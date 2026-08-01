@@ -1,0 +1,459 @@
+# =============================================================================
+# MASTER ARCHITECTURE DIAGRAM - Mermaid
+# Version: 1.0.0
+# Date: 2026-08-01
+# Design Freeze: P13.8
+# =============================================================================
+
+## Mermaid LR Diagram
+
+```mermaid
+graph LR
+    %% -----------------------------------------------------------------------------
+    %% STYLING DEFINITIONS
+    %% -----------------------------------------------------------------------------
+
+    classDef presentation fill:#4A90D9,color:#FFFFFF,stroke:#2E5A8B
+    classDef api fill:#52c41a,color:#FFFFFF,stroke:#3B8E0F
+    classDef runtime fill:#fa8c16,color:#FFFFFF,stroke:#C66A0A
+    classDef commercial fill:#f5222d,color:#FFFFFF,stroke:#B81C1C
+    classDef platform fill:#722ed1,color:#FFFFFF,stroke:#5A22A3
+    classDef ecosystem fill:#13c2c2,color:#FFFFFF,stroke:#0F8A8A
+    classDef core fill:#607D8B,color:#FFFFFF,stroke:#455A64
+    classDef repository fill:#fadb14,color:#000000,stroke:#C6A80F
+    classDef infrastructure fill:#8c8c8c,color:#FFFFFF,stroke:#666666
+    classDef manager fill:#FF6B6B,color:#FFFFFF,stroke:#CC0000
+    classDef capability fill:#E8E8E8,color:#333333,stroke:#999999
+
+    %% -----------------------------------------------------------------------------
+    %% PRESENTATION LAYER
+    %% -----------------------------------------------------------------------------
+
+    subgraph PRESENTATION["<b>PRESENTATION LAYER</b>"]
+        FM["Flutter Mobile App"]
+        FW["Flutter Web App"]
+        WP["WordPress Frontend"]
+        ADMIN["Admin Portal"]
+        OWNER["Owner Portal"]
+        API_CON["API Consumers"]
+    end
+
+    class FM,FW,WP,ADMIN,OWNER,API_CON presentation
+
+    %% -----------------------------------------------------------------------------
+    %% API LAYER
+    %% -----------------------------------------------------------------------------
+
+    subgraph API["<b>API LAYER</b>"]
+        REST["REST API"]
+        AUTH["Authentication"]
+        AUTHZ["Authorization"]
+        VAL["Validation"]
+        RATE["Rate Limiting"]
+    end
+
+    class REST,AUTH,AUTHZ,VAL,RATE api
+
+    %% -----------------------------------------------------------------------------
+    %% RUNTIME LAYER
+    %% -----------------------------------------------------------------------------
+
+    subgraph RUNTIME["<b>RUNTIME LAYER</b>"]
+        RTE["Runtime Engine"]
+        BOOT["Bootstrap Pipeline"]
+        EB["Event Bus"]
+        REPO_ENG["Repository Engine"]
+        SEARCH["Search Engine"]
+        SYNC["Sync Engine"]
+        SCHED["Scheduler"]
+        QUEUE["Queue"]
+        CONFIG["Configuration"]
+        LOG["Logging"]
+        HEALTH["Health Monitor"]
+    end
+
+    class RTE,BOOT,EB,REPO_ENG,SEARCH,SYNC,SCHED,QUEUE,CONFIG,LOG,HEALTH runtime
+
+    %% -----------------------------------------------------------------------------
+    %% COMMERCIAL AGGREGATE (P13.8)
+    %% -----------------------------------------------------------------------------
+
+    subgraph COMMERCIAL["<b>COMMERCIAL AGGREGATE (P13.8)</b>"]
+        subgraph BUSINESS_AGG["<b>Business (Aggregate Root)</b>"]
+            BC["Business Capability"]
+            BM["Business Manager"]
+            BS["Business Service"]
+
+            subgraph BIZ_MANAGERS["<b>Business Managers</b>"]
+                BAM["BusinessAccommodation Manager"]
+                BAVM["BusinessAvailability Manager"]
+                BRM["BusinessReservation Manager"]
+                BVM["BusinessVisitor Manager"]
+                BPM["BusinessPayment Manager"]
+                BNM["BusinessNotification Manager"]
+                BBM["BusinessBrand Manager"]
+                BCM["BusinessCMS Manager"]
+                BOWM["BusinessOwner Manager"]
+                BSM["BusinessSearch Manager"]
+                BSTM["BusinessStatistics Manager"]
+            end
+        end
+
+        subgraph DOMAIN_CAPS["<b>Domain Capabilities</b>"]
+            ACC["Accommodation Capability"]
+            AVL["Availability Capability"]
+            RES["Reservation Capability"]
+            VIS["Visitor Capability"]
+            PAY["Payment Capability"]
+            NOT["Notification Capability"]
+        end
+    end
+
+    class BC,BM,BS,BAM,BAVM,BRM,BVM,BPM,BNM,BBM,BCM,BOWM,BSM,BSTM commercial
+    class ACC,AVL,RES,VIS,PAY,NOT commercial
+
+    %% -----------------------------------------------------------------------------
+    %% PLATFORM CAPABILITIES
+    %% -----------------------------------------------------------------------------
+
+    subgraph PLATFORM["<b>PLATFORM CAPABILITIES</b>"]
+        IDENT["Identity Capability"]
+        DEST["Destination Capability"]
+        COMM["Community Capability"]
+        ENG["Engagement Capability"]
+        CONV["Conversion Capability"]
+        INTEL["Intelligence Capability"]
+        LIFE["Lifecycle Capability"]
+        OWN["Owner Capability"]
+        BILL["Billing Capability"]
+        SAAS["SaaS Capability"]
+        ONB["Onboarding Capability"]
+        SCHED_CAP["Scheduler Capability"]
+        OBS["Observability Capability"]
+        COMMS["Communication Capability"]
+        NOTV2["Notifications v2 Capability"]
+        CMS_CAP["CMS Capability"]
+        BOOK["Booking Capability"]
+        SEO["SEO Intelligence Capability"]
+        PUB["Public Capability"]
+        PWA["PWA Capability"]
+        PWAE["PWA Engine Capability"]
+        ADMIN_CAP["Admin Capability"]
+    end
+
+    class IDENT,DEST,COMM,ENG,CONV,INTEL,LIFE,OWN,BILL,SAAS,ONB,SCHED_CAP,OBS,COMMS,NOTV2,CMS_CAP,BOOK,SEO,PUB,PWA,PWAE,ADMIN_CAP platform
+
+    %% -----------------------------------------------------------------------------
+    %% ECOSYSTEM CAPABILITIES
+    %% -----------------------------------------------------------------------------
+
+    subgraph ECOSYSTEM["<b>ECOSYSTEM CAPABILITIES</b>"]
+        EXPL["Exploration Capability"]
+        GOV["Governance Capability"]
+        OPS["Operations Capability"]
+        OPP["Opportunity Capability"]
+    end
+
+    class EXPL,GOV,OPS,OPP ecosystem
+
+    %% -----------------------------------------------------------------------------
+    %% CORE CAPABILITIES
+    %% -----------------------------------------------------------------------------
+
+    subgraph CORE["<b>CORE CAPABILITIES</b>"]
+        PERS["Persistence Capability"]
+        CORE_CAP["Core Capability"]
+        TENANT["Tenant Capability"]
+    end
+
+    class PERS,CORE_CAP,TENANT core
+
+    %% -----------------------------------------------------------------------------
+    %% REPOSITORY LAYER
+    %% -----------------------------------------------------------------------------
+
+    subgraph REPO_LAYER["<b>REPOSITORY LAYER</b>"]
+        RE["Repository Engine"]
+        RF["Repository Factory"]
+        RR["Repository Registry"]
+        UOW["Unit of Work"]
+        TM["Transaction Manager"]
+
+        subgraph REPO_CONTRACTS["<b>Repository Contracts</b>"]
+            BASE_REPO["Base Repository"]
+            READ_REPO["Read Repository"]
+            WRITE_REPO["Write Repository"]
+            AGG_REPO["Aggregate Repository"]
+        end
+
+        subgraph REPO_ADAPTERS["<b>Repository Adapters</b>"]
+            ORM_AD["ORM Adapter"]
+            QUERY_AD["Query Adapter"]
+            MOCK_AD["Mock Adapter"]
+        end
+
+        subgraph REPO_MIXINS["<b>Repository Mixins</b>"]
+            TENANT_MIX["Tenant Mixin"]
+            SOFTDEL_MIX["Soft Delete Mixin"]
+            PAG_MIX["Pagination Mixin"]
+            SEARCH_MIX["Search Mixin"]
+            AUDIT_MIX["Audit Mixin"]
+            TS_MIX["Timestamps Mixin"]
+            FILTER_MIX["Filtering Mixin"]
+            SORT_MIX["Sorting Mixin"]
+            OPT_MIX["Optimistic Lock Mixin"]
+        end
+    end
+
+    class RE,RF,RR,UOW,TM,BASE_REPO,READ_REPO,WRITE_REPO,AGG_REPO,ORM_AD,QUERY_AD,MOCK_AD,TENANT_MIX,SOFTDEL_MIX,PAG_MIX,SEARCH_MIX,AUDIT_MIX,TS_MIX,FILTER_MIX,SORT_MIX,OPT_MIX repository
+
+    %% -----------------------------------------------------------------------------
+    %% DOMAIN REPOSITORIES
+    %% -----------------------------------------------------------------------------
+
+    subgraph DOMAIN_REPOS["<b>Domain Repositories</b>"]
+        BIZ_REPO["Business Repository"]
+        ACC_REPO["Accommodation Repository"]
+        AVL_REPO["Availability Repository"]
+        RES_REPO["Reservation Repository"]
+        VIS_REPO["Visitor Repository"]
+        PAY_REPO["Payment Repository"]
+        NOT_REPO["Notification Repository"]
+        DEST_REPO["Destination Repository"]
+        IDENT_REPO["Identity Repository"]
+        TENANT_REPO["Tenant Repository"]
+        ANALYTICS_REPO["Analytics Repository"]
+        MEDIA_REPO["Media Repository"]
+        COMM_REPO["Community Repository"]
+        AUDIT_REPO["Audit Repository"]
+        BADGE_REPO["Badge Repository"]
+        CAMP_REPO["Campaign Repository"]
+    end
+
+    class BIZ_REPO,ACC_REPO,AVL_REPO,RES_REPO,VIS_REPO,PAY_REPO,NOT_REPO,DEST_REPO,IDENT_REPO,TENANT_REPO,ANALYTICS_REPO,MEDIA_REPO,COMM_REPO,AUDIT_REPO,BADGE_REPO,CAMP_REPO repository
+
+    %% -----------------------------------------------------------------------------
+    %% INFRASTRUCTURE LAYER
+    %% -----------------------------------------------------------------------------
+
+    subgraph INFRA["<b>INFRASTRUCTURE LAYER</b>"]
+
+        subgraph DATABASE["<b>Database</b>"]
+            PG["PostgreSQL"]
+            DRIZZLE["Drizzle ORM"]
+        end
+
+        subgraph AUTH_INFRA["<b>Authentication</b>"]
+            JWT["JWT Provider"]
+            OAUTH["OAuth Provider"]
+        end
+
+        subgraph CMS_INFRA["<b>CMS</b>"]
+            WP_INFRA["WordPress"]
+        end
+
+        subgraph SEARCH_INFRA["<b>Search</b>"]
+            SEARCH_P["Search Provider"]
+        end
+
+        subgraph PAYMENT_INFRA["<b>Payments</b>"]
+            STRIPE["Stripe Provider"]
+            MERCADO["MercadoPago Provider"]
+            TRANSBANK["Transbank Provider"]
+        end
+
+        subgraph NOTIFICATION_INFRA["<b>Notifications</b>"]
+            SENDGRID["SendGrid Provider"]
+            TWILIO["Twilio Provider"]
+            FIREBASE["Firebase Provider"]
+        end
+    end
+
+    class PG,DRIZZLE,JWT,OAUTH,WP_INFRA,SEARCH_P,STRIPE,MERCADO,TRANSBANK,SENDGRID,TWILIO,FIREBASE infrastructure
+
+    %% =============================================================================
+    %% RELATIONSHIPS
+    %% =============================================================================
+
+    %% Presentation → API
+    REST --> FM
+    REST --> FW
+    REST --> WP
+    REST --> ADMIN
+    REST --> OWNER
+    REST --> API_CON
+
+    %% API → Runtime
+    REST --> RTE
+    AUTH --> RTE
+    AUTHZ --> RTE
+
+    %% Runtime internal
+    RTE --> BOOT
+    RTE --> EB
+    RTE --> REPO_ENG
+    RTE --> SEARCH
+    RTE --> SYNC
+    RTE --> SCHED
+    BOOT --> CONFIG
+    BOOT --> LOG
+    RTE --> HEALTH
+
+    %% Repository Layer
+    REPO_ENG --> RF
+    REPO_ENG --> RR
+    REPO_ENG --> UOW
+    REPO_ENG --> TM
+    RF --> ORM_AD
+    RF --> QUERY_AD
+    RF --> MOCK_AD
+    ORM_AD --> DRIZZLE
+    DRIZZLE --> PG
+
+    %% Domain Repositories → Repository Engine
+    BIZ_REPO --> REPO_ENG
+    ACC_REPO --> REPO_ENG
+    AVL_REPO --> REPO_ENG
+    RES_REPO --> REPO_ENG
+    VIS_REPO --> REPO_ENG
+    PAY_REPO --> REPO_ENG
+    NOT_REPO --> REPO_ENG
+
+    %% Commercial Aggregate
+    BC --> BM
+    BC --> BS
+    BM --> BAM
+    BM --> BAVM
+    BM --> BRM
+    BM --> BVM
+    BM --> BPM
+    BM --> BNM
+
+    %% Business Managers → Domain Capabilities (Delegation)
+    BAM --> ACC
+    BAVM --> AVL
+    BRM --> RES
+    BVM --> VIS
+    BPM --> PAY
+    BNM --> NOT
+
+    %% Domain Capabilities → Repositories
+    ACC --> ACC_REPO
+    AVL --> AVL_REPO
+    RES --> RES_REPO
+    VIS --> VIS_REPO
+    PAY --> PAY_REPO
+    NOT --> NOT_REPO
+
+    %% Domain Capabilities → EventBus (Publish)
+    ACC -->|publishes| EB
+    AVL -->|publishes| EB
+    RES -->|publishes| EB
+    VIS -->|publishes| EB
+    PAY -->|publishes| EB
+    NOT -->|publishes| EB
+
+    %% EventBus → Capabilities (Subscribe)
+    EB -->|notifies| BC
+    EB -->|notifies| ACC
+    EB -->|notifies| AVL
+    EB -->|notifies| RES
+    EB -->|notifies| VIS
+    EB -->|notifies| PAY
+    EB -->|notifies| NOT
+
+    %% Platform Capabilities → EventBus
+    IDENT -->|publishes| EB
+    DEST -->|publishes| EB
+    COMM -->|publishes| EB
+    ENG -->|publishes| EB
+    INTEL -->|publishes| EB
+    CMS_CAP -->|publishes| EB
+
+    %% Platform Capabilities → Repositories
+    IDENT --> IDENT_REPO
+    DEST --> DEST_REPO
+    COMM --> COMM_REPO
+    SAAS --> TENANT_REPO
+    ONB --> TENANT_REPO
+
+    %% Core → Persistence
+    PERS --> REPO_ENG
+    CORE_CAP --> PERS
+    TENANT --> TENANT_REPO
+
+    %% Runtime → Infrastructure
+    RTE --> PG
+    RTE --> DRIZZLE
+    SYNC --> WP_INFRA
+    SCHED --> PG
+
+    %% Capabilities → Runtime Context
+    ACC --> RTE
+    AVL --> RTE
+    RES --> RTE
+    VIS --> RTE
+    PAY --> RTE
+    NOT --> RTE
+
+    %% Capabilities → Repository Context
+    ACC --> REPO_ENG
+    AVL --> REPO_ENG
+    RES --> REPO_ENG
+    VIS --> REPO_ENG
+    PAY --> REPO_ENG
+    NOT --> REPO_ENG
+
+    %% Platform Capabilities → Runtime
+    CMS_CAP --> RTE
+    NOTV2 --> RTE
+    COMMS --> RTE
+
+    %% Forbidden relationships (commented out as they cannot be shown)
+    %% PAY -x STRIPE : FORBIDDEN
+    %% NOT -x SENDGRID : FORBIDDEN
+
+    %% =============================================================================
+    %% LEGEND
+    %% =============================================================================
+
+    linkStyle default stroke:#333333,stroke-width:2px
+    linkStyle 38,39,40,41,42,43,44 stroke:#52c41a,stroke-width:2px
+    linkStyle 48,49,50 stroke:#f5222d,stroke-width:2px
+```
+
+## Architecture Layers Summary
+
+| Layer | Components | Purpose |
+|-------|------------|---------|
+| **Presentation** | Flutter Mobile, Flutter Web, WordPress, Admin, Owner, API Consumers | User-facing applications |
+| **API** | REST API, Auth, AuthZ, Validation, Rate Limiting | Request handling |
+| **Runtime** | Engine, Bootstrap, EventBus, Repository, Search, Sync, Scheduler | Platform orchestration |
+| **Commercial Aggregate** | Business, Accommodation, Availability, Reservation, Visitor, Payment, Notification | Core business domain |
+| **Platform Capabilities** | Identity, Destination, Community, Engagement, SaaS, etc. | Platform services |
+| **Ecosystem** | Exploration, Governance, Operations | Extended ecosystem |
+| **Core** | Persistence, Core, Tenant | Foundation capabilities |
+| **Repository** | Engine, Factory, Adapters, Mixins | Data persistence abstraction |
+| **Infrastructure** | PostgreSQL, Drizzle, WordPress, JWT, Providers | External systems |
+
+## Relationship Types
+
+| Type | Symbol | Description |
+|------|--------|-------------|
+| **Uses** | ────▶ | Direct dependency |
+| **Delegates** | ────▶ | Manager → Capability |
+| **Publishes** | ──▶ | Event emission |
+| **Subscribes** | ◀─── | Event consumption |
+| **Persists** | ────▶ | Repository access |
+| **Orchestrates** | ────▶ | Runtime coordination |
+| **Forbidden** | -x | No direct import |
+
+## Design Freeze P13.8
+
+The Commercial Aggregate (Business, Accommodation, Availability, Reservation, Visitor, Payment, Notification) is **frozen** as of P13.8. No modifications to aggregate ownership, business orchestration patterns, or domain boundaries are permitted.
+
+---
+
+> **Generated:** 2026-08-01
+> **Version:** 1.0.0
+> **Tag:** `design-freeze-p13.8`

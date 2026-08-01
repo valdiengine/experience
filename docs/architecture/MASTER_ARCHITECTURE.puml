@@ -1,0 +1,416 @@
+' =============================================================================
+' MASTER ARCHITECTURE DIAGRAM - PlantUML
+' Version: 1.0.0
+' Date: 2026-08-01
+' Design Freeze: P13.8
+' =============================================================================
+
+' -----------------------------------------------------------------------------
+' SKIN PARAMETERS
+' -----------------------------------------------------------------------------
+skinparam {
+    defaultFontName "Segoe UI"
+    defaultFontSize 12
+    shadowing false
+    stereotypeCBackgroundColor #F0F0F0
+    handwritten false
+    padding 5
+    arrowThickness 1
+}
+
+' -----------------------------------------------------------------------------
+' COLOR DEFINITIONS (by layer)
+' -----------------------------------------------------------------------------
+!define PRESENTATION_COLOR #4A90D9/FFFFFF
+!define API_COLOR #52c41a/FFFFFF
+!define RUNTIME_COLOR #fa8c16/FFFFFF
+!define COMMERCIAL_COLOR #f5222d/FFFFFF
+!define PLATFORM_COLOR #722ed1/FFFFFF
+!define ECOSYSTEM_COLOR #13c2c2/FFFFFF
+!define REPOSITORY_COLOR #fadb14/000000
+!define INFRASTRUCTURE_COLOR #8c8c8c/FFFFFF
+
+' -----------------------------------------------------------------------------
+' LAYOUT CONSTRAINTS
+' -----------------------------------------------------------------------------
+top to bottom direction
+
+' -----------------------------------------------------------------------------
+' ENTITIES
+' -----------------------------------------------------------------------------
+
+' ============================================
+' PRESENTATION LAYER
+' ============================================
+package "Presentation Layer" <<PRESENTATION_COLOR>> {
+    [Flutter Mobile App]
+    [Flutter Web App]
+    [WordPress Frontend]
+    [Admin Portal]
+    [Owner Portal]
+    [API Consumers]
+}
+
+' ============================================
+' API LAYER
+' ============================================
+package "API Layer" <<API_COLOR>> {
+    [REST API]
+    [Authentication]
+    [Authorization]
+    [Validation]
+    [Rate Limiting]
+}
+
+' ============================================
+' RUNTIME LAYER
+' ============================================
+package "Runtime Layer" <<RUNTIME_COLOR>> {
+    [RuntimeEngine]
+    [BootstrapPipeline]
+    [EventBus]
+    [RepositoryEngine]
+    [SearchEngine]
+    [SyncEngine]
+    [Scheduler]
+    [Queue]
+    [Configuration]
+    [Logging]
+    [HealthMonitor]
+}
+
+' ============================================
+' COMMERCIAL AGGREGATE
+' ============================================
+package "Commercial Aggregate (P13.8)" <<COMMERCIAL_COLOR>> {
+    package "Business (Aggregate Root)" {
+        [BusinessCapability]
+        [BusinessManager]
+        [BusinessService]
+
+        package "Business Managers" {
+            [BusinessAccommodationManager]
+            [BusinessAvailabilityManager]
+            [BusinessReservationManager]
+            [BusinessVisitorManager]
+            [BusinessPaymentManager]
+            [BusinessNotificationManager]
+            [BusinessBrandManager]
+            [BusinessCMSManager]
+            [BusinessOwnerManager]
+            [BusinessSearchManager]
+            [BusinessStatisticsManager]
+        }
+    }
+
+    package "Domain Capabilities" {
+        [AccommodationCapability]
+        [AvailabilityCapability]
+        [ReservationCapability]
+        [VisitorCapability]
+        [PaymentCapability]
+        [NotificationCapability]
+    }
+}
+
+' ============================================
+' PLATFORM CAPABILITIES
+' ============================================
+package "Platform Capabilities" <<PLATFORM_COLOR>> {
+    [IdentityCapability]
+    [DestinationCapability]
+    [CommunityCapability]
+    [EngagementCapability]
+    [ConversionCapability]
+    [IntelligenceCapability]
+    [LifecycleCapability]
+    [OwnerCapability]
+    [BillingCapability]
+    [SaaSCapability]
+    [OnboardingCapability]
+    [SchedulerCapability]
+    [ObservabilityCapability]
+    [CommunicationCapability]
+    [NotificationsV2Capability]
+    [CMSCapability]
+    [BookingCapability]
+    [SEOIntelligenceCapability]
+    [PublicCapability]
+    [PWACapability]
+    [PWAEngineCapability]
+    [AdminCapability]
+}
+
+' ============================================
+' ECOSYSTEM CAPABILITIES
+' ============================================
+package "Ecosystem Capabilities" <<ECOSYSTEM_COLOR>> {
+    [ExplorationCapability]
+    [GovernanceCapability]
+    [OperationsCapability]
+    [OpportunityCapability]
+}
+
+' ============================================
+' CORE CAPABILITIES
+' ============================================
+package "Core Capabilities" <<#607D8B>> {
+    [PersistenceCapability]
+    [CoreCapability]
+    [TenantCapability]
+}
+
+' ============================================
+' REPOSITORY LAYER
+' ============================================
+package "Repository Layer" <<REPOSITORY_COLOR>> {
+    [RepositoryEngine]
+    [RepositoryFactory]
+    [RepositoryRegistry]
+    [UnitOfWork]
+    [TransactionManager]
+
+    package "Repository Contracts" {
+        [BaseRepository]
+        [ReadRepository]
+        [WriteRepository]
+        [AggregateRepository]
+    }
+
+    package "Repository Adapters" {
+        [ORMAdapter]
+        [QueryAdapter]
+        [MockAdapter]
+    }
+
+    package "Repository Mixins" {
+        [TenantMixin]
+        [SoftDeleteMixin]
+        [PaginationMixin]
+        [SearchMixin]
+        [AuditMixin]
+        [TimestampsMixin]
+        [FilteringMixin]
+        [SortingMixin]
+        [OptimisticLockMixin]
+    }
+}
+
+' ============================================
+' DOMAIN REPOSITORIES
+' ============================================
+package "Domain Repositories" <<REPOSITORY_COLOR>> {
+    [BusinessRepository]
+    [AccommodationRepository]
+    [AvailabilityRepository]
+    [ReservationRepository]
+    [VisitorRepository]
+    [PaymentRepository]
+    [NotificationRepository]
+    [DestinationRepository]
+    [IdentityRepository]
+    [TenantRepository]
+    [AnalyticsRepository]
+    [MediaRepository]
+    [CommunityRepository]
+    [AuditRepository]
+    [BadgeRepository]
+    [CampaignRepository]
+    [MemoryRepository]
+    [ObservationRepository]
+}
+
+' ============================================
+' INFRASTRUCTURE LAYER
+' ============================================
+package "Infrastructure Layer" <<INFRASTRUCTURE_COLOR>> {
+    package "Database" {
+        [PostgreSQL]
+        [DrizzleORM]
+    }
+
+    package "Authentication" {
+        [JWTProvider]
+        [OAuthProvider]
+    }
+
+    package "CMS" {
+        [WordPress]
+    }
+
+    package "Search" {
+        [SearchProvider]
+    }
+
+    package "Payments" {
+        [StripeProvider]
+        [MercadoPagoProvider]
+        [TransbankProvider]
+    }
+
+    package "Notifications" {
+        [SendGridProvider]
+        [TwilioProvider]
+        [FirebaseProvider]
+    }
+}
+
+' -----------------------------------------------------------------------------
+' RELATIONSHIPS
+' -----------------------------------------------------------------------------
+
+' Presentation → API
+REST_API <- Flutter_Mobile_App : uses
+REST_API <- Flutter_Web_App : uses
+REST_API <- WordPress_Frontend : uses
+REST_API <- Admin_Portal : uses
+REST_API <- Owner_Portal : uses
+REST_API <- API_Consumers : uses
+
+' API → Runtime
+REST_API --> RuntimeEngine : requests
+Authentication --> RuntimeEngine : authenticates
+Authorization --> RuntimeEngine : authorizes
+
+' Runtime internal relationships
+RuntimeEngine --> BootstrapPipeline : orchestrates
+RuntimeEngine --> EventBus : uses
+RuntimeEngine --> RepositoryEngine : uses
+RuntimeEngine --> SearchEngine : uses
+RuntimeEngine --> SyncEngine : uses
+RuntimeEngine --> Scheduler : uses
+BootstrapPipeline --> Configuration : loads
+BootstrapPipeline --> Logging : initializes
+RuntimeEngine --> HealthMonitor : monitors
+
+' Repository Layer relationships
+RepositoryEngine --> RepositoryFactory : creates
+RepositoryEngine --> RepositoryRegistry : registers
+RepositoryEngine --> UnitOfWork : coordinates
+RepositoryEngine --> TransactionManager : manages
+RepositoryFactory --> ORMAdapter : creates
+RepositoryFactory --> QueryAdapter : creates
+RepositoryFactory --> MockAdapter : creates
+ORMAdapter --> DrizzleORM : uses
+DrizzleORM --> PostgreSQL : connects
+
+' Domain Repositories → Repository Layer
+BusinessRepository --> RepositoryEngine
+AccommodationRepository --> RepositoryEngine
+AvailabilityRepository --> RepositoryEngine
+ReservationRepository --> RepositoryEngine
+VisitorRepository --> RepositoryEngine
+PaymentRepository --> RepositoryEngine
+NotificationRepository --> RepositoryEngine
+
+' Commercial Aggregate - Business as Root
+BusinessCapability --> BusinessManager : delegates
+BusinessCapability --> BusinessService : uses
+BusinessManager --> BusinessAccommodationManager : owns
+BusinessManager --> BusinessAvailabilityManager : owns
+BusinessManager --> BusinessReservationManager : owns
+BusinessManager --> BusinessVisitorManager : owns
+BusinessManager --> BusinessPaymentManager : owns
+BusinessManager --> BusinessNotificationManager : owns
+
+' Business Manager → Domain Capabilities (Delegation)
+BusinessAccommodationManager --> AccommodationCapability : delegates
+BusinessAvailabilityManager --> AvailabilityCapability : delegates
+BusinessReservationManager --> ReservationCapability : delegates
+BusinessVisitorManager --> VisitorCapability : delegates
+BusinessPaymentManager --> PaymentCapability : delegates
+BusinessNotificationManager --> NotificationCapability : delegates
+
+' Domain Capabilities → Repository (Persistence)
+AccommodationCapability --> AccommodationRepository : persists
+AvailabilityCapability --> AvailabilityRepository : persists
+ReservationCapability --> ReservationRepository : persists
+VisitorCapability --> VisitorRepository : persists
+PaymentCapability --> PaymentRepository : persists
+NotificationCapability --> NotificationRepository : persists
+
+' Domain Capabilities → EventBus (Publish/Subscribe)
+AccommodationCapability --> EventBus : publishes
+AvailabilityCapability --> EventBus : publishes
+ReservationCapability --> EventBus : publishes
+VisitorCapability --> EventBus : publishes
+PaymentCapability --> EventBus : publishes
+NotificationCapability --> EventBus : publishes
+
+' Event Bus → Capabilities (Subscribe)
+EventBus --> BusinessCapability : notifies
+EventBus --> AccommodationCapability : notifies
+EventBus --> AvailabilityCapability : notifies
+EventBus --> ReservationCapability : notifies
+EventBus --> VisitorCapability : notifies
+EventBus --> PaymentCapability : notifies
+EventBus --> NotificationCapability : notifies
+
+' Platform Capabilities → EventBus
+IdentityCapability --> EventBus : publishes
+DestinationCapability --> EventBus : publishes
+CommunityCapability --> EventBus : publishes
+EngagementCapability --> EventBus : publishes
+IntelligenceCapability --> EventBus : publishes
+CMSCapability --> EventBus : publishes
+
+' Platform Capabilities → Repository
+IdentityCapability --> IdentityRepository : persists
+DestinationCapability --> DestinationRepository : persists
+CommunityCapability --> CommunityRepository : persists
+SaaSCapability --> TenantRepository : persists
+OnboardingCapability --> TenantRepository : persists
+
+' Core → Persistence
+PersistenceCapability --> RepositoryEngine : implements
+CoreCapability --> PersistenceCapability : depends
+TenantCapability --> TenantRepository : persists
+
+' Runtime → Infrastructure (Providers)
+RuntimeEngine --> PostgreSQL : connects
+RuntimeEngine --> DrizzleORM : uses
+SyncEngine --> WordPress : syncs
+SchedulerCapability --> PostgreSQL : schedules
+
+' Platform Capabilities → Runtime Contracts
+CMSCapability --> RuntimeEngine : uses CMS contract
+NotificationsV2Capability --> RuntimeEngine : uses Notification contract
+CommunicationCapability --> RuntimeEngine : uses Notification contract
+
+' Payment/Notification → Providers (via Runtime Contracts)
+' Note: Direct import FORBIDDEN, must go through Runtime Contract
+' PaymentCapability -..-> StripeProvider : FORBIDDEN (no direct import)
+' NotificationCapability -..-> SendGridProvider : FORBIDDEN (no direct import)
+
+' Capabilities → Runtime Context
+AccommodationCapability --> RuntimeEngine : uses context
+AvailabilityCapability --> RuntimeEngine : uses context
+ReservationCapability --> RuntimeEngine : uses context
+VisitorCapability --> RuntimeEngine : uses context
+PaymentCapability --> RuntimeEngine : uses context
+NotificationCapability --> RuntimeEngine : uses context
+
+' Capabilities → Repository Context
+AccommodationCapability --> RepositoryEngine : uses context
+AvailabilityCapability --> RepositoryEngine : uses context
+ReservationCapability --> RepositoryEngine : uses context
+VisitorCapability --> RepositoryEngine : uses context
+PaymentCapability --> RepositoryEngine : uses context
+NotificationCapability --> RepositoryEngine : uses context
+
+' ============================================
+' LEGEND
+' ============================================
+legend right
+|= Relationship Type |= Style |
+| **Ownership** | ← solid arrow |
+| **Delegation** | →→ dashed arrow |
+| **Uses/Persistence** | → solid arrow |
+| **Publishes Event** | ⇶ open arrow |
+| **Subscribes Event** | ◁ open arrow |
+| **Forbidden** | -..-> dotted red |
+end legend
+
+' =============================================================================
+' END OF DIAGRAM
+' =============================================================================
