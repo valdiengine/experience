@@ -1,13 +1,13 @@
 # CURRENT_STATE.md
 
 > Exact snapshot of project state. Update after each completed phase.
-> Last updated: P13.8 — Commercial Aggregate Final Validation (Design Freeze)
+> Last updated: P14 — API Layer Foundation
 
 ## Progress
 
 | Metric | Value |
 |--------|-------|
-| Phases completed | 74/74 + P13.2 + P13.2.1 + P13.3 + P13.3.1 + P13.4 + P13.4.1 + P13.5 + P13.5.1 + P13.5.2 + P13.5.3 + P13.5.4 + P13.5.5 + P13.5.6 + P13.6 + P13.6.1 + P13.6.2 + P13.7 + P13.7.1 + P13.7.2 |
+| Phases completed | 74/74 + P13.2 + P13.2.1 + P13.3 + P13.3.1 + P13.4 + P13.4.1 + P13.5 + P13.5.1 + P13.5.2 + P13.5.3 + P13.5.4 + P13.5.5 + P13.5.6 + P13.6 + P13.6.1 + P13.6.2 + P13.7 + P13.7.1 + P13.7.2 + P13.8 + P14 |
 | Capabilities registered | 32 (Business sub-managers: 12) |
 | Architecture specs | 27 + 8 audit reports |
 | SDK specifications | 9 |
@@ -118,6 +118,8 @@
 | 92 | P13.7 | Notification Capability | Business |
 | 93 | P13.7.1 | Business Notification Manager | Business |
 | 94 | P13.7.2 | Commercial Notification Integration Validation | Audit |
+| 95 | P13.8 | Commercial Aggregate Final Validation | Audit |
+| 96 | P14 | API Layer Foundation | Infrastructure |
 
 ## Registered Capabilities (32)
 
@@ -578,6 +580,43 @@ These files exist in `capabilities/` but are NOT in register.js:
 - BusinessManager remains thin orchestrator (delegates all notification operations)
 - 14 `BUSINESS_NOTIFICATION_EVENTS`, 7 notification search fields
 - Cascade rules preserve notification history (archive on delete)
+
+## P14 — API Layer Foundation
+
+### What Changed
+- Created `api/` — New API layer root directory with complete bootstrap, routing, middleware, response, error, health, versioning infrastructure
+- Created `api/bootstrap/` — `api.bootstrap.js` (entry point), `api.server.js` (HTTP server)
+- Created `api/routes/` — Base `router.js` + `api.router.js` aggregator + 7 domain route files (business, accommodation, availability, reservation, visitor, payment, review)
+- Created `api/controllers/` — `base.controller.js` + `business.controller.js`
+- Created `api/middleware/` — 9 middleware files (request-id, correlation-id, logging, error-handler, not-found, auth, authorization, validation, rate-limit)
+- Created `api/responses/` — `success.response.js`, `problem-details.response.js`
+- Created `api/errors/` — `api.errors.js` (10 error classes: ApiError, BadRequestError, UnauthorizedError, ForbiddenError, NotFoundError, ConflictError, ValidationError, RateLimitError, InternalError, ServiceUnavailableError)
+- Created `api/health/` — Health endpoints (`/health`, `/ready`, `/live`)
+- Created `api/versioning/` — API versioning infrastructure
+- Created `api/serializers/` — 7 entity serializers (business, accommodation, availability, reservation, visitor, payment, review) + index
+- Created `docs/architecture/API_LAYER.md` — Full API layer specification
+- Created `docs/architecture/OPENAPI_ARCHITECTURE.md` — OpenAPI 3.1 specification architecture
+- Created `docs/roadmap/API_LAYER_ROADMAP.md` — API layer implementation roadmap
+- Updated `docs/roadmap/ROADMAP.md` — Added P14 to completed phases
+- Updated `docs/ai/CURRENT_STATE.md` — Added P14 to completed phases
+
+### API Endpoints (56 total)
+- Businesses: 8 endpoints (CRUD + archive + restore)
+- Accommodations: 10 endpoints (+ publish + unpublish)
+- Availability: 9 endpoints (+ block + unblock + reserve + release)
+- Reservations: 11 endpoints (+ confirm + reject + cancel + checkin + checkout)
+- Visitors: 10 endpoints (+ archive + restore + verify + merge)
+- Payments: 8 endpoints (+ process + refund + retry + cancel)
+- Reviews: 8 endpoints (+ approve + reject + report)
+
+### Architecture Rules Enforced
+- Controllers NEVER access repository directly
+- Controllers NEVER duplicate business logic
+- Controllers NEVER duplicate validation
+- All operations delegate to BusinessService
+- All responses use response formatters
+- All errors use error classes
+- All responses include requestId
 
 ## Next
 
