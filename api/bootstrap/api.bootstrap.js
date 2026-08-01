@@ -11,7 +11,6 @@ import { ApiServer } from './server/api.server.js';
 import { ApiRouter } from '../routes/api.router.js';
 import { registerMiddleware } from '../middleware/index.js';
 import { registerVersioning } from '../versioning/index.js';
-import { registerOpenAPI } from '../openapi/index.js';
 import { registerHealthRoutes } from '../health/index.js';
 import { registerBusinessRoutes } from '../routes/business.routes.js';
 import { registerAccommodationRoutes } from '../routes/accommodation.routes.js';
@@ -19,7 +18,7 @@ import { registerAvailabilityRoutes } from '../routes/availability.routes.js';
 import { registerReservationRoutes } from '../routes/reservation.routes.js';
 import { registerVisitorRoutes } from '../routes/visitor.routes.js';
 import { registerPaymentRoutes } from '../routes/payment.routes.js';
-import { registerNotificationRoutes } from '../routes/notification.routes.js';
+import { registerReviewRoutes } from '../routes/review.routes.js';
 
 /**
  * @typedef {Object} ApiBootstrapConfig
@@ -48,7 +47,6 @@ export async function bootstrapApi(config = {}) {
 
   registerMiddleware(server);
   registerVersioning(server);
-  registerOpenAPI(server);
 
   const router = new ApiRouter();
   server.use(router.getRouter());
@@ -60,7 +58,7 @@ export async function bootstrapApi(config = {}) {
   registerReservationRoutes(router);
   registerVisitorRoutes(router);
   registerPaymentRoutes(router);
-  registerNotificationRoutes(router);
+  registerReviewRoutes(router);
 
   await server.start();
 
