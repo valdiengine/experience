@@ -260,50 +260,51 @@ Health Checks
 
 ### 6.1 Complete Capability Registry
 
-| # | Capability | ID | Layer | Purpose |
-|---|------------|-----|-------|---------|
-| 1 | Business | `business` | Commercial | Aggregate root, company management |
-| 2 | Accommodation | `accommodation` | Commercial | Property lifecycle |
-| 3 | Availability | `availability` | Commercial | Calendar, booking rules |
-| 4 | Reservation | `reservation` | Commercial | Reservation lifecycle |
-| 5 | Visitor | `visitor` | Commercial | Customer profiles |
-| 6 | Payment | `payment` | Commercial | Payment lifecycle |
-| 7 | Notification | `notification` | Commercial | Notification lifecycle (domain-only) |
-| 8 | Identity | `identity` | Platform | Identity, culture, heritage |
-| 9 | Destination | `destination` | Platform | Destination management |
-| 10 | Community | `community` | Platform | Visitor-generated content |
-| 11 | Engagement | `engagement` | Platform | Customer engagement |
-| 12 | Conversion | `conversion` | Platform | Lead/customer conversion |
-| 13 | Intelligence | `intelligence` | Platform | Analytics, recommendations |
-| 14 | Lifecycle | `lifecycle` | Platform | Customer lifecycle |
-| 15 | Owner | `owner` | Platform | Owner portal |
-| 16 | Billing | `billing` | Platform | Invoicing, subscriptions |
-| 17 | SaaS | `saas` | Platform | Products, plans, entitlements |
-| 18 | Onboarding | `onboarding` | Platform | Business registration |
-| 19 | Scheduler | `scheduler` | Platform | Job scheduling |
-| 20 | Observability | `observability` | Platform | Metrics, health, alerts |
-| 21 | Communication | `communication` | Platform | Multi-channel messaging |
-| 22 | Notifications (v2) | `notifications` | Platform | Multi-channel notifications |
-| 23 | CMS | `cms` | Platform | WordPress integration |
-| 24 | Booking | `booking` | Platform | Core booking system |
-| 25 | SEO Intelligence | `seo-intelligence` | Platform | SEO analysis |
-| 26 | Public | `public` | Platform | Public experience |
-| 27 | PWA | `pwa` | Platform | Basic PWA |
-| 28 | PWA Engine | `pwa-engine` | Platform | Full PWA engine |
-| 29 | Admin | `admin` | Platform | Admin platform |
-| 30 | Exploration | `exploration` | Ecosystem | Gamification, badges |
-| 31 | Governance | `governance` | Ecosystem | RBAC, moderation |
-| 32 | Operations | `operations` | Ecosystem | Destination health |
-| 33 | Persistence | `persistence` | Core | Repository engine |
-| 34 | Core | `core` | Core | Base capability, loader, registry |
-| 35 | Tenant | `tenant` | Core | Multi-tenancy |
-| 36 | Opportunity | `opportunity` | Ecosystem | Opportunity detection |
-| 37 | Catalog | `catalog` | (Placeholder) | — |
-| 38 | Gallery | `gallery` | (Placeholder) | — |
-| 39 | Payments | `payments` | (Placeholder) | — |
-| 40 | Ecology | `ecology` | (Events Only) | Ecological events |
-| 41 | Economy | `economy` | (Events Only) | Economic events |
-| 42 | Locality | `locality` | (Events Only) | Locality events |
+| # | Capability | ID | Layer | Registered | Purpose |
+|---|------------|-----|-------|------------|---------|
+| 1 | Business | `business` | Commercial | YES | Aggregate root, company management |
+| 2 | Accommodation | `accommodation` | Commercial | NO* | Property lifecycle |
+| 3 | Availability | `availability` | Commercial | YES | Calendar, booking rules |
+| 4 | Reservation | `reservation` | Commercial | YES | Reservation lifecycle |
+| 5 | Visitor | `visitor` | Commercial | YES | Customer profiles |
+| 6 | Payment | `payment` | Commercial | YES | Payment lifecycle |
+| 7 | Notification | `notification` | Commercial | YES | Notification lifecycle (domain-only) |
+| 8 | Identity | `identity` | Platform | YES (as `destination-identity`) | Identity, culture, heritage |
+| 9 | Destination | `destination` | Platform | NO | Destination management |
+| 10 | Community | `community` | Platform | YES | Visitor-generated content |
+| 11 | Engagement | `engagement` | Platform | YES | Customer engagement |
+| 12 | Conversion | `conversion` | Platform | YES | Lead/customer conversion |
+| 13 | Intelligence | `intelligence` | Platform | YES | Analytics, recommendations |
+| 14 | Lifecycle | `lifecycle` | Platform | YES | Customer lifecycle |
+| 15 | Owner | `owner` | Platform | YES | Owner portal |
+| 16 | Billing | `billing` | Platform | YES | Invoicing, subscriptions |
+| 17 | SaaS | `saas` | Platform | YES | Products, plans, entitlements |
+| 18 | Onboarding | `onboarding` | Platform | YES | Business registration |
+| 19 | Scheduler | `scheduler` | Platform | YES | Job scheduling |
+| 20 | Observability | `observability` | Platform | YES | Metrics, health, alerts |
+| 21 | Communication | `communication` | Platform | YES | Multi-channel messaging |
+| 22 | Notifications (v2) | `notifications` | Platform | YES | Multi-channel notifications |
+| 23 | CMS | `cms` | Platform | YES | WordPress integration |
+| 24 | Booking | `booking` | Platform | YES | Core booking system |
+| 25 | SEO Intelligence | `seo-intelligence` | Platform | YES | SEO analysis |
+| 26 | Public | `public` | Platform | YES | Public experience |
+| 27 | PWA | `pwa` | Platform | YES | Basic PWA |
+| 28 | PWA Engine | `pwa-engine` | Platform | YES | Full PWA engine |
+| 29 | Admin | `admin` | Platform | YES | Admin platform |
+| 30 | Exploration | `exploration` | Ecosystem | YES | Gamification, badges |
+| 31 | Governance | `governance` | Ecosystem | YES | RBAC, moderation |
+| 32 | Operations | `operations` | Ecosystem | YES (as `destination-operations`) | Destination health |
+| 33 | Persistence | `persistence` | Core | YES | Repository engine |
+| 34 | Core | `core` | Core | YES | Base capability, loader, registry |
+| 35 | Tenant | `tenant` | Core | NO | Multi-tenancy |
+| 36 | Opportunity | `opportunity` | Ecosystem | YES | Opportunity detection |
+| 37 | Catalog | `catalog` | (Placeholder) | NO | Placeholder only |
+| 38 | Gallery | `gallery` | (Placeholder) | NO | Placeholder only |
+| 39 | Payments | `payments` | (Placeholder) | NO | Placeholder only |
+
+**Total: 35 capabilities with `.capability.js` files, 32 registered in `AVAILABLE_CAPABILITIES`**
+
+*Note: `accommodation` has `.capability.js` but is NOT registered (orphaned). `ecology`, `economy`, `locality` have event files only, not capabilities.
 
 ### 6.2 Capability Structure
 
@@ -428,6 +429,8 @@ capabilities/{name}/
 ### 7.5 Business Managers
 
 All Business Managers follow the **delegation pattern** — they delegate to domain capabilities and do not contain business logic.
+
+**Total: 12 managers (1 aggregate root manager + 11 sub-managers)**
 
 | Manager | File | Methods | Responsibility |
 |---------|------|---------|----------------|
@@ -624,9 +627,9 @@ All Business Managers follow the **delegation pattern** — they delegate to dom
 | DestinationRepository | `persistence/repositories/destination.repository.js` | Base |
 | IdentityRepository | `persistence/repositories/identity.repository.js` | Base |
 | TenantRepository | `persistence/repositories/tenant.repository.js` | Base |
-| OpportunityRepository | `persistence/repositories/opportunity.repository.js` | Metadata |
-| OwnerRepository | `persistence/repositories/owner.repository.js` | Metadata |
-| BookingRepository | `persistence/repositories/booking.repository.js` | Metadata |
+| OpportunityRepository | `persistence/repositories/opportunity.repository.js` | Base |
+| OwnerRepository | `persistence/repositories/owner.repository.js` | Base |
+| BookingRepository | `persistence/repositories/booking.repository.js` | Base |
 | AnalyticsRepository | `persistence/repositories/analytics.repository.js` | Base |
 | AuditRepository | `persistence/repositories/audit.repository.js` | Base |
 | MediaRepository | `persistence/repositories/media.repository.js` | Base |
@@ -645,21 +648,27 @@ All Business Managers follow the **delegation pattern** — they delegate to dom
 | GovernanceRepository | `persistence/repositories/governance.repository.js` | Base |
 | OperationsRepository | `persistence/repositories/operations.repository.js` | Base |
 
+**Total: 30 Domain Repositories**
+
 ---
 
 ## 9. Infrastructure Layer
 
 ### 9.1 Infrastructure Components
 
-| Component | Type | Purpose |
-|-----------|------|---------|
-| PostgreSQL | Database | Primary data store |
-| Drizzle ORM | ORM | Query builder, migrations |
-| JWT Provider | Auth | Token generation, validation |
-| WordPress | CMS | Content management |
-| Search Provider | Search | Full-text search (future) |
-| Notification Providers | Notification | Email, Push, WhatsApp |
-| Payment Providers | Payment | Stripe, MercadoPago, Transbank |
+| Component | Type | Purpose | Status |
+|-----------|------|---------|--------|
+| PostgreSQL | Database | Primary data store | IMPLEMENTED |
+| Drizzle ORM | ORM | Query builder, migrations | IMPLEMENTED |
+| JWT Provider | Auth | Token generation, validation | IMPLEMENTED |
+| WordPress | CMS | Content management | IMPLEMENTED |
+| Search Provider | Search | Full-text search | IMPLEMENTED |
+| Notification Providers | Notification | Email, Push, WhatsApp | IMPLEMENTED |
+| Cache Provider | Cache | Caching layer | IMPLEMENTED |
+| Queue Provider | Queue | Async job processing | IMPLEMENTED |
+| Storage Provider | Storage | File storage | IMPLEMENTED |
+| Payment Providers | Payment | Stripe, MercadoPago, Transbank | FUTURE |
+| SendGrid/Twilio/Firebase | Notification | Email/SMS/Push delivery | FUTURE |
 
 ### 9.2 Provider Architecture
 
@@ -668,15 +677,21 @@ All Business Managers follow the **delegation pattern** — they delegate to dom
 │                    PROVIDER LAYER (External)                     │
 │                                                                 │
 │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │
-│   │  PostgreSQL  │  │    WordPress  │  │    Stripe    │        │
+│   │  PostgreSQL  │  │    WordPress  │  │    Cache     │        │
 │   │   Provider   │  │   Provider    │  │   Provider   │        │
 │   └──────────────┘  └──────────────┘  └──────────────┘        │
 │                                                                 │
 │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │
-│   │  SendGrid    │  │   Firebase   │  │  Transbank    │        │
-│   │   Provider   │  │   Provider    │  │   Provider    │        │
+│   │    Queue     │  │    Search    │  │   Storage    │        │
+│   │   Provider   │  │   Provider   │  │   Provider   │        │
 │   └──────────────┘  └──────────────┘  └──────────────┘        │
 │                                                                 │
+│   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │
+│   │   JWT Auth   │  │    Email     │  │   Push SMS   │        │
+│   │   Provider   │  │   (Future)   │  │   (Future)   │        │
+│   └──────────────┘  └──────────────┘  └──────────────┘        │
+│                                                                 │
+│   FUTURE: Stripe, MercadoPago, Transbank, SendGrid, Twilio     │
 └─────────────────────────────────────────────────────────────────┘
                               ▲
                               │ (Implements)

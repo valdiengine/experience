@@ -1,6 +1,6 @@
 # CAPABILITY_INDEX.md
 
-> Complete index of all 34 registered capabilities with details.
+> Complete index of all 32 registered capabilities with details.
 > Source of truth: `capabilities/core/register.js`
 > Updated: P13.8 — Commercial Aggregate Final Validation
 

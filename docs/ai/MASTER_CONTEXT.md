@@ -1,7 +1,7 @@
 # MASTER_CONTEXT.md
 
 > Single source of truth for AI agents working on Valdi Engine.
-> Read this file FIRST before any task. Updated after each phase completion. Last update: P13.6 — Payment Capability.
+> Read this file FIRST before any task. Updated after each phase completion. Last update: P13.8 — Commercial Aggregate Final Validation.
 
 ## Platform Identity
 
@@ -56,7 +56,7 @@ L0  Shared          - Utilities, constants, schemas, events (ZERO business knowl
 L1  Core            - Bootstrap, routing, theme, data access, event bus
 L2  Providers       - Data source abstraction (JSON, API, CMS)
 L3  Tenant Manager  - Project configuration, engine resolution
-L4  Capabilities    - Feature modules (33 registered)
+L4  Capabilities    - Feature modules (32 registered)
 L5  Plugins         - Cross-cutting concerns
 L6  Business        - Domain logic (reservations, payments, notifications)
 L7  Workflows       - Visual multi-step flow execution

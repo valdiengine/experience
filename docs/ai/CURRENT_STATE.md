@@ -8,7 +8,7 @@
 | Metric | Value |
 |--------|-------|
 | Phases completed | 74/74 + P13.2 + P13.2.1 + P13.3 + P13.3.1 + P13.4 + P13.4.1 + P13.5 + P13.5.1 + P13.5.2 + P13.5.3 + P13.5.4 + P13.5.5 + P13.5.6 + P13.6 + P13.6.1 + P13.6.2 + P13.7 + P13.7.1 + P13.7.2 |
-| Capabilities registered | 34 (Business sub-managers: 11) |
+| Capabilities registered | 32 (Business sub-managers: 12) |
 | Architecture specs | 27 + 8 audit reports |
 | SDK specifications | 9 |
 | Total event types | ~440 |

@@ -29,15 +29,22 @@
 
 ## Business Managers Included
 
-| Manager | Approx Lines | Public Methods |
-|---------|--------------|----------------|
-| BusinessManager | 1334 | ~150 |
-| BusinessAccommodationManager | ~420 | 45 |
-| BusinessAvailabilityManager | ~420 | 55 |
-| BusinessReservationManager | ~850 | 77 |
-| BusinessVisitorManager | ~850 | 55 |
-| BusinessPaymentManager | 788 | 62 |
-| BusinessNotificationManager | 747 | 57 |
+| Manager | File | Approx Lines | Public Methods |
+|---------|------|--------------|----------------|
+| BusinessManager | business.manager.js | ~1334 | ~150 |
+| BusinessAccommodationManager | business-accommodation.manager.js | ~420 | 45 |
+| BusinessAvailabilityManager | business-availability.manager.js | ~420 | 55 |
+| BusinessReservationManager | business-reservation.manager.js | ~850 | 77 |
+| BusinessVisitorManager | business-visitor.manager.js | ~850 | 55 |
+| BusinessPaymentManager | business-payment.manager.js | ~788 | 62 |
+| BusinessNotificationManager | business-notification.manager.js | ~747 | 57 |
+| BusinessBrandManager | business-brand.manager.js | ~40 | — |
+| BusinessCMSManager | business-cms.manager.js | ~35 | — |
+| BusinessOwnerManager | business-owner.manager.js | ~30 | — |
+| BusinessSearchManager | business-search.manager.js | ~50 | — |
+| BusinessStatisticsManager | business-statistics.manager.js | ~30 | — |
+
+**Total: 12 managers (1 aggregate root + 11 sub-managers)**
 
 ---
 
