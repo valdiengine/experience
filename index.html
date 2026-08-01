@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark" data-component="app">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title data-i18n="app.title">Dronestica — Gestión de Flota Cinematográfica</title>
+  <meta name="description" content="Plataforma de gestión de drones para producción cinematográfica" />
+  <meta name="theme-color" content="#03050a" />
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       ICONOS Y MANIFIESTO
+       ═══════════════════════════════════════════════════════════════ -->
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+  <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.json" />
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       TIPOGRAFÍA PREMIUM
+       Cabecera: Cabinet Grotesk (geométrica cinematográfica)
+       Cuerpo: Inter (máxima legibilidad en monitores)
+       Mono: JetBrains Mono (telemetría y datos crudos)
+       ═══════════════════════════════════════════════════════════════ -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    @font-face {
+      font-family: 'Cabinet Grotesk';
+      src: url('/assets/fonts/CabinetGrotesk-Variable.woff2') format('woff2');
+      font-weight: 300 900;
+      font-display: swap;
+    }
+  </style>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       DESIGN SYSTEM
+       ═══════════════════════════════════════════════════════════════ -->
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body data-component="body">
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       # APPLICATION SHELL
+       Estructura principal de la aplicación cinematográfica.
+       Contenedor raíz que aloja header, sidebar y contenido.
+       ═══════════════════════════════════════════════════════════════ -->
+  <div id="app" data-component="app-shell">
+
+    <!-- ───────────────────────────────────────────────────────────
+         HEADER — Barra superior de producción
+         Contiene: logo, búsqueda global, controles de sesión.
+         ─────────────────────────────────────────────────────────── -->
+    <header id="header" data-component="header" role="banner">
+
+      <!-- Logo y nombre del estudio -->
+      <div class="header__brand" data-region="brand">
+        <a href="#dashboard" aria-label="Ir al dashboard" data-navigable>
+          <img src="/assets/logo.svg"
+               alt="Dronestica"
+               width="120"
+               height="32"
+               data-key="app.logoUrl" />
+        </a>
+      </div>
+
+      <!-- Buscador global de la flota -->
+      <div class="header__search" data-region="search" role="search">
+        <form action="#" method="get" data-component="global-search">
+          <label for="global-search-input" class="u-sr-only" data-i18n="header.search.label">
+            Buscar drones, misiones, pilotos…
+          </label>
+          <input id="global-search-input"
+                 type="search"
+                 class="input input--glass"
+                 placeholder="Buscar drones, misiones, pilotos…"
+                 data-key="header.search.placeholder"
+                 data-bind="filters.globalSearch"
+                 autocomplete="off" />
+        </form>
+      </div>
+
+      <!-- Acciones de la derecha: notificaciones, usuario, settings -->
+      <div class="header__actions" data-region="actions">
+
+        <!-- Notificaciones en vivo -->
+        <button type="button"
+                class="btn btn--ghost btn--sm"
+                data-component="notification-bell"
+                data-trigger="alerts:toggle-panel"
+                aria-label="Notificaciones"
+                aria-haspopup="true"
+                aria-expanded="false"
+                data-bind="alerts.unreadCount">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M10 2a6 6 0 00-6 6v3l-1.5 2.5a.5.5 0 00.43.75h14.14a.5.5 0 00.43-.75L16 11V8a6 6 0 00-6-6z" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M8 15a2 2 0 004 0" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+          <span class="badge badge--danger badge--dot"
+                data-key="alerts.unreadCount"
+                data-visible-when="alerts.unreadCount > 0"
+                aria-live="polite"></span>
+        </button>
+
+        <!-- Botón de ajustes rápidos -->
+        <button type="button"
+                class="btn btn--ghost btn--sm"
+                data-component="settings-quick"
+                data-trigger="router:navigate"
+                data-payload='{"page":"settings"}'
+                aria-label="Ajustes">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M10 1v2M10 17v2M1 10h2M17 10h2M3.93 3.93l1.41 1.41M14.66 14.66l1.41 1.41M3.93 16.07l1.41-1.41M14.66 5.34l1.41-1.41" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+
+        <!-- Perfil del operador -->
+        <div class="header__profile" data-component="user-menu">
+          <button type="button"
+                  class="btn btn--ghost btn--sm"
+                  aria-haspopup="true"
+                  aria-expanded="false"
+                  data-trigger="dropdown:toggle"
+                  data-target="user-dropdown">
+            <img src=""
+                 alt=""
+                 width="28"
+                 height="28"
+                 class="header__avatar"
+                 data-key="auth.user.avatar"
+                 data-fallback="/assets/avatar-default.svg" />
+            <span class="header__username" data-key="auth.user.name">Operador</span>
+          </button>
+
+          <!-- Dropdown de usuario -->
+          <div id="user-dropdown"
+               class="dropdown"
+               data-component="dropdown"
+               role="menu"
+               hidden>
+            <a href="#profile" role="menuitem" data-navigable data-i18n="header.profile">
+              Mi perfil
+            </a>
+            <a href="#settings" role="menuitem" data-navigable data-i18n="header.settings">
+              Preferencias
+            </a>
+            <hr class="dropdown__divider" />
+            <button type="button"
+                    role="menuitem"
+                    data-trigger="auth:logout"
+                    data-i18n="header.logout">
+              Cerrar sesión
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </header>
+
+    <!-- ───────────────────────────────────────────────────────────
+         SIDEBAR — Navegación principal del estudio
+         Organizada por módulos de producción.
+         Colapsable para maximizar área de visualización.
+         ─────────────────────────────────────────────────────────── -->
+    <nav id="sidebar" data-component="sidebar" role="navigation" aria-label="Navegación principal">
+
+      <button type="button"
+              class="sidebar__toggle"
+              data-trigger="sidebar:toggle"
+              aria-label="Colapsar menú"
+              aria-controls="sidebar">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M3 10h14M3 5h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+
+      <!-- Grupo de navegación principal -->
+      <ul class="sidebar__nav" data-region="primary-nav" role="list">
+
+        <li class="sidebar__item" data-route="dashboard">
+          <a href="#dashboard"
+             class="sidebar__link"
+             aria-current="page"
+             data-navigable
+             data-key="nav.dashboard">
+            <svg class="sidebar__icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <rect x="2" y="2" width="7" height="8" rx="1" stroke="currentColor" stroke-width="1.5"/>
+              <rect x="11" y="2" width="7" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/>
+              <rect x="2" y="12" width="7" height="6" rx="1" stroke="currentColor" stroke-width="1.5"/>
+              <rect x="11" y="9" width="7" height="9" rx="1" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            <span>Dashboard</span>
+          </a>
+        </li>
+
+        <li class="sidebar__item" data-route="drones">
+          <a href="#drones"
+             class="sidebar__link"
+             data-navigable
+             data-key="nav.drones">
+            <svg class="sidebar__icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M10 1v3M10 16v3M1 10h3M16 10h3M4.93 4.93l2.12 2.12M12.95 12.95l2.12 2.12M4.93 15.07l2.12-2.12M12.95 7.05l2.12-2.12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <span>Drones</span>
+          </a>
+        </li>
+
+        <li class="sidebar__item" data-route="missions">
+          <a href="#missions"
+             class="sidebar__link"
+             data-navigable
+             data-key="nav.missions">
+            <svg class="sidebar__icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M10 2L2 6.5V8a8 8 0 0016 0V6.5L10 2z" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M2 6.5l8 4 8-4" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M10 10v8" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            <span>Misiones</span>
+          </a>
+        </li>
+
+        <li class="sidebar__item" data-route="logs">
+          <a href="#logs"
+             class="sidebar__link"
+             data-navigable
+             data-key="nav.logs">
+            <svg class="sidebar__icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M4 2h12a1 1 0 011 1v14a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M7 6h6M7 10h6M7 14h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <span>Historial</span>
+          </a>
+        </li>
+
+      </ul>
+
+      <!-- Separador -->
+      <hr class="sidebar__divider" aria-hidden="true" />
+
+      <!-- Grupo de navegación secundaria -->
+      <ul class="sidebar__nav" data-region="secondary-nav" role="list">
+
+        <li class="sidebar__item" data-route="alerts">
+          <a href="#alerts"
+             class="sidebar__link"
+             data-navigable
+             data-key="nav.alerts">
+            <svg class="sidebar__icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M10 2a6 6 0 00-6 6v3l-1.5 2.5a.5.5 0 00.43.75h14.14a.5.5 0 00.43-.75L16 11V8a6 6 0 00-6-6z" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M8 15a2 2 0 004 0" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            <span>Alertas</span>
+            <span class="badge badge--danger badge--dot"
+                  data-key="alerts.unreadCount"
+                  data-visible-when="alerts.unreadCount > 0"></span>
+          </a>
+        </li>
+
+        <li class="sidebar__item" data-route="admin">
+          <a href="#admin"
+             class="sidebar__link"
+             data-navigable
+             data-key="nav.admin">
+            <svg class="sidebar__icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <circle cx="10" cy="7" r="3" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M4 17v-1a4 4 0 014-4h4a4 4 0 014 4v1" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            <span>Administración</span>
+          </a>
+        </li>
+
+      </ul>
+
+      <!-- Versión y estado del sistema -->
+      <footer class="sidebar__footer" data-region="sidebar-footer">
+        <span class="text-caption" data-key="app.version">v2.4.1</span>
+        <span class="sidebar__status" data-component="connection-status">
+          <span class="badge badge--success badge--dot" data-key="app.networkStatus"></span>
+          <span class="text-caption" data-key="app.networkStatusLabel">Online</span>
+        </span>
+      </footer>
+    </nav>
+
+    <!-- ───────────────────────────────────────────────────────────
+         MAIN — Área de contenido principal
+         Cada página se renderiza dentro de <main>.
+         ═══════════════════════════════════════════════════════════ -->
+    <main id="main" data-component="main" role="main">
+
+      <!-- DASHBOARD — Vista principal de producción
+           ─────────────────────────────────────────────────────── -->
+      <section id="page-dashboard" data-route="dashboard" data-page="true" aria-labelledby="dashboard-title">
+
+        <header class="page-header" data-region="page-header">
+          <h1 id="dashboard-title" class="text-h2" data-i18n="dashboard.title">Dashboard de Producción</h1>
+          <p class="text-body-sm text-secondary" data-key="dashboard.subtitle">
+            Monitoreo en tiempo real de la flota
+          </p>
+        </header>
+
+        <!-- ─── Barra de estado rápido (KPI cards) ─────────── -->
+        <section class="kpi-bar" data-component="kpi-bar" aria-label="Indicadores clave">
+
+          <article class="card card--glass" data-key="kpi.activeDrones">
+            <div class="card__body u-flex u-items-center u-gap-md">
+              <div class="kpi__icon" aria-hidden="true">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M12 2v3M12 19v3M2 12h3M19 12h3M6 6l2 2M16 16l2 2M6 18l2-2M16 8l2-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div>
+                <span class="text-display-2" data-key="kpi.activeDrones.value" data-bind="kpi.activeDrones">12</span>
+                <span class="text-caption u-block" data-i18n="kpi.activeDrones.label">Drones activos</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="card card--glass" data-key="kpi.activeMissions">
+            <div class="card__body u-flex u-items-center u-gap-md">
+              <div class="kpi__icon" aria-hidden="true">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 3L3 8v2a9 9 0 0018 0V8l-9-5z" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M3 8l9 5 9-5" stroke="currentColor" stroke-width="1.5"/>
+                </svg>
+              </div>
+              <div>
+                <span class="text-display-2" data-key="kpi.activeMissions.value" data-bind="kpi.activeMissions">5</span>
+                <span class="text-caption u-block" data-i18n="kpi.activeMissions.label">Misiones activas</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="card card--glass" data-key="kpi.batteryLow">
+            <div class="card__body u-flex u-items-center u-gap-md">
+              <div class="kpi__icon kpi__icon--warning" aria-hidden="true">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <rect x="4" y="8" width="16" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M20 12h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  <rect x="7" y="11" width="4" height="4" rx="1" fill="currentColor"/>
+                </svg>
+              </div>
+              <div>
+                <span class="text-display-2" data-key="kpi.batteryLow.value" data-bind="kpi.batteryLow">3</span>
+                <span class="text-caption u-block" data-i18n="kpi.batteryLow.label">Batería crítica</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="card card--glass" data-key="kpi.totalFlightTime">
+            <div class="card__body u-flex u-items-center u-gap-md">
+              <div class="kpi__icon" aria-hidden="true">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M12 7v5l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div>
+                <span class="text-display-2" data-key="kpi.totalFlightTime.value" data-bind="kpi.totalFlightTime">47h</span>
+                <span class="text-caption u-block" data-i18n="kpi.totalFlightTime.label">Tiempo de vuelo hoy</span>
+              </div>
+            </div>
+          </article>
+
+        </section>
+
+        <!-- ─── Grid principal del dashboard ──────────────── -->
+        <div class="dashboard-grid" data-region="dashboard-grid">
+
+          <!-- Mapa de telemetría en vivo -->
+          <section class="card card--glass dashboard-grid__map" data-component="map-view" aria-label="Mapa de telemetría">
+            <header class="card__header">
+              <h2 class="text-h4" data-i18n="dashboard.map.title">Mapa en Vivo</h2>
+              <div class="u-flex u-gap-sm">
+                <button type="button" class="btn btn--ghost btn--sm" data-trigger="map:zoom-in" aria-label="Acercar">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </button>
+                <button type="button" class="btn btn--ghost btn--sm" data-trigger="map:zoom-out" aria-label="Alejar">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </button>
+                <button type="button" class="btn btn--ghost btn--sm" data-trigger="map:center" aria-label="Centrar mapa">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3" stroke="currentColor" stroke-width="1.5"/></svg>
+                </button>
+              </div>
+            </header>
+            <div class="card__body map-container" data-region="map" style="min-height:400px">
+              <!-- El mapa se renderiza aquí -->
+              <div class="map-placeholder u-flex u-items-center u-justify-center" style="height:100%;min-height:360px">
+                <span class="text-caption text-secondary" data-i18n="dashboard.map.loading">Cargando mapa…</span>
+              </div>
+            </div>
+            <!-- Lista de drones en mapa (mini) -->
+            <footer class="card__footer" data-region="map-legend">
+              <span class="text-caption" data-i18n="dashboard.map.legend">Drones en zona:</span>
+              <span class="badge badge--primary" data-key="map.visibleDrones" data-bind="map.visibleDrones">8</span>
+            </footer>
+          </section>
+
+          <!-- Panel de telemetría del drone seleccionado -->
+          <section class="card card--glass" data-component="telemetry-panel" aria-label="Telemetría del drone seleccionado">
+            <header class="card__header">
+              <h2 class="text-h4" data-i18n="telemetry.title">Telemetría</h2>
+              <select class="input input--sm" style="width:auto"
+                      data-bind="drones.selectedId"
+                      data-trigger="telemetry:select-drone"
+                      aria-label="Seleccionar drone">
+                <!-- Opciones inyectadas por JSON -->
+              </select>
+            </header>
+            <div class="card__body">
+              <dl class="telemetry-grid" data-component="telemetry-readings" aria-label="Lecturas de telemetría">
+
+                <div class="telemetry-item" data-key="telemetry.battery">
+                  <dt class="text-caption" data-i18n="telemetry.battery.label">Batería</dt>
+                  <dd class="text-h3 mono" data-bind="telemetry.battery">73%</dd>
+                </div>
+
+                <div class="telemetry-item" data-key="telemetry.signal">
+                  <dt class="text-caption" data-i18n="telemetry.signal.label">Señal</dt>
+                  <dd class="text-h3 mono" data-bind="telemetry.signal">-42 dBm</dd>
+                </div>
+
+                <div class="telemetry-item" data-key="telemetry.speed">
+                  <dt class="text-caption" data-i18n="telemetry.speed.label">Velocidad</dt>
+                  <dd class="text-h3 mono" data-bind="telemetry.speed">12.5 m/s</dd>
+                </div>
+
+                <div class="telemetry-item" data-key="telemetry.altitude">
+                  <dt class="text-caption" data-i18n="telemetry.altitude.label">Altitud</dt>
+                  <dd class="text-h3 mono" data-bind="telemetry.altitude">120 m</dd>
+                </div>
+
+                <div class="telemetry-item" data-key="telemetry.heading">
+                  <dt class="text-caption" data-i18n="telemetry.heading.label">Rumbo</dt>
+                  <dd class="text-h3 mono" data-bind="telemetry.heading">270°</dd>
+                </div>
+
+                <div class="telemetry-item" data-key="telemetry.gpsSats">
+                  <dt class="text-caption" data-i18n="telemetry.gpsSats.label">GPS</dt>
+                  <dd class="text-h3 mono" data-bind="telemetry.gpsSats">14 sat</dd>
+                </div>
+
+                <div class="telemetry-item" data-key="telemetry.temperature">
+                  <dt class="text-caption" data-i18n="telemetry.temperature.label">Temp.</dt>
+                  <dd class="text-h3 mono" data-bind="telemetry.temperature">42°C</dd>
+                </div>
+
+                <div class="telemetry-item" data-key="telemetry.flightTime">
+                  <dt class="text-caption" data-i18n="telemetry.flightTime.label">Vuelo</dt>
+                  <dd class="text-h3 mono" data-bind="telemetry.flightTime">14:32 min</dd>
+                </div>
+
+              </dl>
+            </div>
+          </section>
+
+          <!-- Lista de drones activos -->
+          <section class="card card--glass" data-component="drone-list" aria-label="Drones activos">
+            <header class="card__header">
+              <h2 class="text-h4" data-i18n="drones.list.title">Flota Activa</h2>
+              <div class="u-flex u-gap-sm">
+                <button type="button"
+                        class="btn btn--ghost btn--sm"
+                        data-trigger="drones:refresh"
+                        aria-label="Actualizar lista">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 8a6 6 0 0111.33-2.9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M14 8a6 6 0 01-11.33 2.9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M14 2v4h-4M2 14v-4h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </button>
+              </div>
+            </header>
+            <div class="card__body" data-region="drone-items">
+              <!-- Cada drone se renderiza como <article> -->
+            </div>
+          </section>
+
+          <!-- Centro de alertas -->
+          <section class="card card--glass" data-component="alert-center" aria-label="Centro de alertas">
+            <header class="card__header">
+              <h2 class="text-h4" data-i18n="alerts.title">Alertas Recientes</h2>
+              <span class="badge badge--danger" data-key="alerts.unreadCount" data-bind="alerts.unreadCount">3</span>
+            </header>
+            <div class="card__body" data-region="alert-items">
+              <!-- Las alertas se inyectan aquí -->
+            </div>
+            <footer class="card__footer">
+              <a href="#alerts" class="btn btn--ghost btn--sm" data-navigable data-i18n="alerts.viewAll">
+                Ver todas
+              </a>
+            </footer>
+          </section>
+
+        </div>
+      </section>
+
+      <!-- DRONES — Gestión de flota completa
+           ─────────────────────────────────────────────────────── -->
+      <section id="page-drones" data-route="drones" data-page="true" aria-labelledby="drones-title" hidden>
+
+        <header class="page-header" data-region="page-header">
+          <h1 id="drones-title" class="text-h2" data-i18n="drones.title">Flota de Drones</h1>
+          <div class="page-header__actions">
+            <button type="button" class="btn btn--primary btn--md" data-trigger="drones:register" data-i18n="drones.register">
+              + Registrar drone
+            </button>
+          </div>
+        </header>
+
+        <!-- ─── Barra de filtros ──────────────────────────── -->
+        <section class="filters-bar card card--glass" data-component="drone-filters" aria-label="Filtros de flota">
+          <form class="filters-bar__form" data-region="filters" action="#">
+
+            <div class="input-group">
+              <label for="filter-status" class="label" data-i18n="drones.filters.status">Estado</label>
+              <select id="filter-status" class="input input--sm" data-bind="drones.filters.status">
+                <option value="all" data-i18n="drones.filters.all">Todos</option>
+                <option value="flying" data-i18n="drones.status.flying">Volando</option>
+                <option value="idle" data-i18n="drones.status.idle">En tierra</option>
+                <option value="charging" data-i18n="drones.status.charging">Cargando</option>
+                <option value="maintenance" data-i18n="drones.status.maintenance">Mantenimiento</option>
+                <option value="offline" data-i18n="drones.status.offline">Desconectado</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label for="filter-model" class="label" data-i18n="drones.filters.model">Modelo</label>
+              <select id="filter-model" class="input input--sm" data-bind="drones.filters.model">
+                <option value="all" data-i18n="drones.filters.all">Todos</option>
+                <!-- Opciones dinámicas desde JSON -->
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label for="filter-battery" class="label" data-i18n="drones.filters.battery">Batería mínima</label>
+              <input id="filter-battery"
+                     type="range"
+                     min="0"
+                     max="100"
+                     value="0"
+                     class="input"
+                     data-bind="drones.filters.batteryMin" />
+            </div>
+
+            <div class="input-group">
+              <label for="filter-search" class="label u-sr-only" data-i18n="drones.filters.search">Buscar</label>
+              <input id="filter-search"
+                     type="search"
+                     class="input input--sm"
+                     placeholder="Buscar por nombre o ID…"
+                     data-bind="drones.filters.search" />
+            </div>
+
+          </form>
+        </section>
+
+        <!-- ─── Tabla de drones ──────────────────────────── -->
+        <div class="card card--glass" data-region="drone-table-container">
+          <div class="card__body" style="padding:0">
+            <table class="data-table" data-component="drone-table" aria-label="Tabla de drones">
+              <thead>
+                <tr>
+                  <th scope="col" data-sortable="name" aria-sort="ascending">
+                    <button type="button" class="data-table__sort" data-trigger="drones:sort" data-payload='{"field":"name"}'>
+                      <span data-i18n="drones.table.name">Nombre</span>
+                      <svg class="data-table__sort-icon" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M6 2l3 4H3l3-4zM6 10l3-4H3l3 4z" fill="currentColor"/></svg>
+                    </button>
+                  </th>
+                  <th scope="col" data-sortable="model">
+                    <button type="button" class="data-table__sort" data-trigger="drones:sort" data-payload='{"field":"model"}'>
+                      <span data-i18n="drones.table.model">Modelo</span>
+                    </button>
+                  </th>
+                  <th scope="col" data-sortable="status">
+                    <button type="button" class="data-table__sort" data-trigger="drones:sort" data-payload='{"field":"status"}'>
+                      <span data-i18n="drones.table.status">Estado</span>
+                    </button>
+                  </th>
+                  <th scope="col" data-sortable="battery">
+                    <button type="button" class="data-table__sort" data-trigger="drones:sort" data-payload='{"field":"battery"}'>
+                      <span data-i18n="drones.table.battery">Batería</span>
+                    </button>
+                  </th>
+                  <th scope="col" data-sortable="mission">
+                    <button type="button" class="data-table__sort" data-trigger="drones:sort" data-payload='{"field":"mission"}'>
+                      <span data-i18n="drones.table.mission">Misión</span>
+                    </button>
+                  </th>
+                  <th scope="col" data-sortable="pilot">
+                    <button type="button" class="data-table__sort" data-trigger="drones:sort" data-payload='{"field":"pilot"}'>
+                      <span data-i18n="drones.table.pilot">Piloto</span>
+                    </button>
+                  </th>
+                  <th scope="col" aria-label="Acciones"></th>
+                </tr>
+              </thead>
+              <tbody data-region="drone-rows">
+                <!-- Filas inyectadas por JSON -->
+              </tbody>
+            </table>
+          </div>
+          <footer class="card__footer" data-region="pagination">
+            <span class="text-caption" data-i18n="table.pagination" data-key="drones.pagination.label">
+              Página 1 de 5
+            </span>
+            <div class="u-flex u-gap-sm">
+              <button type="button" class="btn btn--ghost btn--sm" data-trigger="drones:page" data-payload='{"page":"prev"}' aria-label="Página anterior">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+              <button type="button" class="btn btn--ghost btn--sm" data-trigger="drones:page" data-payload='{"page":"next"}' aria-label="Página siguiente">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+          </footer>
+        </div>
+      </section>
+
+      <!-- MISIONES — Planificación y seguimiento
+           ─────────────────────────────────────────────────────── -->
+      <section id="page-missions" data-route="missions" data-page="true" aria-labelledby="missions-title" hidden>
+
+        <header class="page-header" data-region="page-header">
+          <h1 id="missions-title" class="text-h2" data-i18n="missions.title">Misiones</h1>
+          <div class="page-header__actions">
+            <button type="button" class="btn btn--primary btn--md" data-trigger="missions:create" data-i18n="missions.create">
+              + Nueva misión
+            </button>
+          </div>
+        </header>
+
+        <!-- ─── Timeline de misiones ─────────────────────── -->
+        <div class="missions-layout" data-region="missions-layout">
+
+          <!-- Sidebar de lista de misiones -->
+          <aside class="card card--glass" data-component="mission-list" aria-label="Lista de misiones">
+            <div class="card__body" data-region="mission-items">
+              <!-- Misiones inyectadas desde JSON -->
+            </div>
+          </aside>
+
+          <!-- Detalle de la misión seleccionada -->
+          <section class="card card--glass" data-component="mission-detail" aria-label="Detalle de misión">
+            <header class="card__header">
+              <h2 class="text-h3" data-key="missions.selected.name" data-i18n="missions.detail.title">Misión seleccionada</h2>
+              <span class="badge badge--primary" data-key="missions.selected.status" data-bind="missions.selected.status">En progreso</span>
+            </header>
+            <div class="card__body">
+
+              <!-- Información general -->
+              <dl class="detail-grid" data-region="mission-info">
+                <div>
+                  <dt class="text-caption" data-i18n="missions.detail.drone">Drone asignado</dt>
+                  <dd class="text-body" data-key="missions.selected.droneName">Alpha-7</dd>
+                </div>
+                <div>
+                  <dt class="text-caption" data-i18n="missions.detail.pilot">Piloto</dt>
+                  <dd class="text-body" data-key="missions.selected.pilotName">Carlos Ruiz</dd>
+                </div>
+                <div>
+                  <dt class="text-caption" data-i18n="missions.detail.start">Inicio</dt>
+                  <dd class="text-body" data-key="missions.selected.startedAt">14:00 UTC</dd>
+                </div>
+                <div>
+                  <dt class="text-caption" data-i18n="missions.detail.estimatedEnd">Fin estimado</dt>
+                  <dd class="text-body" data-key="missions.selected.estimatedEnd">15:00 UTC</dd>
+                </div>
+              </dl>
+
+              <!-- Barra de progreso -->
+              <div class="mission-progress" data-region="mission-progress">
+                <span class="text-caption" data-i18n="missions.detail.progress">Progreso</span>
+                <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" data-key="missions.selected.progress">
+                  <div class="progress-bar__fill" style="width:0%" data-bind="missions.selected.progress"></div>
+                </div>
+                <span class="text-mono-xs" data-bind="missions.selected.progress">0%</span>
+              </div>
+
+              <!-- Lista de waypoints -->
+              <section data-region="waypoints">
+                <h3 class="text-caption" data-i18n="missions.detail.waypoints">Waypoints</h3>
+                <ol class="waypoint-list" data-component="waypoint-list">
+                  <!-- Waypoints inyectados desde JSON -->
+                </ol>
+              </section>
+
+            </div>
+            <footer class="card__footer">
+              <button type="button" class="btn btn--danger btn--sm" data-trigger="missions:abort" data-i18n="missions.abort">
+                Abortar misión
+              </button>
+              <button type="button" class="btn btn--primary btn--sm" data-trigger="missions:edit" data-i18n="missions.edit">
+                Editar
+              </button>
+            </footer>
+          </section>
+
+        </div>
+      </section>
+
+      <!-- HISTORIAL — Logs y trazas
+           ─────────────────────────────────────────────────────── -->
+      <section id="page-logs" data-route="logs" data-page="true" aria-labelledby="logs-title" hidden>
+
+        <header class="page-header" data-region="page-header">
+          <h1 id="logs-title" class="text-h2" data-i18n="logs.title">Historial de Vuelo</h1>
+          <div class="page-header__actions">
+            <button type="button" class="btn btn--ghost btn--sm" data-trigger="logs:export" data-i18n="logs.export">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2v8M5 7l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2 10v3a1 1 0 001 1h10a1 1 0 001-1v-3" stroke="currentColor" stroke-width="1.5"/></svg>
+              Exportar
+            </button>
+          </div>
+        </header>
+
+        <!-- ─── Filtros de logs ──────────────────────────── -->
+        <section class="filters-bar card card--glass" data-component="log-filters" aria-label="Filtros de historial">
+          <form class="filters-bar__form" data-region="filters" action="#">
+
+            <div class="input-group">
+              <label for="log-filter-drone" class="label" data-i18n="logs.filters.drone">Drone</label>
+              <select id="log-filter-drone" class="input input--sm" data-bind="logs.filters.droneId">
+                <option value="" data-i18n="logs.filters.all">Todos</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label for="log-filter-type" class="label" data-i18n="logs.filters.type">Tipo</label>
+              <select id="log-filter-type" class="input input--sm" data-bind="logs.filters.type">
+                <option value="all" data-i18n="logs.filters.all">Todos</option>
+                <option value="flight" data-i18n="logs.types.flight">Vuelo</option>
+                <option value="maintenance" data-i18n="logs.types.maintenance">Mantenimiento</option>
+                <option value="alert" data-i18n="logs.types.alert">Alerta</option>
+                <option value="system" data-i18n="logs.types.system">Sistema</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label for="log-filter-from" class="label" data-i18n="logs.filters.from">Desde</label>
+              <input id="log-filter-from" type="date" class="input input--sm" data-bind="logs.filters.dateFrom" />
+            </div>
+
+            <div class="input-group">
+              <label for="log-filter-to" class="label" data-i18n="logs.filters.to">Hasta</label>
+              <input id="log-filter-to" type="date" class="input input--sm" data-bind="logs.filters.dateTo" />
+            </div>
+
+          </form>
+        </section>
+
+        <!-- ─── Tabla de logs ────────────────────────────── -->
+        <div class="card card--glass" data-region="log-table-container">
+          <div class="card__body" style="padding:0">
+            <table class="data-table" data-component="log-table" aria-label="Historial de eventos">
+              <thead>
+                <tr>
+                  <th scope="col" data-i18n="logs.table.timestamp">Timestamp</th>
+                  <th scope="col" data-i18n="logs.table.drone">Drone</th>
+                  <th scope="col" data-i18n="logs.table.type">Tipo</th>
+                  <th scope="col" data-i18n="logs.table.event">Evento</th>
+                  <th scope="col" data-i18n="logs.table.detail">Detalle</th>
+                </tr>
+              </thead>
+              <tbody data-region="log-rows">
+                <!-- Filas inyectadas por JSON -->
+              </tbody>
+            </table>
+          </div>
+          <footer class="card__footer" data-region="pagination">
+            <span class="text-caption" data-key="logs.pagination.label">Página 1 de 25</span>
+            <div class="u-flex u-gap-sm">
+              <button type="button" class="btn btn--ghost btn--sm" data-trigger="logs:page" data-payload='{"page":"prev"}' aria-label="Anterior">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+              <button type="button" class="btn btn--ghost btn--sm" data-trigger="logs:page" data-payload='{"page":"next"}' aria-label="Siguiente">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+          </footer>
+        </div>
+      </section>
+
+      <!-- CONFIGURACIÓN — Preferencias del sistema
+           ─────────────────────────────────────────────────────── -->
+      <section id="page-settings" data-route="settings" data-page="true" aria-labelledby="settings-title" hidden>
+
+        <header class="page-header" data-region="page-header">
+          <h1 id="settings-title" class="text-h2" data-i18n="settings.title">Configuración</h1>
+        </header>
+
+        <div class="settings-layout" data-region="settings-layout">
+
+          <!-- Navegación interna de settings -->
+          <nav class="settings-nav card card--glass" aria-label="Secciones de configuración">
+            <div class="card__body">
+              <ul role="list">
+                <li><a href="#settings/general" class="settings-nav__link" data-navigable data-route="settings/general" data-i18n="settings.general">General</a></li>
+                <li><a href="#settings/notifications" class="settings-nav__link" data-navigable data-route="settings/notifications" data-i18n="settings.notifications">Notificaciones</a></li>
+                <li><a href="#settings/telemetry" class="settings-nav__link" data-navigable data-route="settings/telemetry" data-i18n="settings.telemetry">Telemetría</a></li>
+                <li><a href="#settings/users" class="settings-nav__link" data-navigable data-route="settings/users" data-i18n="settings.users">Usuarios</a></li>
+                <li><a href="#settings/firmware" class="settings-nav__link" data-navigable data-route="settings/firmware" data-i18n="settings.firmware">Firmware</a></li>
+                <li><a href="#settings/api" class="settings-nav__link" data-navigable data-route="settings/api" data-i18n="settings.api">API</a></li>
+              </ul>
+            </div>
+          </nav>
+
+          <!-- Panel de configuración activo -->
+          <section class="card card--glass" data-component="settings-panel" aria-label="Panel de configuración">
+
+            <!-- General -->
+            <form id="settings-general" data-route="settings/general" data-page="true" data-region="settings-form">
+              <header class="card__header">
+                <h2 class="text-h3" data-i18n="settings.general.title">General</h2>
+              </header>
+              <div class="card__body">
+
+                <div class="settings-field">
+                  <div>
+                    <span class="label" data-i18n="settings.general.theme">Tema visual</span>
+                    <span class="helper-text" data-i18n="settings.general.themeDesc">Selecciona el tema de la interfaz</span>
+                  </div>
+                  <div class="u-flex u-gap-sm">
+                    <button type="button" class="btn btn--glass btn--sm" data-trigger="settings:theme" data-payload='{"theme":"dark"}' data-i18n="settings.general.dark">Oscuro</button>
+                    <button type="button" class="btn btn--glass btn--sm" data-trigger="settings:theme" data-payload='{"theme":"light"}' data-i18n="settings.general.light">Claro</button>
+                  </div>
+                </div>
+
+                <div class="settings-field">
+                  <div>
+                    <span class="label" data-i18n="settings.general.language">Idioma</span>
+                  </div>
+                  <select class="input input--sm" style="width:auto" data-bind="app.language">
+                    <option value="es" data-i18n="settings.general.lang.es">Español</option>
+                    <option value="en" data-i18n="settings.general.lang.en">English</option>
+                  </select>
+                </div>
+
+                <div class="settings-field">
+                  <div>
+                    <span class="label" data-i18n="settings.general.timezone">Zona horaria</span>
+                  </div>
+                  <select class="input input--sm" style="width:auto" data-bind="app.timezone">
+                    <!-- Opciones inyectadas -->
+                  </select>
+                </div>
+
+              </div>
+              <footer class="card__footer">
+                <button type="submit" class="btn btn--primary btn--sm" data-i18n="settings.save">Guardar cambios</button>
+              </footer>
+            </form>
+
+            <!-- Notificaciones -->
+            <form id="settings-notifications" data-route="settings/notifications" data-page="true" data-region="settings-form" hidden>
+              <header class="card__header">
+                <h2 class="text-h3" data-i18n="settings.notifications.title">Notificaciones</h2>
+              </header>
+              <div class="card__body">
+
+                <div class="settings-field">
+                  <div>
+                    <span class="label" data-i18n="settings.notifications.sound">Sonido de alertas</span>
+                    <span class="helper-text" data-i18n="settings.notifications.soundDesc">Reproducir sonido en alertas críticas</span>
+                  </div>
+                  <label class="toggle">
+                    <input type="checkbox" class="toggle__input" data-bind="alerts.settings.soundEnabled" data-trigger="settings:toggle" />
+                    <span class="toggle__track"></span>
+                  </label>
+                </div>
+
+                <div class="settings-field">
+                  <div>
+                    <span class="label" data-i18n="settings.notifications.criticalOnly">Solo críticas</span>
+                    <span class="helper-text" data-i18n="settings.notifications.criticalOnlyDesc">Ocultar alertas de baja prioridad</span>
+                  </div>
+                  <label class="toggle">
+                    <input type="checkbox" class="toggle__input" data-bind="alerts.settings.criticalOnly" data-trigger="settings:toggle" />
+                    <span class="toggle__track"></span>
+                  </label>
+                </div>
+
+              </div>
+              <footer class="card__footer">
+                <button type="submit" class="btn btn--primary btn--sm" data-i18n="settings.save">Guardar cambios</button>
+              </footer>
+            </form>
+
+          </section>
+        </div>
+      </section>
+
+      <!-- PÁGINA DE LOGIN
+           ─────────────────────────────────────────────────────── -->
+      <section id="page-login" data-route="login" data-page="true" aria-labelledby="login-title" hidden>
+        <div class="login-container" data-component="login">
+
+          <div class="card card--glass" style="max-width:400px;margin:auto">
+            <div class="card__body">
+
+              <figure class="login__logo" data-region="logo">
+                <img src="/assets/logo.svg" alt="Dronestica" width="180" height="48" />
+              </figure>
+
+              <h1 id="login-title" class="text-h3 u-text-center" data-i18n="login.title">Iniciar sesión</h1>
+
+              <form class="login__form" data-region="login-form" action="#" method="post" novalidate>
+
+                <div class="input-group">
+                  <label for="login-email" class="label" data-i18n="login.email">Correo electrónico</label>
+                  <input id="login-email"
+                         type="email"
+                         class="input input--lg"
+                         placeholder="operator@estudio.com"
+                         data-bind="auth.loginForm.email"
+                         required
+                         autocomplete="email" />
+                </div>
+
+                <div class="input-group">
+                  <label for="login-password" class="label" data-i18n="login.password">Contraseña</label>
+                  <input id="login-password"
+                         type="password"
+                         class="input input--lg"
+                         placeholder="············"
+                         data-bind="auth.loginForm.password"
+                         required
+                         autocomplete="current-password" />
+                </div>
+
+                <div class="u-flex u-items-center u-justify-between" style="margin-block:var(--space-4)">
+                  <label class="checkbox">
+                    <input type="checkbox" class="checkbox__input" data-bind="auth.loginForm.remember" />
+                    <span class="checkbox__visual"></span>
+                    <span data-i18n="login.remember">Recordar sesión</span>
+                  </label>
+                  <a href="#login/recover" class="text-body-sm" data-navigable data-i18n="login.forgot">¿Olvidaste tu contraseña?</a>
+                </div>
+
+                <button type="submit" class="btn btn--primary btn--lg u-w-full" data-trigger="auth:login" data-i18n="login.submit">
+                  Ingresar
+                </button>
+
+              </form>
+
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       MODAL GENERIC — Diálogo reutilizable
+       ═══════════════════════════════════════════════════════════════ -->
+  <dialog id="modal-confirm" class="modal-overlay" data-component="modal" data-modal="confirm" aria-labelledby="modal-confirm-title" aria-modal="true">
+    <div class="modal modal--sm">
+      <header class="modal__header">
+        <h2 id="modal-confirm-title" class="text-h4" data-key="modal.confirm.title">Confirmar acción</h2>
+        <button type="button" class="btn btn--ghost btn--sm" data-trigger="modal:close" data-target="modal-confirm" aria-label="Cerrar">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
+      </header>
+      <div class="modal__body">
+        <p data-key="modal.confirm.message">¿Estás seguro de realizar esta acción?</p>
+      </div>
+      <footer class="modal__footer">
+        <button type="button" class="btn btn--ghost btn--md" data-trigger="modal:close" data-target="modal-confirm" data-i18n="modal.cancel">Cancelar</button>
+        <button type="button" class="btn btn--primary btn--md" data-trigger="modal:confirm" data-i18n="modal.confirm">Confirmar</button>
+      </footer>
+    </div>
+  </dialog>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       TOAST CONTAINER — Notificaciones emergentes
+       ═══════════════════════════════════════════════════════════════ -->
+  <div id="toast-container"
+       class="toast-container"
+       data-component="toast-container"
+       aria-live="polite"
+       aria-atomic="false"
+       role="log">
+    <!-- Toasts inyectados dinámicamente -->
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       TEMPLATES — Fragmentos reutilizables (clonados por JS)
+       ═══════════════════════════════════════════════════════════════ -->
+
+  <!-- Template: Drone Card (para drone-list) -->
+  <template id="tmpl-drone-card" data-component="drone-card">
+    <article class="card card--interactive drone-card" data-key="drones.item" role="listitem">
+      <div class="card__body u-flex u-items-center u-gap-md">
+        <span class="badge badge--dot" data-key="drones.item.status"></span>
+        <div style="flex:1">
+          <span class="text-body" data-bind="drones.item.name">Drone</span>
+          <span class="text-caption u-block" data-bind="drones.item.model">Modelo</span>
+        </div>
+        <div class="u-text-right">
+          <span class="text-mono" data-bind="drones.item.battery">0%</span>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <!-- Template: Alert Item -->
+  <template id="tmpl-alert-item" data-component="alert-item">
+    <article class="alert-item" data-key="alerts.item" role="alert">
+      <div class="u-flex u-gap-sm u-items-start">
+        <span class="badge badge--dot" data-key="alerts.item.severity"></span>
+        <div style="flex:1">
+          <span class="text-body-sm" data-bind="alerts.item.message">Mensaje de alerta</span>
+          <span class="text-caption u-block text-secondary" data-bind="alerts.item.timestamp">Hace 2 min</span>
+        </div>
+        <button type="button"
+                class="btn btn--ghost btn--sm"
+                data-trigger="alerts:acknowledge"
+                data-bind="alerts.item.id"
+                aria-label="Descartar alerta">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.5"/></svg>
+        </button>
+      </div>
+    </article>
+  </template>
+
+  <!-- Template: Drone Table Row -->
+  <template id="tmpl-drone-row" data-component="drone-row">
+    <tr data-key="drones.item" data-action="click->drone:select">
+      <td><span data-bind="drones.item.name">Drone</span></td>
+      <td><span class="text-caption" data-bind="drones.item.model">Modelo</span></td>
+      <td><span class="badge" data-bind="drones.item.status">Activo</span></td>
+      <td><span class="text-mono-xs" data-bind="drones.item.battery">73%</span></td>
+      <td><span class="text-body-sm" data-bind="drones.item.mission">Misión activa</span></td>
+      <td><span class="text-body-sm" data-bind="drones.item.pilot">Piloto</span></td>
+      <td>
+        <button type="button" class="btn btn--ghost btn--sm" data-trigger="drones:detail" data-bind="drones.item.id" aria-label="Detalle">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="1.5" fill="currentColor"/><circle cx="7" cy="2.5" r="1.5" fill="currentColor"/><circle cx="7" cy="11.5" r="1.5" fill="currentColor"/></svg>
+        </button>
+      </td>
+    </tr>
+  </template>
+
+  <!-- Template: Log Table Row -->
+  <template id="tmpl-log-row" data-component="log-row">
+    <tr data-key="logs.item">
+      <td><span class="text-mono-xs" data-bind="logs.item.timestamp">2026-07-07 14:32:00</span></td>
+      <td><span class="text-body-sm" data-bind="logs.item.droneName">Alpha-7</span></td>
+      <td><span class="badge" data-bind="logs.item.type">Vuelo</span></td>
+      <td><span class="text-body-sm" data-bind="logs.item.event">Despegue</span></td>
+      <td><span class="text-body-sm text-secondary" data-bind="logs.item.detail">Inicio de misión de inspección</span></td>
+    </tr>
+  </template>
+
+  <!-- Template: Waypoint Item -->
+  <template id="tmpl-waypoint" data-component="waypoint-item">
+    <li class="waypoint-item" data-key="missions.waypoints.item">
+      <span class="badge badge--primary" data-bind="missions.waypoints.item.index">WP01</span>
+      <span class="text-mono-xs" data-bind="missions.waypoints.item.coords">19.4326, -99.1332</span>
+      <span class="text-body-sm" data-bind="missions.waypoints.item.action">Hover 30s</span>
+    </li>
+  </template>
+
+  <!-- Template: Mission Item (sidebar) -->
+  <template id="tmpl-mission-item" data-component="mission-item">
+    <article class="card card--interactive mission-item" data-key="missions.item" role="listitem">
+      <div class="card__body u-flex u-items-center u-gap-sm" style="padding:var(--space-3)">
+        <span class="badge badge--dot" data-key="missions.item.status"></span>
+        <div style="flex:1">
+          <span class="text-body-sm" data-bind="missions.item.name">Nombre de misión</span>
+        </div>
+        <span class="text-caption" data-bind="missions.item.progress">45%</span>
+      </div>
+    </article>
+  </template>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       PUNTO DE ENTRADA JAVASCRIPT
+       ═══════════════════════════════════════════════════════════════ -->
+  <script src="data.js"></script>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

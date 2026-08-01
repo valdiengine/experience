@@ -1,0 +1,658 @@
+{
+  "generatedAt": "2026-08-01T08:49:12.248Z",
+  "summary": {
+    "suites": 8,
+    "checks": 95,
+    "passed": 88,
+    "failed": 7,
+    "crashed": 3,
+    "executionTimeMs": 1099,
+    "green": false
+  },
+  "suites": [
+    {
+      "name": "runtime.bootstrap",
+      "executionTimeMs": 38,
+      "passed": 8,
+      "failed": 0,
+      "total": 8,
+      "crashed": false,
+      "error": null
+    },
+    {
+      "name": "runtime.health",
+      "executionTimeMs": 4,
+      "passed": 15,
+      "failed": 0,
+      "total": 15,
+      "crashed": false,
+      "error": null
+    },
+    {
+      "name": "runtime.smoke",
+      "executionTimeMs": 539,
+      "passed": 6,
+      "failed": 0,
+      "total": 6,
+      "crashed": false,
+      "error": null
+    },
+    {
+      "name": "business.lifecycle",
+      "executionTimeMs": 25,
+      "passed": 30,
+      "failed": 6,
+      "total": 36,
+      "crashed": false,
+      "error": null
+    },
+    {
+      "name": "availability.lifecycle",
+      "executionTimeMs": 19,
+      "passed": 29,
+      "failed": 1,
+      "total": 30,
+      "crashed": false,
+      "error": null
+    },
+    {
+      "name": "visitor.lifecycle",
+      "executionTimeMs": 0,
+      "passed": 0,
+      "failed": 0,
+      "total": 0,
+      "crashed": true,
+      "error": "Cannot read properties of null (reading 'id')"
+    },
+    {
+      "name": "reservation.lifecycle",
+      "executionTimeMs": 0,
+      "passed": 0,
+      "failed": 0,
+      "total": 0,
+      "crashed": true,
+      "error": "availability.isAvailable is not a function"
+    },
+    {
+      "name": "commercial.aggregate",
+      "executionTimeMs": 0,
+      "passed": 0,
+      "failed": 0,
+      "total": 0,
+      "crashed": true,
+      "error": "Invalid status transition: draft -> published"
+    }
+  ],
+  "checks": [
+    {
+      "id": "runtime.bootstrap:start-resolves",
+      "pass": true,
+      "detail": "start() resolved a runtime bundle",
+      "suite": "runtime.bootstrap"
+    },
+    {
+      "id": "runtime.bootstrap:engine-present",
+      "pass": true,
+      "detail": "bundle.engine present",
+      "suite": "runtime.bootstrap"
+    },
+    {
+      "id": "runtime.bootstrap:startup-event-order",
+      "pass": true,
+      "detail": "startup events in fixed order: startup:started, startup:runtime_ready, startup:repositories_ready, startup:capabilities_ready, startup:contexts_ready, startup:health_ready, startup:completed",
+      "suite": "runtime.bootstrap"
+    },
+    {
+      "id": "runtime.bootstrap:startup-events-complete",
+      "pass": true,
+      "detail": "all 7 startup events emitted",
+      "suite": "runtime.bootstrap"
+    },
+    {
+      "id": "runtime.bootstrap:repositories-registered",
+      "pass": true,
+      "detail": "repositories registered: 12",
+      "suite": "runtime.bootstrap"
+    },
+    {
+      "id": "runtime.bootstrap:capabilities-registered",
+      "pass": true,
+      "detail": "capabilities registered: 9",
+      "suite": "runtime.bootstrap"
+    },
+    {
+      "id": "runtime.bootstrap:runtime-validation",
+      "pass": true,
+      "detail": "validateRuntime passed",
+      "suite": "runtime.bootstrap"
+    },
+    {
+      "id": "runtime.bootstrap:start-idempotent",
+      "pass": true,
+      "detail": "second start() returns the same bundle shape",
+      "suite": "runtime.bootstrap"
+    },
+    {
+      "id": "runtime.health:health-returns",
+      "pass": true,
+      "detail": "engine.healthCheck() returned a result",
+      "suite": "runtime.health"
+    },
+    {
+      "id": "runtime.health:health-runtime",
+      "pass": true,
+      "detail": "runtime status: healthy",
+      "suite": "runtime.health"
+    },
+    {
+      "id": "runtime.health:health-database",
+      "pass": true,
+      "detail": "database status: healthy",
+      "suite": "runtime.health"
+    },
+    {
+      "id": "runtime.health:health-repository",
+      "pass": true,
+      "detail": "repository status: healthy",
+      "suite": "runtime.health"
+    },
+    {
+      "id": "runtime.health:health-authentication",
+      "pass": true,
+      "detail": "authentication status: healthy",
+      "suite": "runtime.health"
+    },
+    {
+      "id": "runtime.health:health-authorization",
+      "pass": true,
+      "detail": "authorization status: healthy",
+      "suite": "runtime.health"
+    },
+    {
+      "id": "runtime.health:health-cms",
+      "pass": true,
+      "detail": "cms status: healthy",
+      "suite": "runtime.health"
+    },
+    {
+      "id": "runtime.health:health-application",
+      "pass": true,
+      "detail": "application status: ready",
+      "suite": "runtime.health"
+    },
+    {
+      "id": "runtime.health:module:database",
+      "pass": true,
+      "detail": "module \"database\" registered",
+      "suite": "runtime.health"
+    },
+    {
+      "id": "runtime.health:module:auth",
+      "pass": true,
+      "detail": "module \"auth\" registered",
+      "suite": "runtime.health"
+    },
+    {
+      "id": "runtime.health:module:authorization",
+      "pass": true,
+      "detail": "module \"authorization\" registered",
+      "suite": "runtime.health"
+    },
+    {
+      "id": "runtime.health:module:cms",
+      "pass": true,
+      "detail": "module \"cms\" registered",
+      "suite": "runtime.health"
+    },
+    {
+      "id": "runtime.health:module:repository",
+      "pass": true,
+      "detail": "module \"repository\" registered",
+      "suite": "runtime.health"
+    },
+    {
+      "id": "runtime.health:health-ready-event",
+      "pass": true,
+      "detail": "startup:health_ready emitted",
+      "suite": "runtime.health"
+    },
+    {
+      "id": "runtime.health:validation-checks-nonempty",
+      "pass": true,
+      "detail": "runtime validation checks: 16",
+      "suite": "runtime.health"
+    },
+    {
+      "id": "runtime.smoke:exit-code",
+      "pass": true,
+      "detail": "smoke.test.js exit code: 0",
+      "suite": "runtime.smoke"
+    },
+    {
+      "id": "runtime.smoke:report-written",
+      "pass": true,
+      "detail": "smoke.report.json written",
+      "suite": "runtime.smoke"
+    },
+    {
+      "id": "runtime.smoke:report-total",
+      "pass": true,
+      "detail": "smoke checks total: 79",
+      "suite": "runtime.smoke"
+    },
+    {
+      "id": "runtime.smoke:report-passed",
+      "pass": true,
+      "detail": "smoke checks passed: 79/79",
+      "suite": "runtime.smoke"
+    },
+    {
+      "id": "runtime.smoke:report-failed",
+      "pass": true,
+      "detail": "smoke checks failed: 0",
+      "suite": "runtime.smoke"
+    },
+    {
+      "id": "runtime.smoke:report-score",
+      "pass": true,
+      "detail": "smoke score: 100/100",
+      "suite": "runtime.smoke"
+    },
+    {
+      "id": "business.lifecycle:baseline:runtime-healthy",
+      "pass": false,
+      "detail": "runtime healthy after setup — health: {\"database\":\"healthy\",\"repository\":\"healthy\",\"runtime\":\"healthy\",\"authentication\":\"healthy\",\"authorization\":\"healthy\",\"cms\":\"healthy\",\"providers\":\"healthy\",\"application\":\"ready\"}",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:baseline:capabilities-registered",
+      "pass": true,
+      "detail": "commercial capabilities registered (9)",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:baseline:no-circular-references",
+      "pass": true,
+      "detail": "no circular capability dependencies",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:business-created",
+      "pass": true,
+      "detail": "createBusiness succeeded",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:business-created-row",
+      "pass": true,
+      "detail": "business row persisted with status draft",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:business-created-event",
+      "pass": true,
+      "detail": "business:created emitted",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:auth-business-create",
+      "pass": true,
+      "detail": "authorize(business:create) recorded",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:accommodation-created",
+      "pass": true,
+      "detail": "createAccommodation succeeded",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:accommodation-owned",
+      "pass": true,
+      "detail": "accommodation row owned by business + tenant",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:accommodation-created-event",
+      "pass": true,
+      "detail": "accommodation:created emitted",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:visitor-created",
+      "pass": true,
+      "detail": "createVisitor succeeded",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:visitor-created-row",
+      "pass": true,
+      "detail": "visitor row persisted",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:visitor-created-event",
+      "pass": true,
+      "detail": "visitor:created emitted",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:reservation-created",
+      "pass": true,
+      "detail": "createReservation succeeded",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:reservation-created-row",
+      "pass": true,
+      "detail": "reservation row persisted as requested",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:reservation-created-event",
+      "pass": true,
+      "detail": "reservation:created emitted",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:business-archived",
+      "pass": true,
+      "detail": "archiveBusiness succeeded",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:business-archived-row",
+      "pass": true,
+      "detail": "business row archived",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:accommodation-cascade-archived",
+      "pass": true,
+      "detail": "accommodation cascade hidden",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:visitor-cascade-archived",
+      "pass": false,
+      "detail": "visitor cascade archived",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:business-archived-event",
+      "pass": true,
+      "detail": "business:archived emitted",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:visitor-cascade-archive-event",
+      "pass": false,
+      "detail": "visitor cascade archive event emitted — event \"business.visitor:archived\" not found (emitted 0 times)",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:business-restored",
+      "pass": true,
+      "detail": "restoreBusiness succeeded",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:business-restored-row",
+      "pass": true,
+      "detail": "business row restored to draft",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:accommodation-cascade-restored",
+      "pass": true,
+      "detail": "accommodation cascade restored",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:visitor-cascade-restored",
+      "pass": false,
+      "detail": "visitor cascade restored to inactive",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:business-restored-event",
+      "pass": true,
+      "detail": "business:restored emitted",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:business-deleted",
+      "pass": true,
+      "detail": "deleteBusiness succeeded",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:business-deleted-row",
+      "pass": true,
+      "detail": "business row deleted",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:visitor-cascade-deleted",
+      "pass": false,
+      "detail": "visitor cascade archived on delete",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:business-deleted-event",
+      "pass": true,
+      "detail": "business:deleted emitted",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:reservation-cascade-event",
+      "pass": false,
+      "detail": "reservation cascade archive event emitted — event \"business.reservation:archived\" not found (emitted 0 times)",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:baseline:tenant-isolation:business",
+      "pass": true,
+      "detail": "all business rows in tenant commercial",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:baseline:tenant-isolation:accommodation",
+      "pass": true,
+      "detail": "all accommodation rows in tenant commercial",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:baseline:tenant-isolation:reservation",
+      "pass": true,
+      "detail": "all reservation rows in tenant commercial",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "business.lifecycle:baseline:tenant-isolation:visitor",
+      "pass": true,
+      "detail": "all visitor rows in tenant commercial",
+      "suite": "business.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:baseline:runtime-healthy",
+      "pass": false,
+      "detail": "runtime healthy after setup — health: {\"database\":\"healthy\",\"repository\":\"healthy\",\"runtime\":\"healthy\",\"authentication\":\"healthy\",\"authorization\":\"healthy\",\"cms\":\"healthy\",\"providers\":\"healthy\",\"application\":\"ready\"}",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:baseline:capabilities-registered",
+      "pass": true,
+      "detail": "commercial capabilities registered (9)",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:baseline:no-circular-references",
+      "pass": true,
+      "detail": "no circular capability dependencies",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:window-created",
+      "pass": true,
+      "detail": "createWindow succeeded",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:window-row",
+      "pass": true,
+      "detail": "window row persisted",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:window-event",
+      "pass": true,
+      "detail": "availability:calendar.updated emitted",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:day-created",
+      "pass": true,
+      "detail": "createDay succeeded",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:day-row",
+      "pass": true,
+      "detail": "day row persisted as available",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:day-created-event",
+      "pass": true,
+      "detail": "availability:created emitted",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:search-indexed",
+      "pass": true,
+      "detail": "search.index(availability) recorded",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:sync-pushed",
+      "pass": true,
+      "detail": "sync.push(availability) recorded",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:auth-write",
+      "pass": true,
+      "detail": "authorize(availability:write) recorded",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:block-success",
+      "pass": true,
+      "detail": "block succeeded",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:blocked-rows",
+      "pass": true,
+      "detail": "3 day rows blocked",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:blocked-event",
+      "pass": true,
+      "detail": "availability:blocked emitted",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:blocked-not-available",
+      "pass": true,
+      "detail": "blocked range reported unavailable",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:reserve-success",
+      "pass": true,
+      "detail": "reserve succeeded",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:reserved-row",
+      "pass": true,
+      "detail": "day row reserved",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:reserved-event",
+      "pass": true,
+      "detail": "availability:reserved emitted",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:release-success",
+      "pass": true,
+      "detail": "release succeeded",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:released-row",
+      "pass": true,
+      "detail": "day row released to available",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:released-event",
+      "pass": true,
+      "detail": "availability:released emitted",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:archive-success",
+      "pass": true,
+      "detail": "archiveDay succeeded",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:archived-row",
+      "pass": true,
+      "detail": "day row archived",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:archived-event",
+      "pass": true,
+      "detail": "availability:archived emitted",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:search-deleted",
+      "pass": true,
+      "detail": "search.delete(availability, id) recorded",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:restore-success",
+      "pass": true,
+      "detail": "restoreDay succeeded",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:restored-row",
+      "pass": true,
+      "detail": "day row restored to available",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:search-reindexed",
+      "pass": true,
+      "detail": "search.index(availability) recorded after restore",
+      "suite": "availability.lifecycle"
+    },
+    {
+      "id": "availability.lifecycle:baseline:tenant-isolation:availability",
+      "pass": true,
+      "detail": "all availability rows in tenant commercial",
+      "suite": "availability.lifecycle"
+    }
+  ]
+}

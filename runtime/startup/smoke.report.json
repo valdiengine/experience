@@ -1,0 +1,542 @@
+{
+  "phase": "P13.5.6 — End-to-End Runtime Smoke Test",
+  "startedAt": "1970-01-01T00:00:00.406Z",
+  "finishedAt": "1970-01-01T00:00:00.433Z",
+  "summary": {
+    "passed": 79,
+    "failed": 0,
+    "total": 79,
+    "score": 100,
+    "startupDurationMs": 27,
+    "shutdownDurationMs": 1,
+    "bootstrapStepDurations": {
+      "loadConfiguration": 1,
+      "buildRuntime": 1,
+      "registerProviders": 0,
+      "initializeRepositories": 0,
+      "initializeCapabilities": 1,
+      "initializeCMS": 0,
+      "initializeAuthentication": 0,
+      "initializeRuntime": 7,
+      "healthCheck": 4
+    },
+    "startupStages": [
+      {
+        "from": "started",
+        "to": "runtime_ready",
+        "ms": 16
+      },
+      {
+        "from": "runtime_ready",
+        "to": "repositories_ready",
+        "ms": 1
+      },
+      {
+        "from": "repositories_ready",
+        "to": "capabilities_ready",
+        "ms": 8
+      },
+      {
+        "from": "capabilities_ready",
+        "to": "contexts_ready",
+        "ms": 1
+      },
+      {
+        "from": "contexts_ready",
+        "to": "health_ready",
+        "ms": 0
+      },
+      {
+        "from": "health_ready",
+        "to": "completed",
+        "ms": 1
+      }
+    ],
+    "health": {
+      "application": "ready",
+      "runtime": "healthy",
+      "authentication": "healthy",
+      "authorization": "healthy",
+      "cms": "healthy",
+      "repository": "healthy",
+      "commercial": "healthy",
+      "bootstrap": "ready"
+    }
+  },
+  "results": [
+    {
+      "category": "startup",
+      "id": "application.start",
+      "pass": true,
+      "detail": "ok"
+    },
+    {
+      "category": "startup",
+      "id": "runtime.started",
+      "pass": true,
+      "detail": "started=true"
+    },
+    {
+      "category": "startup",
+      "id": "bootstrap.completed",
+      "pass": true,
+      "detail": "pipeline produced health + engine"
+    },
+    {
+      "category": "startup",
+      "id": "eventbus.initialized",
+      "pass": true,
+      "detail": "on/emit present"
+    },
+    {
+      "category": "modules",
+      "id": "repository.runtime",
+      "pass": true,
+      "detail": "initialized=true"
+    },
+    {
+      "category": "modules",
+      "id": "authentication.runtime",
+      "pass": true,
+      "detail": "initialized=true"
+    },
+    {
+      "category": "modules",
+      "id": "authorization.runtime",
+      "pass": true,
+      "detail": "module present + initialized"
+    },
+    {
+      "category": "modules",
+      "id": "cms.runtime",
+      "pass": true,
+      "detail": "initialized=true"
+    },
+    {
+      "category": "registries",
+      "id": "repositories.all",
+      "pass": true,
+      "detail": "count=12 (expected 12)"
+    },
+    {
+      "category": "registries",
+      "id": "repositories.commercial",
+      "pass": true,
+      "detail": "9/9"
+    },
+    {
+      "category": "registries",
+      "id": "capabilities.all",
+      "pass": true,
+      "detail": "count=9 (expected 9)"
+    },
+    {
+      "category": "registries",
+      "id": "capabilities.commercial",
+      "pass": true,
+      "detail": "9/9"
+    },
+    {
+      "category": "registries",
+      "id": "capabilities.active",
+      "pass": true,
+      "detail": "active=9"
+    },
+    {
+      "category": "contexts",
+      "id": "context.runtime",
+      "pass": true,
+      "detail": "ok"
+    },
+    {
+      "category": "contexts",
+      "id": "context.repositories",
+      "pass": true,
+      "detail": "facade present"
+    },
+    {
+      "category": "contexts",
+      "id": "context.eventBus",
+      "pass": true,
+      "detail": "eventBus injected"
+    },
+    {
+      "category": "contexts",
+      "id": "context.runtime.auth",
+      "pass": true,
+      "detail": "auth module reachable"
+    },
+    {
+      "category": "contexts",
+      "id": "context.runtime.cms",
+      "pass": true,
+      "detail": "cms module reachable"
+    },
+    {
+      "category": "contexts",
+      "id": "context.runtime.repository",
+      "pass": true,
+      "detail": "repository module reachable"
+    },
+    {
+      "category": "contexts",
+      "id": "context.runtime.search",
+      "pass": true,
+      "detail": "search=null (declared future slot)"
+    },
+    {
+      "category": "contexts",
+      "id": "context.runtime.sync",
+      "pass": true,
+      "detail": "sync=null (declared future slot)"
+    },
+    {
+      "category": "events",
+      "id": "order",
+      "pass": true,
+      "detail": "actual=[startup:started > startup:runtime_ready > startup:repositories_ready > startup:capabilities_ready > startup:contexts_ready > startup:health_ready > startup:completed]"
+    },
+    {
+      "category": "events",
+      "id": "monotonic.timestamps",
+      "pass": true,
+      "detail": "timestamps non-decreasing"
+    },
+    {
+      "category": "repositories",
+      "id": "business",
+      "pass": true,
+      "detail": "mock: findById=null findMany=[] findOne=null count=0 exists=false paginate.total=0"
+    },
+    {
+      "category": "repositories",
+      "id": "accommodation",
+      "pass": true,
+      "detail": "mock: findById=null findMany=[] findOne=null count=0 exists=false paginate.total=0"
+    },
+    {
+      "category": "repositories",
+      "id": "availability",
+      "pass": true,
+      "detail": "mock: findById=null findMany=[] findOne=null count=0 exists=false paginate.total=0"
+    },
+    {
+      "category": "repositories",
+      "id": "reservation",
+      "pass": true,
+      "detail": "mock: findById=null findMany=[] findOne=null count=0 exists=false paginate.total=0"
+    },
+    {
+      "category": "repositories",
+      "id": "visitor",
+      "pass": true,
+      "detail": "mock: findById=null findMany=[] findOne=null count=0 exists=false paginate.total=0"
+    },
+    {
+      "category": "repositories",
+      "id": "owner",
+      "pass": true,
+      "detail": "mock: findById=null findMany=[] findOne=null count=0 exists=false paginate.total=0"
+    },
+    {
+      "category": "repositories",
+      "id": "booking",
+      "pass": true,
+      "detail": "mock: findById=null findMany=[] findOne=null count=0 exists=false paginate.total=0"
+    },
+    {
+      "category": "repositories",
+      "id": "notification",
+      "pass": true,
+      "detail": "mock: findById=null findMany=[] findOne=null count=0 exists=false paginate.total=0"
+    },
+    {
+      "category": "repositories",
+      "id": "opportunity",
+      "pass": true,
+      "detail": "mock: findById=null findMany=[] findOne=null count=0 exists=false paginate.total=0"
+    },
+    {
+      "category": "capabilities",
+      "id": "resolve.business",
+      "pass": true,
+      "detail": "state=active context=true service=true"
+    },
+    {
+      "category": "capabilities",
+      "id": "resolve.accommodation",
+      "pass": true,
+      "detail": "state=active context=true service=true"
+    },
+    {
+      "category": "capabilities",
+      "id": "resolve.availability",
+      "pass": true,
+      "detail": "state=active context=true service=true"
+    },
+    {
+      "category": "capabilities",
+      "id": "resolve.reservation",
+      "pass": true,
+      "detail": "state=active context=true service=true"
+    },
+    {
+      "category": "capabilities",
+      "id": "resolve.visitor",
+      "pass": true,
+      "detail": "state=active context=true service=true"
+    },
+    {
+      "category": "capabilities",
+      "id": "resolve.owner",
+      "pass": true,
+      "detail": "state=active context=true service=true"
+    },
+    {
+      "category": "capabilities",
+      "id": "resolve.booking",
+      "pass": true,
+      "detail": "state=active context=true service=false"
+    },
+    {
+      "category": "capabilities",
+      "id": "resolve.notifications",
+      "pass": true,
+      "detail": "state=active context=true service=true"
+    },
+    {
+      "category": "capabilities",
+      "id": "resolve.opportunity",
+      "pass": true,
+      "detail": "state=active context=true service=false"
+    },
+    {
+      "category": "capabilities",
+      "id": "peer.business",
+      "pass": true,
+      "detail": "context.capabilities.get() resolves"
+    },
+    {
+      "category": "capabilities",
+      "id": "peer.accommodation",
+      "pass": true,
+      "detail": "context.capabilities.get() resolves"
+    },
+    {
+      "category": "capabilities",
+      "id": "peer.availability",
+      "pass": true,
+      "detail": "context.capabilities.get() resolves"
+    },
+    {
+      "category": "capabilities",
+      "id": "peer.reservation",
+      "pass": true,
+      "detail": "context.capabilities.get() resolves"
+    },
+    {
+      "category": "capabilities",
+      "id": "peer.visitor",
+      "pass": true,
+      "detail": "context.capabilities.get() resolves"
+    },
+    {
+      "category": "capabilities",
+      "id": "peer.owner",
+      "pass": true,
+      "detail": "context.capabilities.get() resolves"
+    },
+    {
+      "category": "capabilities",
+      "id": "peer.booking",
+      "pass": true,
+      "detail": "context.capabilities.get() resolves"
+    },
+    {
+      "category": "capabilities",
+      "id": "peer.notifications",
+      "pass": true,
+      "detail": "context.capabilities.get() resolves"
+    },
+    {
+      "category": "capabilities",
+      "id": "peer.opportunity",
+      "pass": true,
+      "detail": "context.capabilities.get() resolves"
+    },
+    {
+      "category": "capabilities",
+      "id": "business->accommodation",
+      "pass": true,
+      "detail": "resolved accommodation"
+    },
+    {
+      "category": "capabilities",
+      "id": "business->availability",
+      "pass": true,
+      "detail": "resolved availability"
+    },
+    {
+      "category": "capabilities",
+      "id": "business->reservation",
+      "pass": true,
+      "detail": "resolved reservation"
+    },
+    {
+      "category": "capabilities",
+      "id": "business->visitor",
+      "pass": true,
+      "detail": "resolved visitor"
+    },
+    {
+      "category": "capabilities",
+      "id": "business->opportunity",
+      "pass": true,
+      "detail": "resolved opportunity"
+    },
+    {
+      "category": "capabilities",
+      "id": "no.direct.capability.imports",
+      "pass": true,
+      "detail": "no cross-capability imports"
+    },
+    {
+      "category": "capabilities",
+      "id": "no.infra.imports",
+      "pass": true,
+      "detail": "no infrastructure imports"
+    },
+    {
+      "category": "health",
+      "id": "application",
+      "pass": true,
+      "detail": "application=ready"
+    },
+    {
+      "category": "health",
+      "id": "runtime",
+      "pass": true,
+      "detail": "runtime=healthy"
+    },
+    {
+      "category": "health",
+      "id": "authentication",
+      "pass": true,
+      "detail": "authentication=healthy"
+    },
+    {
+      "category": "health",
+      "id": "authorization",
+      "pass": true,
+      "detail": "authorization=healthy"
+    },
+    {
+      "category": "health",
+      "id": "cms",
+      "pass": true,
+      "detail": "cms=healthy"
+    },
+    {
+      "category": "health",
+      "id": "repository",
+      "pass": true,
+      "detail": "repository=healthy"
+    },
+    {
+      "category": "health",
+      "id": "commercial",
+      "pass": true,
+      "detail": "commercial=healthy"
+    },
+    {
+      "category": "health",
+      "id": "bootstrap",
+      "pass": true,
+      "detail": "bootstrap=ready"
+    },
+    {
+      "category": "health",
+      "id": "all",
+      "pass": true,
+      "detail": "ok"
+    },
+    {
+      "category": "failures",
+      "id": "duplicate.registration",
+      "pass": true,
+      "detail": "RepositoryConfigurationError"
+    },
+    {
+      "category": "failures",
+      "id": "missing.repository",
+      "pass": true,
+      "detail": "RepositoryConfigurationError"
+    },
+    {
+      "category": "failures",
+      "id": "missing.capability",
+      "pass": true,
+      "detail": "get() returns null"
+    },
+    {
+      "category": "failures",
+      "id": "missing.provider",
+      "pass": true,
+      "detail": "RepositoryConfigurationError: No adapter registered for provider \"postgresql\""
+    },
+    {
+      "category": "failures",
+      "id": "dependency.cycle",
+      "pass": true,
+      "detail": "DependencyResolutionError"
+    },
+    {
+      "category": "failures",
+      "id": "missing.dependency",
+      "pass": true,
+      "detail": "UnregisteredProviderError"
+    },
+    {
+      "category": "failures",
+      "id": "invalid.startup.order",
+      "pass": true,
+      "detail": "ProviderRegistrationError"
+    },
+    {
+      "category": "failures",
+      "id": "double.initialize",
+      "pass": true,
+      "detail": "initialize() twice is idempotent"
+    },
+    {
+      "category": "failures",
+      "id": "double.shutdown",
+      "pass": true,
+      "detail": "shutdown() twice is idempotent"
+    },
+    {
+      "category": "failures",
+      "id": "missing.provider.module",
+      "pass": true,
+      "detail": "getModule(jwt) -> null"
+    },
+    {
+      "category": "shutdown",
+      "id": "cleanup.first",
+      "pass": true,
+      "detail": "returned=true"
+    },
+    {
+      "category": "shutdown",
+      "id": "engine.stopped",
+      "pass": true,
+      "detail": "started=false"
+    },
+    {
+      "category": "shutdown",
+      "id": "cleanup.second.idempotent",
+      "pass": true,
+      "detail": "returned=true"
+    }
+  ]
+}

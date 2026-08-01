@@ -1,0 +1,11 @@
+{
+  "name": "drone-ecosystem",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Dronestica ecosystem platform — ESM runtime entry",
+  "scripts": {
+    "start": "node runtime/startup/application.start.js",
+    "smoke": "node runtime/startup/smoke.test.js"
+  }
+}

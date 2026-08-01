@@ -1,0 +1,25 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Build
+dist/
+build/
+coverage/
+
+# Environment
+.env
+.env.*
+
+# Logs
+*.log
+
+# Windows
+Thumbs.db
+
+# macOS
+.DS_Store
+
+# VSCode (solo configuraciones personales)
+.vscode/settings.json
+.vscode/launch.json

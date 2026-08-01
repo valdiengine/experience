@@ -1,0 +1,133 @@
+export const NOTIFICATION_STATUS = Object.freeze({
+  DRAFT: 'draft',
+  PENDING: 'pending',
+  SCHEDULED: 'scheduled',
+  PROCESSING: 'processing',
+  SENT: 'sent',
+  DELIVERED: 'delivered',
+  FAILED: 'failed',
+  CANCELLED: 'cancelled',
+  ARCHIVED: 'archived',
+  DELETED: 'deleted',
+})
+
+export const NOTIFICATION_STATUS_LIST = Object.values(NOTIFICATION_STATUS)
+
+export const NOTIFICATION_STATUS_LABELS = Object.freeze({
+  [NOTIFICATION_STATUS.DRAFT]: 'Draft',
+  [NOTIFICATION_STATUS.PENDING]: 'Pending',
+  [NOTIFICATION_STATUS.SCHEDULED]: 'Scheduled',
+  [NOTIFICATION_STATUS.PROCESSING]: 'Processing',
+  [NOTIFICATION_STATUS.SENT]: 'Sent',
+  [NOTIFICATION_STATUS.DELIVERED]: 'Delivered',
+  [NOTIFICATION_STATUS.FAILED]: 'Failed',
+  [NOTIFICATION_STATUS.CANCELLED]: 'Cancelled',
+  [NOTIFICATION_STATUS.ARCHIVED]: 'Archived',
+  [NOTIFICATION_STATUS.DELETED]: 'Deleted',
+})
+
+export function isPending(status) {
+  return [
+    NOTIFICATION_STATUS.PENDING,
+    NOTIFICATION_STATUS.SCHEDULED,
+    NOTIFICATION_STATUS.PROCESSING,
+  ].includes(status)
+}
+
+export function isCompleted(status) {
+  return [
+    NOTIFICATION_STATUS.SENT,
+    NOTIFICATION_STATUS.DELIVERED,
+  ].includes(status)
+}
+
+export function isFailed(status) {
+  return status === NOTIFICATION_STATUS.FAILED
+}
+
+export function isTerminal(status) {
+  return [
+    NOTIFICATION_STATUS.DELIVERED,
+    NOTIFICATION_STATUS.CANCELLED,
+    NOTIFICATION_STATUS.ARCHIVED,
+    NOTIFICATION_STATUS.DELETED,
+  ].includes(status)
+}
+
+export function isRetryable(status) {
+  return status === NOTIFICATION_STATUS.FAILED
+}
+
+export function canTransitionTo(from, to) {
+  const valid = VALID_TRANSITIONS[from]
+  return valid ? valid.includes(to) : false
+}
+
+export function canCancel(status) {
+  return [
+    NOTIFICATION_STATUS.DRAFT,
+    NOTIFICATION_STATUS.PENDING,
+    NOTIFICATION_STATUS.SCHEDULED,
+  ].includes(status)
+}
+
+export function canRetry(status) {
+  return status === NOTIFICATION_STATUS.FAILED
+}
+
+export function canArchive(status) {
+  return !isTerminal(status)
+}
+
+export function canDelete(status) {
+  return [
+    NOTIFICATION_STATUS.DRAFT,
+    NOTIFICATION_STATUS.CANCELLED,
+    NOTIFICATION_STATUS.ARCHIVED,
+  ].includes(status)
+}
+
+const VALID_TRANSITIONS = Object.freeze({
+  [NOTIFICATION_STATUS.DRAFT]: [
+    NOTIFICATION_STATUS.PENDING,
+    NOTIFICATION_STATUS.CANCELLED,
+    NOTIFICATION_STATUS.DELETED,
+  ],
+  [NOTIFICATION_STATUS.PENDING]: [
+    NOTIFICATION_STATUS.SCHEDULED,
+    NOTIFICATION_STATUS.PROCESSING,
+    NOTIFICATION_STATUS.CANCELLED,
+    NOTIFICATION_STATUS.FAILED,
+  ],
+  [NOTIFICATION_STATUS.SCHEDULED]: [
+    NOTIFICATION_STATUS.PROCESSING,
+    NOTIFICATION_STATUS.CANCELLED,
+    NOTIFICATION_STATUS.FAILED,
+  ],
+  [NOTIFICATION_STATUS.PROCESSING]: [
+    NOTIFICATION_STATUS.SENT,
+    NOTIFICATION_STATUS.DELIVERED,
+    NOTIFICATION_STATUS.FAILED,
+    NOTIFICATION_STATUS.CANCELLED,
+  ],
+  [NOTIFICATION_STATUS.SENT]: [
+    NOTIFICATION_STATUS.DELIVERED,
+    NOTIFICATION_STATUS.FAILED,
+    NOTIFICATION_STATUS.ARCHIVED,
+  ],
+  [NOTIFICATION_STATUS.DELIVERED]: [
+    NOTIFICATION_STATUS.ARCHIVED,
+  ],
+  [NOTIFICATION_STATUS.FAILED]: [
+    NOTIFICATION_STATUS.PENDING,
+    NOTIFICATION_STATUS.CANCELLED,
+    NOTIFICATION_STATUS.ARCHIVED,
+  ],
+  [NOTIFICATION_STATUS.CANCELLED]: [
+    NOTIFICATION_STATUS.ARCHIVED,
+  ],
+  [NOTIFICATION_STATUS.ARCHIVED]: [
+    NOTIFICATION_STATUS.RESTORED,
+  ],
+  [NOTIFICATION_STATUS.DELETED]: [],
+})

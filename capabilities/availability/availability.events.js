@@ -1,0 +1,17 @@
+export const AVAILABILITY_EVENTS = {
+  CREATED: 'availability:created',
+  UPDATED: 'availability:updated',
+  DELETED: 'availability:deleted',
+  ARCHIVED: 'availability:archived',
+  RESTORED: 'availability:restored',
+  BLOCKED: 'availability:blocked',
+  UNBLOCKED: 'availability:unblocked',
+  RESERVED: 'availability:reserved',
+  RELEASED: 'availability:released',
+  RULE_CREATED: 'availability:rule.created',
+  RULE_UPDATED: 'availability:rule.updated',
+  RULE_DELETED: 'availability:rule.deleted',
+  CALENDAR_UPDATED: 'availability:calendar.updated',
+  SYNC_REQUESTED: 'availability:sync.requested',
+  SYNC_COMPLETED: 'availability:sync.completed',
+}
