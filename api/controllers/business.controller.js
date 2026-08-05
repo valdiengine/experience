@@ -36,7 +36,7 @@ export class BusinessController extends BaseController {
       if (!global.runtimeContext?.capabilities) {
         throw new Error('Runtime context not initialized');
       }
-      this.#businessService = global.runtimeContext.capabilities.get('business');
+      this.#businessService = global.runtimeContext.capabilities.get('business')?.service;
     }
     return this.#businessService;
   }

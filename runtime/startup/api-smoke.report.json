@@ -1,0 +1,112 @@
+{
+  "phase": "P14.0.7 — API Layer Runtime Smoke Test",
+  "timestamp": "2026-08-02T08:49:41.852Z",
+  "environment": {
+    "node": "v24.18.1",
+    "os": "win32 10.0.19045"
+  },
+  "results": [
+    {
+      "id": "api.bootstrap.success",
+      "pass": true,
+      "detail": "API bootstrap executed"
+    },
+    {
+      "id": "server.ready",
+      "pass": true,
+      "detail": "Server responded to health check"
+    },
+    {
+      "id": "health.liveness",
+      "pass": true,
+      "detail": "HTTP 200: {\"status\":\"healthy\",\"timestamp\":\"2026-08-02T08:49:41.803Z\",\"checks\":{\"runtime\":{\"healthy\":true,\"mess"
+    },
+    {
+      "id": "health.readiness",
+      "pass": true,
+      "detail": "HTTP 200: {\"ready\":true,\"timestamp\":\"2026-08-02T08:49:41.807Z\",\"checks\":{\"runtime\":{\"ready\":true,\"message\":\"Ru"
+    },
+    {
+      "id": "health.liveness-alt",
+      "pass": true,
+      "detail": "HTTP 200: {\"status\":\"alive\"}"
+    },
+    {
+      "id": "route.business",
+      "pass": true,
+      "detail": "HTTP 500 (route registered)"
+    },
+    {
+      "id": "route.accommodation",
+      "pass": true,
+      "detail": "HTTP 200 (route registered)"
+    },
+    {
+      "id": "route.availability",
+      "pass": true,
+      "detail": "HTTP 200 (route registered)"
+    },
+    {
+      "id": "route.reservation",
+      "pass": true,
+      "detail": "HTTP 200 (route registered)"
+    },
+    {
+      "id": "route.visitor",
+      "pass": true,
+      "detail": "HTTP 200 (route registered)"
+    },
+    {
+      "id": "route.payment",
+      "pass": true,
+      "detail": "HTTP 200 (route registered)"
+    },
+    {
+      "id": "route.review",
+      "pass": true,
+      "detail": "HTTP 200 (route registered)"
+    },
+    {
+      "id": "route.groups.total",
+      "pass": true,
+      "detail": "7/7 routes registered"
+    },
+    {
+      "id": "middleware.requestId",
+      "pass": true,
+      "detail": "x-request-id header present"
+    },
+    {
+      "id": "middleware.correlationId",
+      "pass": true,
+      "detail": "x-correlation-id header present"
+    },
+    {
+      "id": "negative.unknown_route",
+      "pass": true,
+      "detail": "Returns 404 for unknown routes"
+    },
+    {
+      "id": "shutdown.success",
+      "pass": true,
+      "detail": "Shutdown completed in 2ms"
+    },
+    {
+      "id": "shutdown.idempotent",
+      "pass": false,
+      "detail": "Server is not running."
+    },
+    {
+      "id": "performance.startup_time",
+      "pass": true,
+      "detail": "Total test execution: 104ms"
+    }
+  ],
+  "summary": {
+    "total": 19,
+    "passed": 18,
+    "failed": 1,
+    "score": 95
+  },
+  "verdict": "ISSUES FOUND"
+}

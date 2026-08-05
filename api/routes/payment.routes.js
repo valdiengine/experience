@@ -6,7 +6,7 @@
  * P14 - API Layer Foundation
  */
 
-import { Router } from '../router.js';
+import { Router } from './router.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 
 /**
@@ -26,7 +26,7 @@ export function registerPaymentRoutes(router) {
   paymentRouter.post('/:id/retry', authMiddleware, controller.retry.bind(controller));
   paymentRouter.post('/:id/cancel', authMiddleware, controller.cancel.bind(controller));
 
-  router.use('/api/v1/payments', paymentRouter.handle.bind(paymentRouter));
+  router.use('/api/v1/payments', paymentRouter);
 }
 
 /**
@@ -38,8 +38,8 @@ export class PaymentController {
 
   getService() {
     if (!this.#service) {
-      const businessService = global.runtimeContext?.capabilities?.get('business');
-      this.#service = businessService?.getPaymentService?.() || businessService;
+      const capability = global.runtimeContext?.capabilities?.get('business');
+      this.#service = capability?.service;
     }
     return this.#service;
   }

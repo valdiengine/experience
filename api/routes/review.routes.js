@@ -6,7 +6,7 @@
  * P14 - API Layer Foundation
  */
 
-import { Router } from '../router.js';
+import { Router } from './router.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 
 /**
@@ -26,7 +26,7 @@ export function registerReviewRoutes(router) {
   reviewRouter.post('/:id/reject', authMiddleware, controller.reject.bind(controller));
   reviewRouter.post('/:id/report', authMiddleware, controller.report.bind(controller));
 
-  router.use('/api/v1/reviews', reviewRouter.handle.bind(reviewRouter));
+  router.use('/api/v1/reviews', reviewRouter);
 }
 
 /**
@@ -38,8 +38,8 @@ export class ReviewController {
 
   getService() {
     if (!this.#service) {
-      const businessService = global.runtimeContext?.capabilities?.get('business');
-      this.#service = businessService?.getReviewService?.() || businessService;
+      const capability = global.runtimeContext?.capabilities?.get('business');
+      this.#service = capability?.service;
     }
     return this.#service;
   }

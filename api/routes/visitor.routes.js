@@ -6,7 +6,7 @@
  * P14 - API Layer Foundation
  */
 
-import { Router } from '../router.js';
+import { Router } from './router.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 
 /**
@@ -28,7 +28,7 @@ export function registerVisitorRoutes(router) {
   visitorRouter.post('/:id/verify', authMiddleware, controller.verify.bind(controller));
   visitorRouter.post('/:id/merge', authMiddleware, controller.merge.bind(controller));
 
-  router.use('/api/v1/visitors', visitorRouter.handle.bind(visitorRouter));
+  router.use('/api/v1/visitors', visitorRouter);
 }
 
 /**
@@ -40,8 +40,8 @@ export class VisitorController {
 
   getService() {
     if (!this.#service) {
-      const businessService = global.runtimeContext?.capabilities?.get('business');
-      this.#service = businessService?.getVisitorService?.() || businessService;
+      const capability = global.runtimeContext?.capabilities?.get('business');
+      this.#service = capability?.service;
     }
     return this.#service;
   }

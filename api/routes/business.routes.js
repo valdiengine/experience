@@ -6,7 +6,7 @@
  * P14 - API Layer Foundation
  */
 
-import { Router } from '../router.js';
+import { Router } from './router.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { BusinessController } from '../controllers/business.controller.js';
 
@@ -27,5 +27,5 @@ export function registerBusinessRoutes(router) {
   businessRouter.post('/:id/archive', authMiddleware, controller.archive.bind(controller));
   businessRouter.post('/:id/restore', authMiddleware, controller.restore.bind(controller));
 
-  router.use('/api/v1/businesses', businessRouter.handle.bind(businessRouter));
+  router.use('/api/v1/businesses', businessRouter);
 }

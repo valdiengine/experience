@@ -47,7 +47,7 @@ export function requirePermission(permission) {
       return;
     }
 
-    next();
+    return next();
   };
 }
 
@@ -90,7 +90,7 @@ export function requireRole(role) {
       return;
     }
 
-    next();
+    return next();
   };
 }
 

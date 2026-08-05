@@ -40,7 +40,7 @@ export async function authMiddleware(req, res, next) {
     req.authenticated = false;
   }
 
-  next();
+  return next();
 }
 
 /**
@@ -77,7 +77,7 @@ export function requireAuth(req, res, next) {
     );
     return;
   }
-  next();
+  return next();
 }
 
 /**
@@ -87,5 +87,5 @@ export function requireAuth(req, res, next) {
  * @param {Function} next
  */
 export function optionalAuth(req, res, next) {
-  next();
+  return next();
 }

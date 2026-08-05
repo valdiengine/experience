@@ -28,20 +28,22 @@ export function loggingMiddleware(req, res, next) {
     correlationId: req.correlationId,
   });
 
-  res.on('finish', () => {
-    const duration = Date.now() - start;
-    const level = LOG_LEVELS[method] || 'info';
+  if (res.on) {
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      const level = LOG_LEVELS[method] || 'info';
 
-    console.log(
-      `[${new Date().toISOString()}] ${method} ${pathname} - ${res.statusCode} (${duration}ms)`,
-      {
-        requestId: req.id,
-        correlationId: req.correlationId,
-        statusCode: res.statusCode,
-        duration,
-      }
-    );
-  });
+      console.log(
+        `[${new Date().toISOString()}] ${method} ${pathname} - ${res.statusCode} (${duration}ms)`,
+        {
+          requestId: req.id,
+          correlationId: req.correlationId,
+          statusCode: res.statusCode,
+          duration,
+        }
+      );
+    });
+  }
 
-  next();
+  return next();
 }

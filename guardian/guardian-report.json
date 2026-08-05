@@ -1,0 +1,731 @@
+{
+  "timestamp": "2026-08-03T06:43:28.049Z",
+  "score": 100,
+  "maxScore": 100,
+  "architecture": {
+    "checks": [
+      {
+        "name": "Design Freeze",
+        "status": "PASS",
+        "message": "Design Freeze document exists"
+      },
+      {
+        "name": "Design Freeze Status",
+        "status": "PASS",
+        "message": "Design Freeze is APPROVED"
+      },
+      {
+        "name": "Architecture Fingerprint",
+        "status": "PASS",
+        "message": "Architecture Fingerprint exists"
+      },
+      {
+        "name": "Frozen: Business Aggregate",
+        "status": "PROTECTED",
+        "message": "Business Aggregate is frozen under Design Freeze"
+      },
+      {
+        "name": "Frozen: BusinessService",
+        "status": "PROTECTED",
+        "message": "BusinessService is frozen under Design Freeze"
+      },
+      {
+        "name": "Frozen: Business Managers",
+        "status": "PROTECTED",
+        "message": "Business Managers is frozen under Design Freeze"
+      },
+      {
+        "name": "Frozen: Repository Engine",
+        "status": "PROTECTED",
+        "message": "Repository Engine is frozen under Design Freeze"
+      },
+      {
+        "name": "Frozen: Runtime Engine",
+        "status": "PROTECTED",
+        "message": "Runtime Engine is frozen under Design Freeze"
+      },
+      {
+        "name": "Frozen: Capability Registration",
+        "status": "PROTECTED",
+        "message": "Capability Registration is frozen under Design Freeze"
+      },
+      {
+        "name": "Frozen: Aggregate Ownership",
+        "status": "PROTECTED",
+        "message": "Aggregate Ownership is frozen under Design Freeze"
+      },
+      {
+        "name": "Frozen: Event Model",
+        "status": "PROTECTED",
+        "message": "Event Model is frozen under Design Freeze"
+      },
+      {
+        "name": "Business Aggregate",
+        "status": "PASS",
+        "message": "Business Aggregate exists"
+      },
+      {
+        "name": "BusinessCapability",
+        "status": "PASS",
+        "message": "BusinessCapability exists"
+      },
+      {
+        "name": "BusinessService",
+        "status": "PASS",
+        "message": "BusinessService exists"
+      },
+      {
+        "name": "Capability Count",
+        "status": "PASS",
+        "message": "42 capabilities found",
+        "count": 42
+      },
+      {
+        "name": "Manager: business-accommodation",
+        "status": "PASS",
+        "message": "business-accommodation manager exists"
+      },
+      {
+        "name": "Manager: business-availability",
+        "status": "PASS",
+        "message": "business-availability manager exists"
+      },
+      {
+        "name": "Manager: business-reservation",
+        "status": "PASS",
+        "message": "business-reservation manager exists"
+      },
+      {
+        "name": "Manager: business-visitor",
+        "status": "PASS",
+        "message": "business-visitor manager exists"
+      },
+      {
+        "name": "Manager: business-payment",
+        "status": "PASS",
+        "message": "business-payment manager exists"
+      },
+      {
+        "name": "Manager: business-notification",
+        "status": "PASS",
+        "message": "business-notification manager exists"
+      },
+      {
+        "name": "Total Managers",
+        "status": "PASS",
+        "message": "12 managers found",
+        "count": 12
+      }
+    ],
+    "violations": [],
+    "status": "PASS"
+  },
+  "runtime": {
+    "checks": [
+      {
+        "name": "Runtime Bootstrap",
+        "status": "FAIL",
+        "message": "Runtime Bootstrap missing"
+      },
+      {
+        "name": "RuntimeContext",
+        "status": "FAIL",
+        "message": "RuntimeContext not found"
+      },
+      {
+        "name": "Application Entry Point",
+        "status": "PASS",
+        "message": "application.start.js exists"
+      },
+      {
+        "name": "startWithApi Method",
+        "status": "PASS",
+        "message": "startWithApi method exists"
+      },
+      {
+        "name": "Health Engine",
+        "status": "WARNING",
+        "message": "Health directory missing (optional)"
+      },
+      {
+        "name": "Capability Bootstrap",
+        "status": "PASS",
+        "message": "Capability Bootstrap exists"
+      },
+      {
+        "name": "Repository Bootstrap",
+        "status": "PASS",
+        "message": "Repository Bootstrap exists"
+      }
+    ],
+    "violations": [],
+    "status": "PASS"
+  },
+  "api": {
+    "checks": [
+      {
+        "name": "API Bootstrap",
+        "status": "PASS",
+        "message": "API Bootstrap exists"
+      },
+      {
+        "name": "Controllers Directory",
+        "status": "PASS",
+        "message": "Controllers directory exists"
+      },
+      {
+        "name": "Controller Count",
+        "status": "PASS",
+        "message": "2 controllers found",
+        "count": 2
+      },
+      {
+        "name": "Business Controller",
+        "status": "PASS",
+        "message": "Business Controller exists"
+      },
+      {
+        "name": "Routes Directory",
+        "status": "PASS",
+        "message": "Routes directory exists"
+      },
+      {
+        "name": "Route: business.routes.js",
+        "status": "PASS",
+        "message": "business.routes.js exists"
+      },
+      {
+        "name": "Route: accommodation.routes.js",
+        "status": "PASS",
+        "message": "accommodation.routes.js exists"
+      },
+      {
+        "name": "Route: availability.routes.js",
+        "status": "PASS",
+        "message": "availability.routes.js exists"
+      },
+      {
+        "name": "Route: reservation.routes.js",
+        "status": "PASS",
+        "message": "reservation.routes.js exists"
+      },
+      {
+        "name": "Route: visitor.routes.js",
+        "status": "PASS",
+        "message": "visitor.routes.js exists"
+      },
+      {
+        "name": "Route: payment.routes.js",
+        "status": "PASS",
+        "message": "payment.routes.js exists"
+      },
+      {
+        "name": "Route: review.routes.js",
+        "status": "PASS",
+        "message": "review.routes.js exists"
+      },
+      {
+        "name": "Route Count",
+        "status": "PASS",
+        "message": "7 route files found",
+        "count": 7
+      },
+      {
+        "name": "Middleware Directory",
+        "status": "PASS",
+        "message": "Middleware directory exists"
+      },
+      {
+        "name": "Middleware Count",
+        "status": "PASS",
+        "message": "9 middleware files found",
+        "count": 9
+      },
+      {
+        "name": "Route: accommodation.routes.js (correct pattern)",
+        "status": "PASS",
+        "message": "accommodation.routes.js uses correct capability?.service pattern"
+      },
+      {
+        "name": "Route: availability.routes.js (correct pattern)",
+        "status": "PASS",
+        "message": "availability.routes.js uses correct capability?.service pattern"
+      },
+      {
+        "name": "Route: payment.routes.js (correct pattern)",
+        "status": "PASS",
+        "message": "payment.routes.js uses correct capability?.service pattern"
+      },
+      {
+        "name": "Route: reservation.routes.js (correct pattern)",
+        "status": "PASS",
+        "message": "reservation.routes.js uses correct capability?.service pattern"
+      },
+      {
+        "name": "Route: review.routes.js (correct pattern)",
+        "status": "PASS",
+        "message": "review.routes.js uses correct capability?.service pattern"
+      },
+      {
+        "name": "Route: visitor.routes.js (correct pattern)",
+        "status": "PASS",
+        "message": "visitor.routes.js uses correct capability?.service pattern"
+      },
+      {
+        "name": "Repository Isolation",
+        "status": "PASS",
+        "message": "No repository leaks detected in API"
+      }
+    ],
+    "violations": [],
+    "status": "PASS"
+  },
+  "repository": {
+    "checks": [
+      {
+        "name": "Persistence Directory",
+        "status": "FAIL",
+        "message": "Persistence directory missing"
+      },
+      {
+        "name": "Repository Directory",
+        "status": "FAIL",
+        "message": "Repository directory missing"
+      },
+      {
+        "name": "Engine Directory",
+        "status": "WARNING",
+        "message": "Engine directory missing (optional)"
+      },
+      {
+        "name": "Contracts Directory",
+        "status": "WARNING",
+        "message": "Contracts directory missing (optional)"
+      }
+    ],
+    "violations": [
+      {
+        "level": "P1",
+        "name": "Persistence Isolation",
+        "message": "Capability leaks persistence: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\core\\register.js"
+      }
+    ],
+    "status": "FAIL"
+  },
+  "documentation": {
+    "checks": [
+      {
+        "name": "Doc: AI_BOOTSTRAP",
+        "status": "PASS",
+        "message": "AI_BOOTSTRAP exists"
+      },
+      {
+        "name": "Doc: 00_READ_FIRST",
+        "status": "PASS",
+        "message": "00_READ_FIRST exists"
+      },
+      {
+        "name": "Doc: PROJECT_CONTEXT",
+        "status": "PASS",
+        "message": "PROJECT_CONTEXT exists"
+      },
+      {
+        "name": "Doc: PROJECT_HEALTH",
+        "status": "PASS",
+        "message": "PROJECT_HEALTH exists"
+      },
+      {
+        "name": "Doc: ARCHITECTURE_FINGERPRINT",
+        "status": "PASS",
+        "message": "ARCHITECTURE_FINGERPRINT exists"
+      },
+      {
+        "name": "Doc: AI_RULES",
+        "status": "PASS",
+        "message": "AI_RULES exists"
+      },
+      {
+        "name": "Doc: AI_HANDSHAKE",
+        "status": "PASS",
+        "message": "AI_HANDSHAKE exists"
+      },
+      {
+        "name": "Doc: AI_SESSION_REPORT",
+        "status": "PASS",
+        "message": "AI_SESSION_REPORT exists"
+      },
+      {
+        "name": "Doc: AI_DECISIONS",
+        "status": "PASS",
+        "message": "AI_DECISIONS exists"
+      },
+      {
+        "name": "Doc: ARCHITECTURE_CHANGELOG",
+        "status": "PASS",
+        "message": "ARCHITECTURE_CHANGELOG exists"
+      },
+      {
+        "name": "Doc: AI_DOCUMENTATION_AUDIT",
+        "status": "PASS",
+        "message": "AI_DOCUMENTATION_AUDIT exists"
+      },
+      {
+        "name": "Doc: AI_OPERATING_SYSTEM",
+        "status": "PASS",
+        "message": "AI_OPERATING_SYSTEM exists"
+      },
+      {
+        "name": "Doc: CURRENT_STATE",
+        "status": "PASS",
+        "message": "CURRENT_STATE exists"
+      },
+      {
+        "name": "Doc: NEXT_PHASE",
+        "status": "PASS",
+        "message": "NEXT_PHASE exists"
+      },
+      {
+        "name": "Doc: MASTER_CONTEXT",
+        "status": "PASS",
+        "message": "MASTER_CONTEXT exists"
+      },
+      {
+        "name": "Doc: ROADMAP",
+        "status": "PASS",
+        "message": "ROADMAP exists"
+      },
+      {
+        "name": "Doc: CHANGELOG",
+        "status": "PASS",
+        "message": "CHANGELOG exists"
+      },
+      {
+        "name": "Doc: DESIGN_FREEZE",
+        "status": "PASS",
+        "message": "DESIGN_FREEZE exists"
+      },
+      {
+        "name": "Doc: ARCHITECTURE_IMMUTABLE",
+        "status": "PASS",
+        "message": "ARCHITECTURE_IMMUTABLE exists"
+      },
+      {
+        "name": "Doc: MASTER_ARCHITECTURE",
+        "status": "PASS",
+        "message": "MASTER_ARCHITECTURE exists"
+      },
+      {
+        "name": "Doc: API_LAYER",
+        "status": "PASS",
+        "message": "API_LAYER exists"
+      },
+      {
+        "name": "Doc: API_RUNTIME_INTEGRATION",
+        "status": "PASS",
+        "message": "API_RUNTIME_INTEGRATION exists"
+      },
+      {
+        "name": "Documentation Coverage",
+        "status": "PASS",
+        "message": "22/22 documents exist",
+        "count": 22,
+        "total": 22
+      },
+      {
+        "name": "Version Consistency",
+        "status": "WARNING",
+        "message": "Version not found"
+      },
+      {
+        "name": "Reading Order",
+        "status": "PASS",
+        "message": "00_READ_FIRST starts with DESIGN_FREEZE.md"
+      }
+    ],
+    "violations": [],
+    "missingDocs": [],
+    "status": "PASS"
+  },
+  "dependency": {
+    "checks": [
+      {
+        "name": "Capability Isolation",
+        "status": "PASS",
+        "message": "Cross-capability imports verified"
+      },
+      {
+        "name": "Business Domain Isolation",
+        "status": "PASS",
+        "message": "Business domain isolation verified"
+      },
+      {
+        "name": "Cross-Capability Communication",
+        "status": "PASS",
+        "message": "Events used for cross-capability communication"
+      },
+      {
+        "name": "Infrastructure Isolation",
+        "status": "PASS",
+        "message": "No infrastructure leaks detected"
+      }
+    ],
+    "violations": [
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\admin\\billing\\plan.manager.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\admin\\tenant-admin\\tenant.settings.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\business\\manager\\business-notification.manager.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\business\\manager\\business-payment.manager.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\business\\manager\\business-reservation.manager.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\business\\manager\\business-visitor.manager.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\conversion\\analytics\\conversion.analytics.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\conversion\\automation\\followup.engine.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\conversion\\automation\\recovery.engine.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\core\\loader.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\core\\registry.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\engagement\\analytics\\engagement.analytics.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\lifecycle\\retention\\recovery.manager.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\notification\\notification.manager.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\notifications\\analytics\\notification.analytics.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\notifications\\batching\\batch.processor.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\notifications\\notification.manager.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\notifications\\preferences\\notification.preferences.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\notifications\\rate-limit\\rate.limiter.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\notifications\\scheduler\\notification.scheduler.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\notifications\\templates\\template.manager.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\observability\\health.monitor.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\observability\\observability.manager.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\owner\\ui\\availability.view.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\persistence\\adapters\\orm\\orm.registry.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\saas\\entitlement.manager.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\saas\\plan.manager.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\saas\\product.catalog.js"
+      }
+    ],
+    "status": "FAIL"
+  },
+  "git": {
+    "checks": [
+      {
+        "name": "Current Branch",
+        "status": "PASS",
+        "message": "Current branch: release/design-freeze-p13.8",
+        "branch": "release/design-freeze-p13.8"
+      },
+      {
+        "name": "Design Freeze Branch",
+        "status": "PASS",
+        "message": "Branch release/design-freeze-p13.8 exists",
+        "branch": "release/design-freeze-p13.8"
+      },
+      {
+        "name": "Design Freeze Tag",
+        "status": "PASS",
+        "message": "Tag design-freeze-p13.8 exists",
+        "tag": "design-freeze-p13.8"
+      },
+      {
+        "name": "Working Tree",
+        "status": "PASS",
+        "message": "Working tree: CLEAN",
+        "workingTree": "CLEAN"
+      }
+    ],
+    "violations": [],
+    "status": "PASS"
+  },
+  "ai": {
+    "checks": [
+      {
+        "name": "AI OS: AI_BOOTSTRAP",
+        "status": "PASS",
+        "message": "AI_BOOTSTRAP exists"
+      },
+      {
+        "name": "AI OS: 00_READ_FIRST",
+        "status": "PASS",
+        "message": "00_READ_FIRST exists"
+      },
+      {
+        "name": "AI OS: PROJECT_CONTEXT",
+        "status": "PASS",
+        "message": "PROJECT_CONTEXT exists"
+      },
+      {
+        "name": "AI OS: PROJECT_HEALTH",
+        "status": "PASS",
+        "message": "PROJECT_HEALTH exists"
+      },
+      {
+        "name": "AI OS: ARCHITECTURE_FINGERPRINT",
+        "status": "PASS",
+        "message": "ARCHITECTURE_FINGERPRINT exists"
+      },
+      {
+        "name": "AI OS: AI_RULES",
+        "status": "PASS",
+        "message": "AI_RULES exists"
+      },
+      {
+        "name": "AI OS: AI_HANDSHAKE",
+        "status": "PASS",
+        "message": "AI_HANDSHAKE exists"
+      },
+      {
+        "name": "AI OS: AI_SESSION_REPORT",
+        "status": "PASS",
+        "message": "AI_SESSION_REPORT exists"
+      },
+      {
+        "name": "AI OS: AI_DECISIONS",
+        "status": "PASS",
+        "message": "AI_DECISIONS exists"
+      },
+      {
+        "name": "AI OS: AI_DOCUMENTATION_AUDIT",
+        "status": "PASS",
+        "message": "AI_DOCUMENTATION_AUDIT exists"
+      },
+      {
+        "name": "AI OS: AI_OPERATING_SYSTEM",
+        "status": "PASS",
+        "message": "AI_OPERATING_SYSTEM exists"
+      },
+      {
+        "name": "AI OS: AI_DOCUMENTATION_FLOW",
+        "status": "PASS",
+        "message": "AI_DOCUMENTATION_FLOW exists"
+      },
+      {
+        "name": "AI OS Coverage",
+        "status": "PASS",
+        "message": "12/12 AI OS documents exist",
+        "count": 12,
+        "total": 12
+      },
+      {
+        "name": "Version Consistency",
+        "status": "WARNING",
+        "message": "Could not extract version from documents"
+      }
+    ],
+    "violations": [],
+    "status": "PASS"
+  },
+  "violations": [],
+  "warnings": [],
+  "overall": {
+    "status": "HEALTHY",
+    "violations": 0,
+    "warnings": 0
+  }
+}

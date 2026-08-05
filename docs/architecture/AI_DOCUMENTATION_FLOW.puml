@@ -1,0 +1,57 @@
+@startuml AI Documentation Flow
+
+!theme plain
+
+title AI Documentation Flow
+
+start
+
+:AI_BOOTSTRAP.md;
+
+:00_READ_FIRST.md;
+
+:PROJECT_CONTEXT.md;
+
+:ARCHITECTURE_FINGERPRINT.md;
+
+if (Need Session History?) then (yes)
+  :AI_SESSION_REPORT.md;
+endif
+
+if (Need Frozen Decisions?) then (yes)
+  :AI_DECISIONS.md;
+endif
+
+if (Need Architecture Evolution?) then (yes)
+  :ARCHITECTURE_CHANGELOG.md;
+endif
+
+if (Need Immutable Rules?) then (yes)
+  :AI_RULES.md;
+endif
+
+if (Ready to Implement?) then (yes)
+  :AI_HANDSHAKE.md;
+  :Verify All Checks Pass;
+else (no)
+  :Read more docs;
+  :Review ARCHITECTURE_FINGERPRINT.md;
+endif
+
+:CURRENT_STATE.md;
+
+:NEXT_PHASE.md;
+
+:Implementation;
+
+:Run Smoke Test;
+
+:Validation;
+
+:Audit;
+
+:Update Session Report;
+
+stop
+
+@enduml

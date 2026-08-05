@@ -22,16 +22,29 @@ export class Router {
   /** @type {Map<string, Function>} */
   #middleware = new Map();
 
+  /** @type {Array<{path: string, router: Router}>} */
+  #subRouters = [];
+
   constructor() {}
 
   /**
-   * Register global middleware
-   * @param {Function} middleware
+   * Register middleware or mount sub-router at path
+   * @param {string|Function} pathOrMiddleware
+   * @param {Function} [middleware]
    */
-  use(middleware) {
-    const path = '*';
-    const existing = this.#middleware.get(path) || [];
-    this.#middleware.set(path, [...existing, middleware]);
+  use(pathOrMiddleware, middleware) {
+    if (typeof pathOrMiddleware === 'string') {
+      const path = pathOrMiddleware;
+      const router = middleware;
+      if (router && typeof router.handle === 'function') {
+        this.#subRouters.push({ path, router });
+      }
+    } else {
+      const fn = pathOrMiddleware;
+      const path = '*';
+      const existing = this.#middleware.get(path) || [];
+      this.#middleware.set(path, [...existing, fn]);
+    }
   }
 
   /**
@@ -162,11 +175,26 @@ export class Router {
    * Handle request
    * @param {Object} req
    * @param {Object} res
+   * @param {Function} [next]
    */
-  async handle(req, res) {
+  async handle(req, res, next) {
     const match = this.match(req.method, req.pathname);
 
     if (!match) {
+      const subMatch = this.#matchSubRouter(req.method, req.pathname);
+      if (subMatch) {
+        req.params = subMatch.params;
+        const originalPathname = req.pathname;
+        req.pathname = subMatch.pathname;
+        await subMatch.router.handle(req, res);
+        req.pathname = originalPathname;
+        return;
+      }
+
+      if (next) {
+        return next();
+      }
+
       res.statusCode = 404;
       res.setHeader('Content-Type', 'application/json');
       res.end(
@@ -188,15 +216,34 @@ export class Router {
     const allMiddleware = [...globalMiddleware, ...routeMiddleware];
 
     let index = 0;
-    const next = async () => {
+    const middlewareNext = async () => {
       if (index >= allMiddleware.length) {
-        await match.route.handler(req, res, next);
+        await match.route.handler(req, res, middlewareNext);
         return;
       }
       const middleware = allMiddleware[index++];
-      await middleware(req, res, next);
+      await middleware(req, res, middlewareNext);
     };
 
-    await next();
+    await middlewareNext();
+  }
+
+  /**
+   * Match sub-router
+   * @param {string} method
+   * @param {string} pathname
+    * @returns {{router: Router, params: Object, pathname: string}|null}
+   */
+  #matchSubRouter(method, pathname) {
+    for (const { path, router } of this.#subRouters) {
+      if (pathname.startsWith(path)) {
+        const relativePath = pathname.slice(path.length) || '/';
+        const match = router.match(method, relativePath);
+        if (match) {
+          return { router, params: match.params, pathname: relativePath };
+        }
+      }
+    }
+    return null;
   }
 }

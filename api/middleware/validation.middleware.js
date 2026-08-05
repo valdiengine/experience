@@ -42,7 +42,7 @@ export function validateBody(schema) {
       return;
     }
 
-    next();
+    return next();
   };
 }
 
@@ -76,7 +76,7 @@ export function validateQuery(schema) {
       return;
     }
 
-    next();
+    return next();
   };
 }
 
@@ -110,7 +110,7 @@ export function validateParams(schema) {
       return;
     }
 
-    next();
+    return next();
   };
 }
 

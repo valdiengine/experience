@@ -12,8 +12,6 @@ import { loggingMiddleware } from './logging.middleware.js';
 import { errorHandlerMiddleware } from './error-handler.middleware.js';
 import { notFoundMiddleware } from './not-found.middleware.js';
 import { authMiddleware } from './auth.middleware.js';
-import { authorizationMiddleware } from './authorization.middleware.js';
-import { validationMiddleware } from './validation.middleware.js';
 import { rateLimitMiddleware } from './rate-limit.middleware.js';
 
 /**
@@ -24,8 +22,6 @@ export function registerMiddleware(server) {
   server.use(requestIdMiddleware);
   server.use(correlationIdMiddleware);
   server.use(loggingMiddleware);
-  server.use(errorHandlerMiddleware);
-  server.use(notFoundMiddleware);
 }
 
 export {
@@ -35,7 +31,5 @@ export {
   errorHandlerMiddleware,
   notFoundMiddleware,
   authMiddleware,
-  authorizationMiddleware,
-  validationMiddleware,
   rateLimitMiddleware,
 };

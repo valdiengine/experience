@@ -181,7 +181,11 @@ export async function start(options = {}) {
  * @param {object} bundle - Runtime bundle returned by start()
  */
 export async function cleanup(bundle = {}) {
-  const { capabilityRegistry, eventBus, engine } = bundle
+  const { capabilityRegistry, eventBus, engine, apiServer } = bundle
+
+  if (apiServer) {
+    try { await apiServer.shutdown() } catch {}
+  }
 
   if (capabilityRegistry) {
     for (const capability of capabilityRegistry.getAll()) {
@@ -201,4 +205,50 @@ export async function cleanup(bundle = {}) {
   return true
 }
 
-export default start
+/**
+ * Start the Commercial platform WITH the API Layer.
+ * This is the single entry point for the full platform (Runtime + API).
+ *
+ * P14.1 — API Layer Integration
+ *
+ * @param {object} [options]
+ * @param {object} [options.eventBus] - Shared event bus (created here if omitted)
+ * @param {object} [options.sources] - Config sources for BootstrapConfig.load()
+ * @param {object} [options.tenant] - Tenant metadata injected into capability contexts
+ * @param {object} [options.configuration] - Per-capability configuration
+ * @param {object} [options.apiPort] - API server port (default: 3000)
+ * @param {object} [options.apiHost] - API server host (default: 0.0.0.0)
+ * @returns {Promise<object>} - Full runtime bundle with apiServer
+ */
+export async function startWithApi(options = {}) {
+  const bundle = await start(options);
+
+  if (bundle.runtimeContext) {
+    global.runtimeContext = bundle.runtimeContext;
+  }
+
+  const { bootstrapApi } = await import('../../api/bootstrap/api.bootstrap.js');
+  const apiPort = options.apiPort || process.env.API_PORT || 3000;
+  const apiHost = options.apiHost || process.env.API_HOST || '0.0.0.0';
+
+  const apiContext = {
+    ...bundle.runtimeContext,
+    capabilities: bundle.capabilityContext?.capabilities,
+    repositories: bundle.repositoryRuntime,
+    auth: bundle.authenticationRuntime,
+    cms: bundle.cmsRuntime,
+  };
+
+  const apiServer = await bootstrapApi({
+    port: apiPort,
+    host: apiHost,
+    env: options.env || process.env.NODE_ENV || 'development',
+    runtimeContext: apiContext,
+  });
+
+  bundle.apiServer = apiServer;
+
+  console.log(`Platform Runtime + API Server ready on ${apiHost}:${apiPort}`);
+
+  return bundle;
+}

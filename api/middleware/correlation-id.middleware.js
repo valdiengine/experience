@@ -18,5 +18,5 @@ export function correlationIdMiddleware(req, res, next) {
   req.correlationId = correlationId;
   res.setHeader('X-Correlation-ID', correlationId);
 
-  next();
+  return next();
 }

@@ -5,6 +5,7 @@
  * Initializes the HTTP server, registers middleware, routes, and starts listening.
  *
  * P14 - API Layer Foundation
+ * P14.1 - Runtime Integration (runtimeContext injection)
  */
 
 import { ApiServer } from './server/api.server.js';
@@ -25,6 +26,7 @@ import { registerReviewRoutes } from '../routes/review.routes.js';
  * @property {number} port - HTTP server port
  * @property {string} host - HTTP server host
  * @property {string} env - Environment (development, staging, production)
+ * @property {object} runtimeContext - Runtime context from Platform Runtime
  */
 
 const DEFAULT_CONFIG = {
@@ -41,6 +43,10 @@ const DEFAULT_CONFIG = {
 export async function bootstrapApi(config = {}) {
   const finalConfig = { ...DEFAULT_CONFIG, ...config };
 
+  if (finalConfig.runtimeContext) {
+    global.runtimeContext = finalConfig.runtimeContext;
+  }
+
   const server = new ApiServer(finalConfig);
 
   await server.initialize();
@@ -49,7 +55,6 @@ export async function bootstrapApi(config = {}) {
   registerVersioning(server);
 
   const router = new ApiRouter();
-  server.use(router.getRouter());
 
   registerHealthRoutes(router);
   registerBusinessRoutes(router);
@@ -59,6 +64,8 @@ export async function bootstrapApi(config = {}) {
   registerVisitorRoutes(router);
   registerPaymentRoutes(router);
   registerReviewRoutes(router);
+
+  server.setRequestHandler(router.getRouter().handle.bind(router.getRouter()));
 
   await server.start();
 

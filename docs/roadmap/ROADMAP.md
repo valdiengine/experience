@@ -6,10 +6,12 @@
 
 ## Current Status
 
-- **Phases completed:** 74/74 + P13.2 + P13.2.1 + P13.3 + P13.3.1 + P13.4 + P13.4.1 + P13.5 + P13.5.1 + P13.5.2 + P13.5.3 + P13.5.4 + P13.5.5 + P13.5.6 + P13.6 + P13.6.1 + P13.6.2 + P13.7 + P13.7.1 + P13.7.2 + P13.8 + P14 (100%)
+- **Platform Version:** 4.0
+- **Status:** PLATFORM CERTIFIED — READY FOR PRODUCT DEVELOPMENT
+- **Phases completed:** 90+ (P0 through P14.FINAL)
 - **Capabilities registered:** 34
-- **Architecture specs:** 29 + 9 audit reports
-- **Last phase:** P14 — API Layer Foundation
+- **Architecture specs:** 29 + 10 audit reports
+- **Last phase:** P14.FINAL — API Layer Closure Audit (Platform Certified)
 
 ---
 
@@ -98,6 +100,15 @@
 | 79 | P13.7.2 | Commercial Notification Integration Validation | Audit |
 | 80 | P13.8 | Commercial Aggregate Final Validation | Audit |
 | 81 | P14 | API Layer Foundation | Infrastructure |
+| 82 | P14.0.5 | API Layer Architecture Validation | Audit |
+| 83 | P14.0.6 | Validation Corrections | Audit |
+| 84 | P14.0.7 | Runtime/API Smoke Test | Audit |
+| 85 | P14.1 | API Layer Integration | Integration |
+| 86 | P14.1.5 | API Layer Integration Validation | Validation |
+| 87 | P14.1.5.5 | Commercial Aggregate Entry Point Validation | Decision |
+| 88 | P14.1.6 | Integration Validation Corrections | Corrections |
+| 89 | P14.1.7 | API Closure Corrections | Corrections |
+| 90 | P14.FINAL | API Layer Closure Audit | Audit |
 
 ---
 
@@ -105,25 +116,27 @@
 
 | Priority | Phase | Name | Category | Status |
 |----------|-------|------|----------|--------|
-| 1 | P12.3.0 | Infrastructure Wiring | Infrastructure | Completed |
+| 1 | P14.FINAL | API Layer Closure Audit | Audit | Pending |
 | 2 | P12.3.1 | Database Connection & Migration | Infrastructure | Pending |
-| 3 | P12.3.2 | Authentication Provider Configuration | Infrastructure | Pending |
-| 4 | P12.3.3 | CMS Provider Configuration | Infrastructure | Pending |
-| 5 | P12.3.4 | Repository Adapter Registration | Infrastructure | Pending |
-| 6 | P12.3.5 | Environment Setup (dev/staging/prod) | DevOps | Pending |
-| 7 | P12.3.6 | Event → CMS Sync Wiring | Backend | Pending |
-| 8 | P12.3.7 | Event → Email Wiring | Backend | Pending |
-| 9 | P12.3.8 | Accommodation Management API | MVP | Pending |
-| 10 | P12.3.9 | Reservation API | MVP | Pending |
-| 11 | P12.3.10 | Owner Portal API | MVP | Pending |
-| 12 | P12.3.11 | Visitor Experience API | MVP | Pending |
-| 13 | P12.3.12 | Testing Setup | Quality | Pending |
+| 2 | P12.3.0 | Infrastructure Wiring | Infrastructure | Completed |
+| 3 | P12.3.1 | Database Connection & Migration | Infrastructure | Pending |
+| 4 | P12.3.2 | Authentication Provider Configuration | Infrastructure | Pending |
+| 5 | P12.3.3 | CMS Provider Configuration | Infrastructure | Pending |
+| 6 | P12.3.4 | Repository Adapter Registration | Infrastructure | Pending |
+| 7 | P12.3.5 | Environment Setup (dev/staging/prod) | DevOps | Pending |
+| 8 | P12.3.6 | Event → CMS Sync Wiring | Backend | Pending |
+| 9 | P12.3.7 | Event → Email Wiring | Backend | Pending |
+| 10 | P12.3.8 | Accommodation Management API | MVP | Pending |
+| 11 | P12.3.9 | Reservation API | MVP | Pending |
+| 12 | P12.3.10 | Owner Portal API | MVP | Pending |
+| 13 | P12.3.11 | Visitor Experience API | MVP | Pending |
+| 14 | P12.3.12 | Testing Setup | Quality | Pending |
 
 ---
 
 ## Recommended Next Step
 
-**P12.3.1 — Database Connection & Migration.** Wire the existing PostgresProvider + DrizzleProvider to a real PostgreSQL instance, run the migration runner to create the schema, and validate the Repository Engine against real data. This is the single dependency that unblocks all provider work.
+**P14.FINAL — API Layer Closure Audit.** After P14.1.7 corrections, the API Layer Closure Audit certifies P14 as CLOSED. P14 becomes immutable under Design Freeze. Next: P12.3.1 — Database Connection & Migration.
 
 ---
 

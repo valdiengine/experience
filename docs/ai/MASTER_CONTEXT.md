@@ -1,7 +1,7 @@
 # MASTER_CONTEXT.md
 
 > Single source of truth for AI agents working on Valdi Engine.
-> Read this file FIRST before any task. Updated after each phase completion. Last update: P13.8 — Commercial Aggregate Final Validation.
+> Read this file FIRST before any task. Updated after each phase completion. Last update: P14.1.5.5 — Commercial Aggregate Entry Point Validation.
 
 ## Platform Identity
 
@@ -113,10 +113,10 @@ capabilities/{name}/
 
 ## Current Progress
 
-- **Phases completed:** 74/74 + P13.2 + P13.2.1 + P13.3 + P13.3.1 + P13.4 + P13.4.1 + P13.5 + P13.5.1 + P13.5.2 + P13.5.3 + P13.5.4 + P13.5.5 + P13.5.6 + P13.6
-- **Capabilities registered:** 33
-- **Architecture specs:** 26 + 6 audit reports + 3 hardening specs + 2 CMS architecture docs + 1 wiring doc (MULTI-TENANT-IDENTITY-AUDIT, AUTHENTICATION-SECURITY-AUDIT, AUTHORIZATION-AUDIT, IDENTITY-READINESS-REPORT, IDENTITY-DEPENDENCY-AUDIT, IDENTITY-EVENT-AUDIT, plus rate-limit contract, brute-force detector, secrets contract; plus WORDPRESS-PROVIDER-ARCHITECTURE.md and CMS-SYNC-ENGINE-ARCHITECTURE.md; plus INFRASTRUCTURE-WIRING-ARCHITECTURE.md; plus BUSINESS-AVAILABILITY-MANAGER.md; plus RESERVATION-CAPABILITY.md; plus BUSINESS-RESERVATION-MANAGER.md; plus VISITOR-CAPABILITY.md; plus BUSINESS-VISITOR-MANAGER.md; plus COMMERCIAL-AGGREGATE-VALIDATION.md; plus COMMERCIAL-RUNTIME-VERIFICATION.md; plus COMMERCIAL-RUNTIME-STARTUP.md; plus COMMERCIAL-RUNTIME-SMOKE-TEST.md)
-- **Last updated:** P13.6 — Payment Capability (Commercial Domain)
+- **Phases completed:** 90+ (P0 through P14.FINAL)
+- **Capabilities registered:** 34
+- **Architecture specs:** 29 + 10 audit reports
+- **Last updated:** P14.FINAL — API Layer Closure Audit (Platform Certified)
 
 ## Key Files
 
@@ -212,3 +212,6 @@ capabilities/{name}/
 | `docs/architecture/COMMERCIAL_RUNTIME_SMOKE_TEST.md` | P13.5.6 — End-to-End Runtime Smoke Test (79/79 PASS, 100/100; 16 runtime defects fixed; RB6 resolved) |
 | `capabilities/payment/` (14 files) | P13.6 — Payment Capability (commercial payment domain, zero gateway knowledge) |
 | `docs/architecture/PAYMENT-CAPABILITY.md` | P13.6 — Payment Capability architecture (16 sections, 10 rules) |
+| `api/` | P14 — API Layer Foundation (bootstrap, routes, controllers, middleware, responses, errors, health, versioning) |
+| `docs/architecture/API_LAYER.md` | P14 — API Layer specification |
+| `docs/architecture/API_LAYER_CLOSURE_AUDIT.md` | P14.FINAL — API Layer Closure Audit (API LAYER CLOSED) |

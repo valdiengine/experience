@@ -6,27 +6,25 @@
  * P14 - API Layer Foundation
  */
 
-import { healthRouter } from './health.router.js';
-
 /**
  * @param {import('../routes/api.router.js').ApiRouter} router
  */
 export function registerHealthRoutes(router) {
-  router.get('/health', async (req, res) => {
+  router.addRoute('GET', '/health', async (req, res) => {
     const health = await getHealth();
     res.statusCode = health.status === 'healthy' ? 200 : 503;
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify(health));
   });
 
-  router.get('/ready', async (req, res) => {
+  router.addRoute('GET', '/ready', async (req, res) => {
     const ready = await checkReady();
     res.statusCode = ready.ready ? 200 : 503;
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify(ready));
   });
 
-  router.get('/live', async (req, res) => {
+  router.addRoute('GET', '/live', async (req, res) => {
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ status: 'alive' }));

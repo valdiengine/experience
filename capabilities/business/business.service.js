@@ -13,7 +13,15 @@ export class BusinessService {
     return this.#manager.getById(id, identity)
   }
 
+  async getBusiness(id, identity) {
+    return this.#manager.getById(id, identity)
+  }
+
   async list(filter, identity) {
+    return this.#manager.getMany(filter, identity)
+  }
+
+  async listBusinesses(filter, identity) {
     return this.#manager.getMany(filter, identity)
   }
 
@@ -39,6 +47,30 @@ export class BusinessService {
 
   async delete(id, identity) {
     return this.#manager.deleteBusiness(id, identity)
+  }
+
+  async createBusiness(data, identity) {
+    return this.#manager.createBusiness(data, identity)
+  }
+
+  async updateBusiness(id, data, identity) {
+    return this.#manager.updateBusiness(id, data, identity)
+  }
+
+  async patchBusiness(id, data, identity) {
+    return this.#manager.updateBusiness(id, data, identity)
+  }
+
+  async deleteBusiness(id, identity) {
+    return this.#manager.deleteBusiness(id, identity)
+  }
+
+  async archiveBusiness(id, identity) {
+    return this.#manager.archiveBusiness(id, identity)
+  }
+
+  async restoreBusiness(id, identity) {
+    return this.#manager.restoreBusiness(id, identity)
   }
 
   async verify(id, identity) {
@@ -113,6 +145,46 @@ export class BusinessService {
 
   async getBusinessAccommodations(businessId, options) {
     return this.#manager.listAccommodations(businessId, options)
+  }
+
+  async listAccommodations({ businessId, page, perPage, tenantId }) {
+    return this.#manager.listAccommodations(businessId, { page, perPage, tenantId })
+  }
+
+  async getAccommodation(accommodationId, { tenantId }) {
+    return this.#manager.getById(accommodationId, { tenantId })
+  }
+
+  async createAccommodation(data, { tenantId, userId }) {
+    return this.#manager.createAccommodation(null, data, { tenantId, userId })
+  }
+
+  async updateAccommodation(accommodationId, data, { tenantId, userId }) {
+    return this.#manager.updateAccommodation(accommodationId, data, { tenantId, userId })
+  }
+
+  async patchAccommodation(accommodationId, data, { tenantId, userId }) {
+    return this.#manager.updateAccommodation(accommodationId, data, { tenantId, userId })
+  }
+
+  async deleteAccommodation(accommodationId, { tenantId, userId }) {
+    return this.#manager.deleteAccommodation(accommodationId, { tenantId, userId })
+  }
+
+  async archiveAccommodation(accommodationId, { tenantId, userId }) {
+    return this.#manager.archiveAccommodation(accommodationId, { tenantId, userId })
+  }
+
+  async restoreAccommodation(accommodationId, { tenantId, userId }) {
+    return this.#manager.restoreAccommodation(accommodationId, { tenantId, userId })
+  }
+
+  async publishAccommodation(accommodationId, { tenantId, userId }) {
+    return this.#manager.publishAccommodation(accommodationId, { tenantId, userId })
+  }
+
+  async unpublishAccommodation(accommodationId, { tenantId, userId }) {
+    return this.#manager.hideAccommodation(accommodationId, { tenantId, userId })
   }
 
   async getPublishedAccommodations(businessId) {
@@ -331,6 +403,50 @@ export class BusinessService {
     return this.#manager.getReservations(businessId, filter, identity)
   }
 
+  async listReservations({ page, perPage, status, businessId, visitorId, tenantId }) {
+    return this.#manager.getReservations(businessId, { page, perPage, status, visitorId, tenantId })
+  }
+
+  async getReservation(reservationId, { tenantId }) {
+    return this.#manager.getReservation(null, reservationId, { tenantId })
+  }
+
+  async createReservation(data, { tenantId, userId }) {
+    return this.#manager.createReservation(null, data, { tenantId, userId })
+  }
+
+  async updateReservation(reservationId, data, { tenantId, userId }) {
+    return this.#manager.updateReservation(null, reservationId, data, { tenantId, userId })
+  }
+
+  async patchReservation(reservationId, data, { tenantId, userId }) {
+    return this.#manager.updateReservation(null, reservationId, data, { tenantId, userId })
+  }
+
+  async deleteReservation(reservationId, { tenantId, userId }) {
+    return this.#manager.deleteReservation(null, reservationId, { tenantId, userId })
+  }
+
+  async confirmReservation(reservationId, { tenantId, userId }) {
+    return this.#manager.confirmReservation(null, reservationId, { tenantId, userId })
+  }
+
+  async rejectReservation(reservationId, reason, { tenantId, userId }) {
+    return this.#manager.rejectReservation(null, reservationId, reason, { tenantId, userId })
+  }
+
+  async cancelReservation(reservationId, reason, { tenantId, userId }) {
+    return this.#manager.cancelReservation(null, reservationId, reason, { tenantId, userId })
+  }
+
+  async checkInReservation(reservationId, { tenantId, userId }) {
+    return this.#manager.checkInReservation(null, reservationId, { tenantId, userId })
+  }
+
+  async checkOutReservation(reservationId, { tenantId, userId }) {
+    return this.#manager.checkOutReservation(null, reservationId, { tenantId, userId })
+  }
+
   async findByVisitor(businessId, visitorId, identity) {
     return this.#manager.findByVisitor(businessId, visitorId, identity)
   }
@@ -475,6 +591,42 @@ export class BusinessService {
 
   async getVisitor(businessId, visitorId, identity) {
     return this.#manager.getVisitor(businessId, visitorId, identity)
+  }
+
+  async getVisitorById(visitorId, { tenantId }) {
+    return this.#manager.getVisitor(null, visitorId, { tenantId })
+  }
+
+  async createVisitor(data, { tenantId, userId }) {
+    return this.#manager.createVisitor(null, data, { tenantId, userId })
+  }
+
+  async updateVisitor(visitorId, data, { tenantId, userId }) {
+    return this.#manager.updateVisitor(null, visitorId, data, { tenantId, userId })
+  }
+
+  async patchVisitor(visitorId, data, { tenantId, userId }) {
+    return this.#manager.updateVisitor(null, visitorId, data, { tenantId, userId })
+  }
+
+  async deleteVisitor(visitorId, { tenantId, userId }) {
+    return this.#manager.deleteVisitor(null, visitorId, { tenantId, userId })
+  }
+
+  async archiveVisitor(visitorId, { tenantId, userId }) {
+    return this.#manager.archiveVisitor(null, visitorId, { tenantId, userId })
+  }
+
+  async restoreVisitor(visitorId, { tenantId, userId }) {
+    return this.#manager.restoreVisitor(null, visitorId, { tenantId, userId })
+  }
+
+  async verifyVisitor(visitorId, { tenantId, userId }) {
+    return this.#manager.verifyVisitor(null, visitorId, { tenantId, userId })
+  }
+
+  async mergeVisitors(targetId, sourceId, { tenantId, userId }) {
+    return this.#manager.mergeVisitors(null, targetId, sourceId, { tenantId, userId })
   }
 
   async findVisitorByEmail(businessId, email, identity) {
@@ -705,6 +857,53 @@ export class BusinessService {
 
   async getPayment(businessId, paymentId, identity) {
     return this.#manager.getPayment(businessId, paymentId, identity)
+  }
+
+  async getPaymentById(paymentId, { tenantId }) {
+    return this.#manager.getPayment(null, paymentId, { tenantId })
+  }
+
+  async listPayments({ page, perPage, reservationId, status, tenantId }) {
+    return this.#manager.getPayments(null, { page, perPage, reservationId, status, tenantId })
+  }
+
+  async createPayment(data, { tenantId, userId }) {
+    return this.#manager.createPayment(null, data, { tenantId, userId })
+  }
+
+  async updatePayment(paymentId, data, { tenantId, userId }) {
+    return this.#manager.updatePayment(null, paymentId, data, { tenantId, userId })
+  }
+
+  async patchPayment(paymentId, data, { tenantId, userId }) {
+    return this.#manager.updatePayment(null, paymentId, data, { tenantId, userId })
+  }
+
+  async processPayment(paymentId, { tenantId, userId }) {
+    return this.#manager.capturePayment(null, paymentId, { tenantId, userId })
+  }
+
+  async refundPayment(paymentId, amount, { tenantId, userId }) {
+    if (amount) {
+      return this.#manager.partialRefundPayment(null, paymentId, amount, { tenantId, userId })
+    }
+    return this.#manager.refundPayment(null, paymentId, { tenantId, userId })
+  }
+
+  async retryPayment(paymentId, { tenantId, userId }) {
+    return this.#manager.expirePayment(null, paymentId, { tenantId, userId })
+  }
+
+  async cancelPayment(paymentId, { tenantId, userId }) {
+    return this.#manager.cancelPayment(null, paymentId, { tenantId, userId })
+  }
+
+  async archivePayment(paymentId, { tenantId, userId }) {
+    return this.#manager.archivePayment(null, paymentId, { tenantId, userId })
+  }
+
+  async restorePayment(paymentId, { tenantId, userId }) {
+    return this.#manager.restorePayment(null, paymentId, { tenantId, userId })
   }
 
   async getBusinessPayments(businessId, identity) {
@@ -1059,5 +1258,125 @@ export class BusinessService {
 
   async getNotificationCapability(businessId) {
     return this.#manager.getNotificationManager().getNotificationCapability()
+  }
+
+  #getCommunityCapability() {
+    return this.#manager?.context?.capabilities?.get?.('community')
+  }
+
+  async listReviews({ page = 1, perPage = 20, accommodationId, businessId, status, tenantId }) {
+    const community = this.#getCommunityCapability()
+    if (!community?.reviews) return { items: [], total: 0 }
+    const allReviews = community.reviews.getAll?.() || []
+    const filtered = allReviews.filter(r => r.entityType === 'accommodation' && r.entityId === accommodationId)
+    return {
+      items: filtered.slice((page - 1) * perPage, page * perPage),
+      total: filtered.length
+    }
+  }
+
+  async getReview(reviewId, { tenantId }) {
+    const community = this.#getCommunityCapability()
+    return community?.reviews?.getById?.(reviewId) || null
+  }
+
+  async createReview(data, { tenantId, userId }) {
+    const community = this.#getCommunityCapability()
+    return community?.createReview?.(data) || { success: false, error: 'Not implemented' }
+  }
+
+  async updateReview(reviewId, data, { tenantId, userId }) {
+    const community = this.#getCommunityCapability()
+    return community?.reviews?.update?.(reviewId, data) || { success: false, error: 'Not implemented' }
+  }
+
+  async patchReview(reviewId, data, { tenantId, userId }) {
+    return this.updateReview(reviewId, data, { tenantId, userId })
+  }
+
+  async deleteReview(reviewId, { tenantId, userId }) {
+    const community = this.#getCommunityCapability()
+    return community?.reviews?.delete?.(reviewId) || { success: false, error: 'Not implemented' }
+  }
+
+  async approveReview(reviewId, { tenantId, userId }) {
+    const community = this.#getCommunityCapability()
+    return community?.approveContent?.(reviewId, userId) || { success: false, error: 'Not implemented' }
+  }
+
+  async rejectReview(reviewId, reason, { tenantId, userId }) {
+    const community = this.#getCommunityCapability()
+    return community?.rejectContent?.(reviewId, reason, userId) || { success: false, error: 'Not implemented' }
+  }
+
+  async reportReview(reviewId, reason, { tenantId, userId }) {
+    const community = this.#getCommunityCapability()
+    return community?.reportContent?.(reviewId, reason, userId) || { success: false, error: 'Not implemented' }
+  }
+
+  #getAvailabilityCapability() {
+    return this.#manager?.context?.capabilities?.get?.('availability')
+  }
+
+  async listAvailability({ accommodationId, startDate, endDate, tenantId }) {
+    const availability = this.#getAvailabilityCapability()
+    if (!availability) return { items: [], total: 0 }
+    return availability?.listAvailability?.({ accommodationId, startDate, endDate, tenantId }) || { items: [], total: 0 }
+  }
+
+  async getAvailability(availabilityId, { tenantId }) {
+    const availability = this.#getAvailabilityCapability()
+    return availability?.getAvailability?.(availabilityId, { tenantId }) || null
+  }
+
+  async createAvailability(data, { tenantId, userId }) {
+    const availability = this.#getAvailabilityCapability()
+    return availability?.createAvailability?.(data, { tenantId, userId }) || { success: false, error: 'Not implemented' }
+  }
+
+  async updateAvailability(availabilityId, data, { tenantId, userId }) {
+    const availability = this.#getAvailabilityCapability()
+    return availability?.updateAvailability?.(availabilityId, data, { tenantId, userId }) || { success: false, error: 'Not implemented' }
+  }
+
+  async patchAvailability(availabilityId, data, { tenantId, userId }) {
+    return this.updateAvailability(availabilityId, data, { tenantId, userId })
+  }
+
+  async deleteAvailability(availabilityId, { tenantId, userId }) {
+    const availability = this.#getAvailabilityCapability()
+    return availability?.deleteAvailability?.(availabilityId, { tenantId, userId }) || { success: false, error: 'Not implemented' }
+  }
+
+  async blockDate(availabilityId, { startDate, endDate, reason }, identity) {
+    const availabilityCap = this.#getAvailabilityCapability()
+    if (!availabilityCap?.manager) return null
+    const av = await availabilityCap?.manager?.getAvailabilityById?.(availabilityId)
+    if (!av) return null
+    return this.#manager.blockAccommodation(av.accommodationId, startDate, endDate, reason, identity)
+  }
+
+  async unblockDate(availabilityId, { startDate, endDate }, identity) {
+    const availabilityCap = this.#getAvailabilityCapability()
+    if (!availabilityCap?.manager) return null
+    const av = await availabilityCap?.manager?.getAvailabilityById?.(availabilityId)
+    if (!av) return null
+    return this.#manager.unblockAccommodation(av.accommodationId, startDate, endDate, identity)
+  }
+
+  async reserveDate(availabilityId, { checkIn, checkOut, reservationId }, identity) {
+    const availabilityCap = this.#getAvailabilityCapability()
+    if (!availabilityCap?.manager) return null
+    const av = await availabilityCap?.manager?.getAvailabilityById?.(availabilityId)
+    if (!av) return null
+    return this.#manager.reserveAccommodation(av.accommodationId, checkIn, checkOut, reservationId, identity)
+  }
+
+  async releaseDate(availabilityId, { checkIn, checkOut }, identity) {
+    const availabilityCap = this.#getAvailabilityCapability()
+    if (!availabilityCap?.manager) return null
+    const av = await availabilityCap?.manager?.getAvailabilityById?.(availabilityId)
+    if (!av) return null
+    return this.#manager.releaseReservation(av.accommodationId, checkIn, checkOut, identity)
   }
 }

@@ -19,5 +19,5 @@ export function requestIdMiddleware(req, res, next) {
   req.id = requestId;
   res.setHeader('X-Request-ID', requestId);
 
-  next();
+  return next();
 }

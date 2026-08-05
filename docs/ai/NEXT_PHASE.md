@@ -1,16 +1,21 @@
 # NEXT_PHASE.md
 
-> What comes next. P13.6 — Payment Capability is complete.
+> What comes next. **Platform v4.0 — PLATFORM CERTIFIED.**
 
 ---
 
 ## Current Status
 
-89 phases complete. P13.6 — Payment Capability is complete. Pure commercial payment domain with complete lifecycle: creation, authorization, capture, settlement, refunds, disputes, and archival. 14 files in `capabilities/payment/`. Architecture document: `docs/architecture/PAYMENT-CAPABILITY.md`.
+**PLATFORM v4.0 — PLATFORM CERTIFIED**
 
-P13.6: Payment capability implemented following the same architecture, conventions and quality standards as P13.0-P13.5. Zero gateway knowledge. Registered in `capabilities/core/register.js`.
+- **Platform Version:** 4.0
+- **Platform Status:** CERTIFIED
+- **Product Development:** ACTIVE
+- **Design Freeze:** ACTIVE (P13.8)
+- **Architecture Score:** 98/100
+- **API Layer:** CLOSED (P14.FINAL: 97/100)
 
-What remains is **connecting to real services**. The bootstrap pipeline is ready — providers are registered and wired — but no real PostgreSQL, SendGrid, Stripe, or LocalFS instances are configured.
+**Decision:** Platform is certified. Product development is now active. P12.3.1 is the next product milestone.
 
 ---
 
@@ -197,15 +202,13 @@ What remains is **connecting to real services**. The bootstrap pipeline is ready
 
 ## Recommended Next Step
 
-**P13.6 — Payment Capability (complete).** Payment domain implemented with 14 files in `capabilities/payment/`. Pure commercial payment lifecycle without gateway knowledge.
+**Platform v4.0 — PLATFORM CERTIFIED.** P14 is CLOSED and Design Freeze protected.
 
-**Next: P13.7 — Business Payment Manager.** The last reserved orchestration manager. It completes the Business capability's orchestration surface (Accommodation, Availability, Reservation, Visitor, Payment, Notification).
-
-**Alternative (infrastructure track): P12.3.1 — Database Connection & Migration.** This is the single dependency that unblocks everything:
+**Next: P12.3.1 — Database Connection & Migration.** This is the single dependency that unblocks everything:
 - Configure a real PostgreSQL connection string in `.env`
 - Start the engine with `FEATURE_DATABASE=true` to wire PostgresProvider
 - Run `DrizzleMigrationRunner` to create the initial schema
 - Validate that `RepositoryEngine` operations work against real data
 - Once database is live, storage, email, payment, and auth providers follow naturally
 
-The bootstrap pipeline is fully implemented (P12.3.0). The providers are registered and wired. What remains is pointing them at real infrastructure.
+The API Layer is complete and frozen (P14). The bootstrap pipeline is fully implemented (P12.3.0). What remains is connecting to real infrastructure (P12.3.1).

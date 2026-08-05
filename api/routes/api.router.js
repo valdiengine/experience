@@ -44,6 +44,19 @@ export class ApiRouter {
   }
 
   /**
+   * Use middleware or mount sub-router at path
+   * @param {string|Function} pathOrMiddleware
+   * @param {Function} [middleware]
+   */
+  use(pathOrMiddleware, middleware) {
+    if (typeof pathOrMiddleware === 'string') {
+      this.#router.use(pathOrMiddleware, middleware);
+    } else {
+      this.#router.use(pathOrMiddleware);
+    }
+  }
+
+  /**
    * Register all domain routes
    */
   #registerRoutes() {

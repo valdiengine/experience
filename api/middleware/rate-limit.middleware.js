@@ -78,7 +78,7 @@ export function rateLimitMiddleware(config = {}) {
       return;
     }
 
-    next();
+    return next();
   };
 }
 

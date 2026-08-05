@@ -37,7 +37,7 @@ export function registerVersioning(router) {
     req.apiVersion = version;
     req.apiPath = effectivePath;
 
-    next();
+    return next();
   });
 }
 
