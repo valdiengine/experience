@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title data-i18n="app.title">Dronestica — Gestión de Flota Cinematográfica</title>
+  <title data-i18n="app.title" data-dynamic data-bind="studio.name">Valdi — Gestión de Flota Cinematográfica</title>
   <meta name="description" content="Plataforma de gestión de drones para producción cinematográfica" />
   <meta name="theme-color" content="#03050a" />
 
@@ -56,11 +56,12 @@
       <!-- Logo y nombre del estudio -->
       <div class="header__brand" data-region="brand">
         <a href="#dashboard" aria-label="Ir al dashboard" data-navigable>
-          <img src="/assets/logo.svg"
+           <img src="/assets/logo.svg"
                alt="Dronestica"
                width="120"
                height="32"
-               data-key="app.logoUrl" />
+               data-key="app.logoUrl"
+               data-bind="studio.name" />
         </a>
       </div>
 
@@ -895,7 +896,7 @@
             <div class="card__body">
 
               <figure class="login__logo" data-region="logo">
-                <img src="/assets/logo.svg" alt="Dronestica" width="180" height="48" />
+                <img src="/assets/logo.svg" alt="Dronestica" width="180" height="48" data-bind="studio.name" />
               </figure>
 
               <h1 id="login-title" class="text-h3 u-text-center" data-i18n="login.title">Iniciar sesión</h1>

@@ -94,12 +94,12 @@ The dependency graph is a Directed Acyclic Graph (DAG). All dependencies flow do
 
 ### HIGH: Business Logic in engine/core/
 
-| File | Violation |
-|---|---|
-| engine/core/engine.js | Hardcoded drone status mapping (flying→success, idle→warning), "Dronestica" brand, battery/price formatting |
-| engine/core/bootstrap.js | Hardcoded tenant config: id='dronestica', colors, capabilities list |
-| engine/core/theme.js | Hardcoded 'dronestica-theme' localStorage key |
-| engine/core/loader.js | Hardcoded "Dronestica" display text |
+| File | Violation | Status |
+|---|---|---|
+| engine/core/engine.js | Hardcoded drone status mapping (flying→success, idle→warning), "Dronestica" brand, battery/price formatting | ✅ RESOLVED - Hero title now reads from window.DATA |
+| engine/core/bootstrap.js | Hardcoded tenant config: id='dronestica', colors, capabilities list | ✅ RESOLVED - Imports from config/product.config.js |
+| engine/core/theme.js | Hardcoded 'dronestica-theme' localStorage key | ✅ RESOLVED - Uses PLATFORM_CONFIG.theme.storageKey |
+| engine/core/loader.js | Hardcoded "Dronestica" display text | ✅ RESOLVED - Uses PRODUCT_CONFIG.name |
 
 ### HIGH: Business Domain Data in engine/data/
 

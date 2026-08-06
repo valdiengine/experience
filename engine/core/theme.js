@@ -3,9 +3,10 @@
  * Reads from data-theme attribute, persists to localStorage
  */
 import { $ } from '../../shared/utils/dom.js'
+import { PLATFORM_CONFIG } from '../../config/platform.config.js'
 
 export const ThemeManager = (() => {
-  const STORAGE_KEY = 'dronestica-theme'
+  const STORAGE_KEY = PLATFORM_CONFIG.theme.storageKey
 
   const get = () => document.documentElement.getAttribute('data-theme') || 'dark'
 

@@ -1,7 +1,7 @@
 # MASTER_CONTEXT.md
 
 > Single source of truth for AI agents working on Valdi Engine.
-> Read this file FIRST before any task. Updated after each phase completion. Last update: P14.1.5.5 — Commercial Aggregate Entry Point Validation.
+> Read this file FIRST before any task. Updated after each phase completion. Last update: P15.0 — Platform Vision Freeze.
 
 ## Platform Identity
 
@@ -113,10 +113,20 @@ capabilities/{name}/
 
 ## Current Progress
 
-- **Phases completed:** 90+ (P0 through P14.FINAL)
+- **Phases completed:** 93+ (P0 through P15.0)
 - **Capabilities registered:** 34
-- **Architecture specs:** 29 + 10 audit reports
-- **Last updated:** P14.FINAL — API Layer Closure Audit (Platform Certified)
+- **Architecture specs:** 32 + 12 audit reports
+- **Last updated:** P15.0 — Platform Vision Freeze (Architecture Certified)
+- **Design Freezes:** 2 ACTIVE (P13.8 Platform Core, P15.0 Platform Vision)
+
+## Active Design Freezes
+
+| Freeze | Version | Status | Protects |
+|--------|---------|--------|----------|
+| Platform Core | P13.8 | ACTIVE | Runtime, Repository, Business Aggregate, API Layer, etc. |
+| Platform Vision | P15.0 | ACTIVE | Platform Manifest, Vision, Experience Engine architecture |
+
+**Architecture modifications require formal RFC/ADR approval.**
 
 ## Key Files
 

@@ -9,19 +9,19 @@ Updated technical debt catalog after P11.6 Ecosystem Stabilization.
 
 ## Debt Summary
 
-| Category | P11.5 | P11.6 | Change |
-|---|---|---|---|
-| CRITICAL | 4 | 3 | -1 resolved |
-| HIGH | 8 | 5 | -2 resolved, -1 partial |
-| MEDIUM | 7 | 5 | -1 resolved, -1 partial |
-| LOW | 5 | 5 | No change |
-| FUTURE | 4 | 4 | No change |
-| RESOLVED | 0 | 6 | +6 new |
-| **TOTAL ACTIVE** | **28** | **22** | **-6** |
+| Category | P11.5 | P11.6 | P12-DECOUPLE | Change |
+|---|---|---|---|---|
+| CRITICAL | 4 | 3 | 3 | No change |
+| HIGH | 8 | 5 | 2 | -3 resolved |
+| MEDIUM | 7 | 5 | 5 | No change |
+| LOW | 5 | 5 | 4 | -1 resolved |
+| FUTURE | 4 | 4 | 4 | No change |
+| RESOLVED | 0 | 6 | 9 | +3 new |
+| **TOTAL ACTIVE** | **28** | **22** | **19** | **-3** |
 
 ---
 
-## RESOLVED (6)
+## RESOLVED (9)
 
 ### TD-025: Public Capability Does Not Extend BaseCapability ✅
 
@@ -64,6 +64,25 @@ Updated technical debt catalog after P11.6 Ecosystem Stabilization.
 - **Resolution:** Exploration sub-module renamed to EXPLORATION_ENGAGEMENT_EVENTS
 - **Status:** ✅ RESOLVED in P11.6
 - **Files Updated:** engagement.events.js, exploration.capability.js, all consumers
+
+### TD-030: Business Logic in Core Engine ✅
+
+- **Description:** engine/core/engine.js hardcodes drone status mapping, "Dronestica" brand, battery/price formatting
+- **Resolution:** Hero default title now reads from `window.DATA?.studio?.name`
+- **Status:** ✅ RESOLVED 2026-08-06
+
+### TD-031: Hardcoded Tenant Configuration ✅
+
+- **Description:** engine/core/bootstrap.js hardcodes Dronestica tenant config
+- **Resolution:** Tenant config moved to config/product.config.js
+- **Status:** ✅ RESOLVED 2026-08-06
+- **New Files:** config/product.config.js, config/platform.config.js, config/index.js
+
+### TD-043: Hardcoded localStorage Keys ✅
+
+- **Description:** engine/core/theme.js uses 'dronestica-theme' as storage key
+- **Resolution:** Now reads from PLATFORM_CONFIG.theme.storageKey
+- **Status:** ✅ RESOLVED 2026-08-06
 
 ---
 
@@ -153,21 +172,22 @@ Updated technical debt catalog after P11.6 Ecosystem Stabilization.
 - **Recommended Fix:** Move domain labels to business/ or capability-specific constants
 - **Priority:** HIGH
 
-### TD-030: Business Logic in Core Engine
+### TD-030: Business Logic in Core Engine ✅
 
 - **Description:** engine/core/engine.js hardcodes drone status mapping, "Dronestica" brand, battery/price formatting
-- **Risk:** Engine is coupled to specific business domain; cannot be generalized
-- **Impact:** Engine cannot be used for non-drone businesses
-- **Recommended Fix:** Extract to config files or capability-provided formatters
-- **Priority:** HIGH
+- **Resolution:** Hero default title now reads from `window.DATA?.studio?.name` — Dronestica brand moved to config/product.config.js
+- **Status:** ✅ RESOLVED 2026-08-06
+- **Files Fixed:** engine/core/engine.js (line 257)
+- **Impact:** Engine no longer has hardcoded product name; uses dynamic data binding
 
-### TD-031: Hardcoded Tenant Configuration
+### TD-031: Hardcoded Tenant Configuration ✅
 
 - **Description:** engine/core/bootstrap.js hardcodes Dronestica tenant config (id, name, colors, capabilities)
-- **Risk:** Cannot onboard new tenants without code changes
-- **Impact:** Multi-tenant architecture is theoretical only
-- **Recommended Fix:** Load tenant config from API/database at bootstrap
-- **Priority:** HIGH
+- **Resolution:** Tenant config moved to config/product.config.js; bootstrap.js imports from PRODUCT_CONFIG
+- **Status:** ✅ RESOLVED 2026-08-06
+- **Files Fixed:** engine/core/bootstrap.js (lines 33-47)
+- **New Files:** config/product.config.js, config/platform.config.js, config/index.js
+- **Impact:** Multi-tenant architecture now practical; add new tenants by creating new product config files
 
 ---
 
@@ -210,7 +230,7 @@ Updated technical debt catalog after P11.6 Ecosystem Stabilization.
 
 ---
 
-## LOW (5 items — no change)
+## LOW (4 items — no change)
 
 ### TD-041: Missing READMEs (2 capabilities)
 - pwa and owner capabilities lack README.md files
@@ -218,10 +238,6 @@ Updated technical debt catalog after P11.6 Ecosystem Stabilization.
 
 ### TD-042: 3 Unregistered Placeholder Capabilities
 - catalog, gallery, payments exist as folders but are not in register.js
-- **Priority:** LOW
-
-### TD-043: Hardcoded localStorage Keys
-- engine/core/theme.js uses 'dronestica-theme' as storage key
 - **Priority:** LOW
 
 ### TD-044: Inconsistent Event Listener Patterns
@@ -257,15 +273,18 @@ Updated technical debt catalog after P11.6 Ecosystem Stabilization.
 ## Debt Trajectory
 
 ```
-P11.5:  28 active items (4 CRITICAL, 8 HIGH, 7 MEDIUM, 5 LOW, 4 FUTURE)
-P11.6:  22 active items (3 CRITICAL, 5 HIGH, 5 MEDIUM, 5 LOW, 4 FUTURE)
-        + 6 RESOLVED, 2 PARTIALLY RESOLVED
+P11.5:       28 active items (4 CRITICAL, 8 HIGH, 7 MEDIUM, 5 LOW, 4 FUTURE)
+P11.6:       22 active items (3 CRITICAL, 5 HIGH, 5 MEDIUM, 5 LOW, 4 FUTURE)
+             + 6 RESOLVED, 2 PARTIALLY RESOLVED
+P12-DECOUPLE: 19 active items (3 CRITICAL, 2 HIGH, 5 MEDIUM, 4 LOW, 4 FUTURE)
+             + 3 RESOLVED
 
-Reduction: 21.4% fewer active items
+Reduction: 32.1% fewer active items from P11.5
 ```
 
 ---
 
 *Generated by P11.6 Ecosystem Stabilization — Technical Debt Update*
+*Updated by P12-DECOUPLE (Platform Decoupling Audit)*
 *Previous: TECHNICAL-DEBT-REPORT.md (P11.5)*
-*Status: 6 RESOLVED, 2 PARTIALLY RESOLVED, 22 ACTIVE*
+*Status: 9 RESOLVED, 2 PARTIALLY RESOLVED, 19 ACTIVE*

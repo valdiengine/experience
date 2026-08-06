@@ -6,12 +6,13 @@
 
 ## Current Status
 
-- **Platform Version:** 4.0
-- **Status:** PLATFORM CERTIFIED — READY FOR PRODUCT DEVELOPMENT
-- **Phases completed:** 90+ (P0 through P14.FINAL)
+- **Platform Version:** 4.1
+- **Status:** PLATFORM VISION FROZEN — PRODUCT DEVELOPMENT ACTIVE
+- **Phases completed:** 93+ (P0 through P15.0)
 - **Capabilities registered:** 34
-- **Architecture specs:** 29 + 10 audit reports
-- **Last phase:** P14.FINAL — API Layer Closure Audit (Platform Certified)
+- **Architecture specs:** 32 + 12 audit reports
+- **Last phase:** P15.0 — Platform Vision Freeze (Architecture Certified)
+- **Design Freezes Active:** P13.8 (Platform Core), P15.0 (Platform Vision)
 
 ---
 
@@ -109,6 +110,9 @@
 | 88 | P14.1.6 | Integration Validation Corrections | Corrections |
 | 89 | P14.1.7 | API Closure Corrections | Corrections |
 | 90 | P14.FINAL | API Layer Closure Audit | Audit |
+| 91 | P15.0 | Multi-Ecosystem Architecture | Architecture |
+| 92 | P15.0 | Platform Vision Freeze | Architecture |
+| 93 | P15.0 | Platform Decoupling (Dronestica) | Architecture |
 
 ---
 
@@ -116,27 +120,33 @@
 
 | Priority | Phase | Name | Category | Status |
 |----------|-------|------|----------|--------|
-| 1 | P14.FINAL | API Layer Closure Audit | Audit | Pending |
-| 2 | P12.3.1 | Database Connection & Migration | Infrastructure | Pending |
-| 2 | P12.3.0 | Infrastructure Wiring | Infrastructure | Completed |
-| 3 | P12.3.1 | Database Connection & Migration | Infrastructure | Pending |
-| 4 | P12.3.2 | Authentication Provider Configuration | Infrastructure | Pending |
-| 5 | P12.3.3 | CMS Provider Configuration | Infrastructure | Pending |
-| 6 | P12.3.4 | Repository Adapter Registration | Infrastructure | Pending |
-| 7 | P12.3.5 | Environment Setup (dev/staging/prod) | DevOps | Pending |
-| 8 | P12.3.6 | Event → CMS Sync Wiring | Backend | Pending |
-| 9 | P12.3.7 | Event → Email Wiring | Backend | Pending |
-| 10 | P12.3.8 | Accommodation Management API | MVP | Pending |
-| 11 | P12.3.9 | Reservation API | MVP | Pending |
-| 12 | P12.3.10 | Owner Portal API | MVP | Pending |
-| 13 | P12.3.11 | Visitor Experience API | MVP | Pending |
-| 14 | P12.3.12 | Testing Setup | Quality | Pending |
+| 1 | P12.3.1 | Database Connection & Migration | Infrastructure | NEXT |
+| 2 | P12.3.2 | Storage Provider | Infrastructure | Pending |
+| 3 | P12.3.3 | Email Provider | Infrastructure | Pending |
+| 4 | P12.3.4 | Payment Provider | Infrastructure | Pending |
+| 5 | P12.3.5 | Auth Persistent Store | Infrastructure | Pending |
+| 6 | P15.1 | Ecosystem Infrastructure | Ecosystem | Pending |
+| 7 | P15.2 | Dronestica Migration | Ecosystem | Pending |
+| 8 | P15.3 | Runtime Integration | Ecosystem | Pending |
+| 9 | P15.4 | Multi-Destination Testing | Ecosystem | Pending |
+| 10 | P16 | Multi-Country | Expansion | Future |
+| 11 | P17 | Multi-Product | Expansion | Future |
+| 12 | P18 | Platform Marketplace | Expansion | Future |
+
+---
+
+## Design Freezes Active
+
+| Freeze | Version | Status | Components |
+|--------|---------|--------|------------|
+| Platform Core | P13.8 | ACTIVE | Runtime, Repository, Business Aggregate, API, etc. (12) |
+| Platform Vision | P15.0 | ACTIVE | Platform Manifest, Vision, Experience Engine, etc. (8 docs) |
 
 ---
 
 ## Recommended Next Step
 
-**P14.FINAL — API Layer Closure Audit.** After P14.1.7 corrections, the API Layer Closure Audit certifies P14 as CLOSED. P14 becomes immutable under Design Freeze. Next: P12.3.1 — Database Connection & Migration.
+**P12.3.1 — Database Connection & Migration.** With both Platform Core (P13.8) and Platform Vision (P15.0) frozen, the first product development phase begins: implementing real infrastructure providers.
 
 ---
 

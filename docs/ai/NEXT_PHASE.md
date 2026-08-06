@@ -1,21 +1,21 @@
 # NEXT_PHASE.md
 
-> What comes next. **Platform v4.0 — PLATFORM CERTIFIED.**
+> What comes next. **Platform v4.1 — PLATFORM VISION FROZEN.**
 
 ---
 
 ## Current Status
 
-**PLATFORM v4.0 — PLATFORM CERTIFIED**
+**PLATFORM v4.1 — PLATFORM VISION FROZEN**
 
-- **Platform Version:** 4.0
-- **Platform Status:** CERTIFIED
+- **Platform Version:** 4.1
+- **Platform Status:** VISION FROZEN
 - **Product Development:** ACTIVE
-- **Design Freeze:** ACTIVE (P13.8)
+- **Design Freezes:** 2 ACTIVE (P13.8 Platform Core, P15.0 Platform Vision)
 - **Architecture Score:** 98/100
-- **API Layer:** CLOSED (P14.FINAL: 97/100)
+- **Architecture:** CLOSED
 
-**Decision:** Platform is certified. Product development is now active. P12.3.1 is the next product milestone.
+**Decision:** Platform Core and Platform Vision are both frozen. Product development is fully active. P12.3.1 (Database Connection & Migration) is the next milestone.
 
 ---
 

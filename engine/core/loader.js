@@ -2,6 +2,7 @@
  * Loader — Shows/hides the loading screen
  */
 import { $ } from '../../shared/utils/dom.js'
+import { PRODUCT_CONFIG } from '../../config/product.config.js'
 
 export const Loader = (() => {
   let el = null
@@ -14,7 +15,7 @@ export const Loader = (() => {
     el.innerHTML = `
       <div class="loader__inner">
         <div class="loader__spinner"></div>
-        <span class="loader__text">Dronestica</span>
+        <span class="loader__text">${PRODUCT_CONFIG.name}</span>
       </div>`
     document.body.prepend(el)
   }

@@ -254,7 +254,7 @@ export const StudioEngine = ((globalData) => {
     const heroData = resolve(store, dataPath) || {}
     if (!heroData?.name) return
 
-    const { heroVideo: videoSrc = '', name: title = 'Dronestica', tagline = '', about: { mission: description = '' } = {} } = heroData
+    const { heroVideo: videoSrc = '', name: title = window.DATA?.studio?.name || 'Valdi', tagline = '', about: { mission: description = '' } = {} } = heroData
     const ctaText = config.ctaText || 'Ver proyectos'
     const ctaLink = config.ctaLink || '#portfolio'
     const secondaryCtaText = config.secondaryCtaText || 'Contactar'

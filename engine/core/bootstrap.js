@@ -14,6 +14,7 @@ import { TenantManager } from '../../capabilities/tenant/manager.js'
 import { CapabilityLoader } from '../../capabilities/core/loader.js'
 import { createAllCapabilities } from '../../capabilities/core/register.js'
 import { UIManager } from '../../src/ui.js'
+import { PRODUCT_CONFIG } from '../../config/product.config.js'
 
 export const Bootstrap = (() => {
 
@@ -28,23 +29,8 @@ export const Bootstrap = (() => {
     // 3. TenantManager (resolves current tenant)
     const tenantManager = new TenantManager(eventBus)
     const tenant = await tenantManager.init({
-      tenants: [
-        {
-          id: 'dronestica',
-          name: 'Dronestica',
-          slug: 'dronestica',
-          domain: 'dronestica.com',
-          branding: {
-            colors: {
-              primary: '#c8a55c',
-              secondary: '#1a1a2e',
-            },
-          },
-          provider: { type: 'json', config: {} },
-          capabilities: ['gallery', 'booking', 'notifications', 'pwa'],
-        },
-      ],
-      defaultTenantId: 'dronestica',
+      tenants: [PRODUCT_CONFIG],
+      defaultTenantId: PRODUCT_CONFIG.id,
     })
 
     // 4. Provider + DataManager (BEFORE capabilities — they need data access)
@@ -99,7 +85,7 @@ export const Bootstrap = (() => {
     // 9. Hide loader
     requestAnimationFrame(() => Loader.hide())
 
-    console.log('[Bootstrap] Dronestica initialized', {
+    console.log(`[Bootstrap] ${PRODUCT_CONFIG.name} initialized`, {
       tenant: tenant?.slug,
       capabilities: capabilityLoader.getActive().map(c => c.id),
       timestamp: new Date().toISOString(),

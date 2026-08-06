@@ -4,6 +4,59 @@
 
 ---
 
+## v4.1 — Platform Vision Frozen (2026-08-06)
+
+### Platform Release 4.1 — PLATFORM VISION FROZEN
+
+**Status:** PRODUCT DEVELOPMENT ACTIVE
+
+- **Platform Core Freeze:** ACTIVE (P13.8)
+- **Platform Vision Freeze:** ACTIVE (P15.0)
+- **Architecture:** CLOSED
+- **Design Freezes:** 2 ACTIVE
+- **Next Phase:** P12.3.1 — Database Connection & Migration
+
+#### Key Deliverables
+
+- Platform Manifest: `docs/architecture/PLATFORM_MANIFEST.md`
+- Platform Vision: `docs/architecture/VALDI_PLATFORM_VISION.md`
+- Multi-Ecosystem Architecture: `docs/architecture/MULTI-ECOSYSTEM-ARCHITECTURE.md`
+- Platform Freezes: `docs/architecture/PLATFORM_FREEZES.md`
+- Vision Freeze Certification: `docs/architecture/PLATFORM_VISION_FREEZE.md`
+
+#### P15.0 — Platform Vision Freeze
+
+- **VERDICT:** PLATFORM VISION FROZEN
+- **Documents Certified:** 8 architecture documents verified for consistency
+- **Philosophy:** Platform owns behavior, Experience Engine composes, Products own identity
+- **Architecture:** Platform Core → Product Resolver → Ecosystem Loader → Experience Engine
+
+#### P15.0 — Multi-Ecosystem Architecture
+
+- Complete multi-ecosystem architecture designed
+- Country → Region → Destination → Experience → Company hierarchy
+- Product Resolver architecture (domain, subdomain, path, header, query, geo)
+- Ecosystem Loader architecture (configuration loading, inheritance resolution)
+- Experience Engine architecture (composition layer)
+
+#### P15.0 — Platform Decoupling
+
+- **Dronestica references externalized** from engine/core
+- **New config structure:** `config/platform.config.js`, `config/product.config.js`
+- **Technical debt reduced:** 22 → 19 active items
+- **HIGH priority items resolved:** TD-030, TD-031, TD-043
+- **Zero impact on certified Platform Core**
+
+#### Configuration Changes
+
+- `engine/core/bootstrap.js` — Now imports from `config/product.config.js`
+- `engine/core/theme.js` — Uses `PLATFORM_CONFIG.theme.storageKey`
+- `engine/core/loader.js` — Uses `PRODUCT_CONFIG.name`
+- `engine/core/engine.js` — Hero reads from `window.DATA?.studio?.name`
+- `index.html` — Dynamic bindings on logos and title
+
+---
+
 ## v4.0 — Platform Certified (2026-08-02)
 
 ### Platform Release 4.0 — PLATFORM CERTIFIED
