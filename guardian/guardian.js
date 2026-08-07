@@ -15,6 +15,9 @@ import { DocumentationGuardian } from './documentation.guardian.js';
 import { DependencyGuardian } from './dependency.guardian.js';
 import { GitGuardian } from './git.guardian.js';
 import { AIGuardian } from './ai.guardian.js';
+import { DatabaseGuardian } from './database.guardian.js';
+import { StorageGuardian } from './storage.guardian.js';
+import { MediaGuardian } from './media.guardian.js';
 import { ReportGenerator } from './report.generator.js';
 import fs from 'fs';
 import path from 'path';
@@ -45,6 +48,9 @@ export class GuardianOrchestrator {
       dependency: null,
       git: null,
       ai: null,
+      database: null,
+      storage: null,
+      media: null,
       violations: [],
       warnings: [],
       score: 0,
@@ -59,7 +65,10 @@ export class GuardianOrchestrator {
       documentation: new DocumentationGuardian(),
       dependency: new DependencyGuardian(),
       git: new GitGuardian(),
-      ai: new AIGuardian()
+      ai: new AIGuardian(),
+      database: new DatabaseGuardian(),
+      storage: new StorageGuardian(),
+      media: new MediaGuardian()
     };
   }
 
@@ -110,6 +119,12 @@ export class GuardianOrchestrator {
 
     console.log('[GUARDIAN] Running AI Guardian...');
     this.results.ai = await this.guardians.ai.run();
+
+    console.log('[GUARDIAN] Running Database Guardian...');
+    this.results.database = await this.guardians.database.run();
+
+    console.log('[GUARDIAN] Running Storage Guardian...');
+    this.results.storage = await this.guardians.storage.run();
 
     // Calculate score
     this.calculateScore();

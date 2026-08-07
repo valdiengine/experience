@@ -42,6 +42,7 @@ import { VisitorCapability } from '../visitor/visitor.capability.js'
 import { OpportunityCapability } from '../opportunity/opportunity.capability.js'
 import { PaymentCapability } from '../payment/payment.capability.js'
 import { NotificationCapability } from '../notification/notification.capability.js'
+import { StorageCapability } from '../storage/storage.capability.js'
 
 /**
  * Map of capability ID → class constructor
@@ -79,6 +80,7 @@ export const AVAILABLE_CAPABILITIES = {
   governance: GovernanceCapability,
   'destination-operations': OperationsCapability,
   'destination-identity': IdentityCapability,
+  storage: StorageCapability,
 }
 
 /**

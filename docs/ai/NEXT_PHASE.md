@@ -1,21 +1,43 @@
 # NEXT_PHASE.md
 
-> What comes next. **Platform v4.1 — PLATFORM VISION FROZEN.**
+> What comes next. **Platform v4.2 — INFRASTRUCTURE COMPLETE — EXPERIENCE ENGINE NEXT.**
 
 ---
 
 ## Current Status
 
-**PLATFORM v4.1 — PLATFORM VISION FROZEN**
+**PLATFORM v4.2 — INFRASTRUCTURE COMPLETE**
 
-- **Platform Version:** 4.1
-- **Platform Status:** VISION FROZEN
+- **Platform Version:** 4.2
+- **Code Name:** Product Runtime
+- **Platform Status:** INFRASTRUCTURE COMPLETE
 - **Product Development:** ACTIVE
 - **Design Freezes:** 2 ACTIVE (P13.8 Platform Core, P15.0 Platform Vision)
-- **Architecture Score:** 98/100
+- **Architecture Score:** 100/100
+- **Guardian Score:** 100/100
 - **Architecture:** CLOSED
 
-**Decision:** Platform Core and Platform Vision are both frozen. Product development is fully active. P12.3.1 (Database Connection & Migration) is the next milestone.
+**Decision:** Infrastructure layer (P12.3.2.3) is COMPLETE. Next: P15.1 — Experience Engine Core, then FIRST MVP.
+
+---
+
+## Version Roadmap
+
+```
+v4.0-platform (2026-08-02) — Platform Certified
+        ↓
+v4.1-platform-vision (2026-08-06) — Architecture Frozen
+        ↓
+v4.1.1-database-foundation (2026-08-06) — Database Ready
+        ↓
+v4.2-product-runtime (2026-08-07) — Storage Integration Complete
+        ↓
+v4.2-media-processing (2026-08-07) — Media Processing Complete ← INFRASTRUCTURE COMPLETE
+        ↓
+v4.3-experience-engine (NEXT) — Experience Engine Core ← NEXT
+        ↓
+v4.4-mvp-providers — Email, Payment, Auth Providers
+```
 
 ---
 
@@ -49,19 +71,41 @@
 
 **Why:** The bootstrap pipeline exists and works. Now wire it to real infrastructure.
 
-### P12.3.1 — Database Connection & Migration
-- Configure real PostgreSQL connection string in `.env`
-- Run `PostgresProvider` against real PG instance
-- Execute `DrizzleMigrationRunner` to create schema
-- Validate `RepositoryEngine` operations against real data
-- **Effort:** 1-2 days
+### P12.3.1 — Database Connection & Migration ✅ COMPLETED
 
-### P12.3.2 — Storage Provider (LocalFS)
-- Implement `StorageRuntime` contract for local filesystem
-- File upload/download/delete/list
-- Media upload for Accommodation images
-- Wire into bootstrap as `storage` provider slot
-- **Effort:** 1 day
+**P12.3.1.2 ✅ COMPLETED** — Database Schema Design
+- Created 33 Drizzle ORM schemas in `database/schema/`
+- 5 schema layers: platform, ecosystem, company, identity, business
+
+**P12.3.1.3 ✅ COMPLETED** — Migration Implementation
+- Created 5 migration files (0001-0005) in `database/migrations/`
+- drizzle.config.js with PostgreSQL dialect, env mapping, pool settings
+
+**P12.3.1.4 ✅ COMPLETED** — PostgreSQL Connection & Environment Configuration
+- Database configuration and connection files created
+- Environment loader and templates created
+- Drizzle client with Repository boundary enforcement
+- Database Guardian integration
+- Runtime startup integration
+
+**P12.3.1.5 ✅ COMPLETED** — Initial Platform Seed Data
+- Created `database/seeds/` with platform, ecosystem, company seeds
+- Seed registry with dependency ordering
+- Seed runner with idempotency checks
+- 5 destinations, 17 categories, 18 modules, 4 experiences
+- 6 sample companies (architecture examples)
+- Documents: `SEED_IMPLEMENTATION_REPORT.md`, `INITIAL_PLATFORM_STATE.md`
+
+### P12.3.2 — Storage Provider ✅ COMPLETED
+
+**P12.3.2.0 ✅** — Storage Architecture
+**P12.3.2.0.1 ✅** — Storage Architecture Validation
+**P12.3.2.0.2 ✅** — Storage Capability Boundary
+**P12.3.2.1 ✅** — Storage Provider Interface Implementation (Local, S3, R2)
+**P12.3.2.2 ✅** — Storage Integration & Testing (47 tests, 100/100 Guardian)
+**P12.3.2.3 ✅** — Media Processing Engine (100/100 Guardian)
+
+### P15.1 — Experience Engine Core (NEXT)
 
 ### P12.3.3 — Email Provider (SendGrid)
 - Implement `MailRuntime` contract
@@ -202,13 +246,14 @@
 
 ## Recommended Next Step
 
-**Platform v4.0 — PLATFORM CERTIFIED.** P14 is CLOSED and Design Freeze protected.
+**Platform v4.1 — INFRASTRUCTURE COMPLETE.** P12.3.1 is fully completed.
 
-**Next: P12.3.1 — Database Connection & Migration.** This is the single dependency that unblocks everything:
-- Configure a real PostgreSQL connection string in `.env`
-- Start the engine with `FEATURE_DATABASE=true` to wire PostgresProvider
-- Run `DrizzleMigrationRunner` to create the initial schema
-- Validate that `RepositoryEngine` operations work against real data
-- Once database is live, storage, email, payment, and auth providers follow naturally
+**Next: P12.3.2 — Storage Provider.** With database foundation complete, storage provider is the logical next step:
+- Implement `StorageRuntime` contract for local filesystem
+- File upload/download/delete/list for media
+- Wire into bootstrap as `storage` provider slot
+- Enables media management for accommodations and content
 
-The API Layer is complete and frozen (P14). The bootstrap pipeline is fully implemented (P12.3.0). What remains is connecting to real infrastructure (P12.3.1).
+After storage: Email (P12.3.3), Payment (P12.3.4), Auth (P12.3.5) follow naturally.
+
+The seed data system is ready. Platform identity created (Chile, 5 destinations, 17 categories, 18 modules). Database is the single dependency that unblocks all infrastructure providers.

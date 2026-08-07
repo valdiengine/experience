@@ -48,4 +48,12 @@ export class ValidationBootstrapError extends StartupError {
   }
 }
 
+export class DatabaseBootstrapError extends StartupError {
+  constructor(message, context = {}) {
+    super(message, context)
+    this.name = 'DatabaseBootstrapError'
+    this.category = 'database'
+  }
+}
+
 export default StartupError

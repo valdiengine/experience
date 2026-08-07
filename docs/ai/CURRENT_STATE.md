@@ -1,30 +1,33 @@
 # CURRENT_STATE.md
 
 > Exact snapshot of project state. Update after each completed phase.
-> Last updated: **PLATFORM v4.1 — Platform Vision Frozen** (2026-08-06)
+> Last updated: **PLATFORM v4.2 — INFRASTRUCTURE COMPLETE** (2026-08-07)
 
 ## Platform Status
 
 | Item | Value |
 |------|-------|
-| Platform Version | **4.1** |
-| Status | **PLATFORM VISION FROZEN** |
+| Platform Version | **4.2** |
+| Code Name | **Product Runtime** |
+| Status | **INFRASTRUCTURE COMPLETE** |
 | Mode | **PRODUCT DEVELOPMENT** |
-| Architecture Score | 98/100 |
-| Design Freezes | **2 ACTIVE** (P13.8, P15.0) |
+| Architecture Score | 100/100 |
+| Guardian Score | 100/100 |
+| Design Freezes | **2 ACTIVE** (P13.8, P15.0)
 
 ## Progress
 
 | Metric | Value |
 |--------|-------|
-| Phases completed | 90+ (P0 through P14.FINAL) |
-| Capabilities registered | 34 (Business sub-managers: 12) |
-| Architecture specs | 29 + 10 audit reports |
+| Phases completed | 100+ (P0 through P12.3.2.3) |
+| Capabilities registered | 35 (Business sub-managers: 12) |
+| Architecture specs | 35 + 12 audit reports |
 | SDK specifications | 9 |
-| Total event types | ~440 |
-| Total code files | ~215+ (business/ ~20+ files + 10 sub-managers + availability/ 14 files + reservation/ 18 files + visitor/ 14 files + notification/ 14 files) |
-| Documentation files | 84 (6 knowledge domains + 4 AI Brain files + Architect Decisions + Project Evolution + Blueprint + Contracts + UoW + Refactoring README + ORM Adapter README + ORM Adapter Architecture + Postgres README + Drizzle README + Postgres Provider Architecture + Runtime README + Platform Runtime Architecture + Identity Authentication Blueprint + Auth Contracts README + Auth Runtime Contracts Architecture + Auth Engine README + Auth Engine Architecture + Auth Integration README + Auth Runtime Integration Architecture + JWT Provider README + JWT Provider Architecture + Authz Engine README + Authz Policies README + Authz Permissions README + Authz Roles README + Authz Scopes README + Authz Audit README + Authorization Policy Engine Architecture + CMS Domain Blueprint + CMS Contracts README + CMS Integration README + WordPress README + WordPress Provider Architecture + Sync Engine README + CMS Sync Engine Architecture) |
-| Code files | ~480+ (40 persistence engine + 27 entity repos + 10 ORM adapter + 10 postgres provider + 10 drizzle + 9 runtime core + 17 runtime contracts + 17 auth contracts + 17 auth engine + 8 auth integration + 12 jwt provider + 8 authorization engine + 6 policies + 4 permissions + 4 roles + 4 scopes + 2 audit + 11 cms contracts + 7 cms integration + 20 wordpress provider + 25 cms sync + 14 notification domain) |
+| Total event types | ~450 |
+| Total code files | ~230+ (business/ ~20+ files + 10 sub-managers + availability/ 14 files + reservation/ 18 files + visitor/ 14 files + notification/ 14 files) |
+| Documentation files | 100+ (including media engine docs) |
+| Code files | ~510+ (40 persistence engine + 27 entity repos + 10 ORM adapter + 10 postgres provider + 10 drizzle + 9 runtime core + 17 runtime contracts + 17 auth contracts + 17 auth engine + 8 auth integration + 12 jwt provider + 8 authorization engine + 6 policies + 4 permissions + 4 roles + 4 scopes + 2 audit + 11 cms contracts + 7 cms integration + 20 wordpress provider + 25 cms sync + 14 notification domain + 6 storage providers + 1 storage integration + 1 storage tests + 16 media engine + 1 media guardian) |
+| Integration tests | 47 |
 | Stabilization documents | 12 |
 | Consolidation documents | 11 |
 | Technical debt items | 28 |
@@ -737,6 +740,92 @@ HTTP Request → ApiServer → Middleware → Router → BusinessController.list
 `docs/architecture/API_RUNTIME_INTEGRATION.md`
 
 ### Score: 100/100 — API LAYER FULLY INTEGRATED
+
+---
+
+## P12.3.1.4 — PostgreSQL Connection & Environment Configuration
+
+### What Changed
+- `database/config/database.config.js` — PostgreSQL settings, pool config, env mappings
+- `database/config/environment.loader.js` — Loads .env files by NODE_ENV
+- `database/connection/postgres.connection.js` — Pool, query, transaction, health methods
+- `database/connection/connection.pool.js` — PoolState, initialize/shutdown
+- `database/connection/connection.health.js` — checkConnection, ping, checkTables
+- `database/client.js` — Drizzle client with schema exports, Repository boundary enforcement
+- `database/bootstrap/database.bootstrap.js` — Full bootstrap flow (env → pool → drizzle → schema)
+- `runtime/startup/database.bootstrap.js` — Runtime integration for startup sequence
+- `guardian/database.guardian.js` — Database architecture validation
+- `.env.example`, `.env.development.example`, `.env.test.example`, `.env.production.example`
+- `database/migrations/migration.status.example.json`
+- `docs/database/DATABASE_CONNECTION_ARCHITECTURE.md`
+- `docs/database/P12.3.1.4_CONNECTION_REPORT.md`
+
+### Architecture Boundary
+- **Runtime → Repository → Drizzle ORM → PostgreSQL**
+- Database must NOT be imported directly by API, BusinessService, Capabilities, or Experience Engine
+- All access must remain behind Repository boundaries
+
+### Database Schema Summary
+| Layer | Entities | Tables |
+|-------|----------|--------|
+| Platform | 7 | tenants, countries, regions, destinations, domains, themes, languages |
+| Ecosystem | 4 | ecosystems, categories, modules, experiences |
+| Company | 4 | companies, company_profiles, company_modules, company_settings |
+| Identity | 5 | users, roles, permissions, user_roles, user_sessions |
+| Business | 12 | accommodations, accommodation_units, availability, availability_rules, reservations, reservation_activities, payments, invoices, reviews, review_helpfulness, business_notifications, notification_preferences |
+
+**Total: 33 entities across 5 layers, 29 tables**
+
+### Migration Files
+| Migration | Layer | Tables |
+|-----------|-------|--------|
+| 0001_platform_foundation | Platform | 7 |
+| 0002_ecosystem_layer | Ecosystem | 4 |
+| 0003_company_layer | Company | 4 |
+| 0004_identity_layer | Identity | 5 |
+| 0005_business_layer | Business | 12 |
+
+---
+
+## P12.3.1.5 — Initial Platform Seed Data
+
+### What Changed
+- `database/seeds/platform/` — tenants, countries, regions, languages, themes seeds
+- `database/seeds/ecosystem/` — destinations, ecosystems, categories, modules, experiences seeds
+- `database/seeds/company/` — companies, company settings seeds
+- `database/seeds/registry/seed.registry.js` — Seed registry with dependency ordering
+- `database/seeds/seed.runner.js` — Seed runner with idempotency checks
+- `docs/database/SEED_IMPLEMENTATION_REPORT.md` — Seed implementation documentation
+- `docs/database/INITIAL_PLATFORM_STATE.md` — Initial platform state documentation
+
+### Seed Data Summary
+| Layer | Entity | Count |
+|-------|--------|-------|
+| Platform | tenants | 3 |
+| Platform | countries | 1 |
+| Platform | regions | 4 |
+| Platform | languages | 3 |
+| Platform | themes | 3 |
+| Ecosystem | destinations | 5 |
+| Ecosystem | ecosystems | 5 |
+| Ecosystem | categories | 17 |
+| Ecosystem | modules | 18 |
+| Ecosystem | experiences | 4 |
+| Company | companies | 6 |
+| Company | company settings | 3 |
+
+### Geographic Coverage
+- **Country**: Chile (with architecture for Argentina, Peru, Colombia, Mexico)
+- **Regions**: Los Ríos (Valdivia), Magallanes (Natales, Punta Arenas), Los Lagos (Chiloé), Aysén (Coyhaique)
+- **Destinations**: 5 tourism destinations across southern Chile
+
+### Sample Companies (Architecture Examples Only)
+- Albasie (Marine) — Valdivia
+- Secnet (Telecom/Security) — Valdivia
+- ESR Motos (Automotive) — Valdivia
+- Hospedaje Demo (Tourism) — Valdivia
+- Hostal Patagonia Demo (Tourism) — Natales
+- Café Cultural Demo (Gastronomy) — Chiloé
 
 ---
 

@@ -1,0 +1,53 @@
+{
+  "generated": "2026-08-06T00:00:00.000Z",
+  "environment": "development",
+  "totalMigrations": 5,
+  "appliedMigrations": 0,
+  "pendingMigrations": 5,
+  "migrations": [
+    {
+      "name": "0001_platform_foundation",
+      "layer": "platform",
+      "order": 1,
+      "tables": ["tenants", "countries", "regions", "destinations", "domains", "themes", "languages"],
+      "applied": false
+    },
+    {
+      "name": "0002_ecosystem_layer",
+      "layer": "ecosystem",
+      "order": 2,
+      "tables": ["ecosystems", "categories", "modules", "experiences"],
+      "applied": false
+    },
+    {
+      "name": "0003_company_layer",
+      "layer": "company",
+      "order": 3,
+      "tables": ["companies", "company_profiles", "company_modules", "company_settings"],
+      "applied": false
+    },
+    {
+      "name": "0004_identity_layer",
+      "layer": "identity",
+      "order": 4,
+      "tables": ["users", "roles", "permissions", "user_roles", "user_sessions"],
+      "applied": false
+    },
+    {
+      "name": "0005_business_layer",
+      "layer": "business",
+      "order": 5,
+      "tables": ["accommodations", "accommodation_units", "availability", "availability_rules", "reservations", "reservation_activities", "payments", "invoices", "reviews", "review_helpfulness", "business_notifications", "notification_preferences"],
+      "applied": false
+    }
+  ],
+  "applied": [],
+  "pending": [
+    "0001_platform_foundation",
+    "0002_ecosystem_layer",
+    "0003_company_layer",
+    "0004_identity_layer",
+    "0005_business_layer"
+  ],
+  "note": "This file is generated during database bootstrap. Run migrations to apply."
+}

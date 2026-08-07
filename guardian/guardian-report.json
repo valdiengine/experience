@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-08-03T06:43:28.049Z",
+  "timestamp": "2026-08-07T02:35:48.430Z",
   "score": 100,
   "maxScore": 100,
   "architecture": {
@@ -77,8 +77,8 @@
       {
         "name": "Capability Count",
         "status": "PASS",
-        "message": "42 capabilities found",
-        "count": 42
+        "message": "44 capabilities found",
+        "count": 44
       },
       {
         "name": "Manager: business-accommodation",
@@ -609,6 +609,21 @@
         "level": "P1",
         "name": "Cross-Capability Leak",
         "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\saas\\product.catalog.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\storage\\storage.adapter.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\storage\\storage.events.js"
+      },
+      {
+        "level": "P1",
+        "name": "Cross-Capability Leak",
+        "message": "Direct capability instantiation: C:\\Users\\casa\\Documents\\desarrollo dronesss\\capabilities\\storage\\storage.manager.js"
       }
     ],
     "status": "FAIL"
@@ -617,9 +632,9 @@
     "checks": [
       {
         "name": "Current Branch",
-        "status": "PASS",
-        "message": "Current branch: release/design-freeze-p13.8",
-        "branch": "release/design-freeze-p13.8"
+        "status": "WARNING",
+        "message": "Current branch: develop/product-development",
+        "branch": "develop/product-development"
       },
       {
         "name": "Design Freeze Branch",
@@ -640,8 +655,14 @@
         "workingTree": "CLEAN"
       }
     ],
-    "violations": [],
-    "status": "PASS"
+    "violations": [
+      {
+        "level": "P3",
+        "name": "Branch Warning",
+        "message": "Not on design-freeze branch. Expected release/design-freeze-p13.8"
+      }
+    ],
+    "status": "WARNING"
   },
   "ai": {
     "checks": [
