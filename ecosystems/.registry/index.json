@@ -1,0 +1,56 @@
+{
+  "platform": "valdi",
+  "version": "4.2",
+  "ecosystems": {
+    "cl": {
+      "name": "Chile",
+      "code": "CL",
+      "flag": "🇨🇱",
+      "regions": ["los-rios", "magallanes", "aysen", "los-lagos"],
+      "defaultRegion": "los-rios",
+      "defaultLocale": "es-CL",
+      "currency": "CLP",
+      "timezone": "America/Santiago"
+    },
+    "ar": {
+      "name": "Argentina",
+      "code": "AR",
+      "flag": "🇦🇷",
+      "regions": ["patagonia", "norte", "cuyo", "pampeana"],
+      "defaultRegion": "patagonia",
+      "defaultLocale": "es-AR",
+      "currency": "ARS",
+      "timezone": "America/Buenos_Aires"
+    },
+    "pe": {
+      "name": "Peru",
+      "code": "PE",
+      "flag": "🇵🇪",
+      "regions": ["lima", "cusco", "arequipa"],
+      "defaultRegion": "lima",
+      "defaultLocale": "es-PE",
+      "currency": "PEN",
+      "timezone": "America/Lima"
+    },
+    "co": {
+      "name": "Colombia",
+      "code": "CO",
+      "flag": "🇨🇴",
+      "regions": ["bogota", "medellin", "cali"],
+      "defaultRegion": "bogota",
+      "defaultLocale": "es-CO",
+      "currency": "COP",
+      "timezone": "America/Bogota"
+    },
+    "mx": {
+      "name": "Mexico",
+      "code": "MX",
+      "flag": "🇲🇽",
+      "regions": ["cdmx", "guadalajara", "monterrey"],
+      "defaultRegion": "cdmx",
+      "defaultLocale": "es-MX",
+      "currency": "MXN",
+      "timezone": "America/Mexico_City"
+    }
+  }
+}

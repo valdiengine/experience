@@ -21,34 +21,6 @@ export const TENANTS_SEED = [
     plan: 'enterprise',
     isActive: true,
   },
-  {
-    name: 'Valdivia Ecosystem',
-    slug: 'valdivia-ecosystem',
-    type: 'ecosystem',
-    status: 'active',
-    domain: 'valdivia.app',
-    config: {
-      platform: false,
-      ecosystem: true,
-      destination: 'valdivia',
-    },
-    plan: 'business',
-    isActive: true,
-  },
-  {
-    name: 'Patagonia Ecosystem',
-    slug: 'patagonia-ecosystem',
-    type: 'ecosystem',
-    status: 'active',
-    domain: 'patagonia.app',
-    config: {
-      platform: false,
-      ecosystem: true,
-      destination: 'patagonia',
-    },
-    plan: 'business',
-    isActive: true,
-  },
 ]
 
 export default TENANTS_SEED

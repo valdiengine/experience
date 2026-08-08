@@ -31,6 +31,7 @@ export class BootstrapPipeline {
       const capabilities = await this.#step('initializeCapabilities', () => this.#initializeCapabilities(engine, config))
       const cms = await this.#step('initializeCMS', () => this.#initializeCMS(engine, config))
       const auth = await this.#step('initializeAuthentication', () => this.#initializeAuthentication(engine, config))
+      const experience = await this.#step('initializeExperience', () => this.#initializeExperience(engine, config))
       const runtime = await this.#step('initializeRuntime', () => this.#initializeRuntime(engine, config))
       const health = await this.#step('healthCheck', () => this.#healthCheck(engine))
 
@@ -160,6 +161,17 @@ export class BootstrapPipeline {
       })
     }
 
+    if (features.experience !== false) {
+      const { ExperienceRuntimeIntegration } = await import('../experience/experience.runtime.integration.js')
+
+      engine.register('experience', ExperienceRuntimeIntegration, {
+        version: '1.0.0',
+        category: 'experience',
+        dependencies: [],
+        priority: 100,
+      })
+    }
+
     this.#registerFutureProviders(engine, features)
 
     this.#emit(BOOTSTRAP_EVENTS.PROVIDERS_REGISTERED, { count: engine.registry.count })
@@ -210,6 +222,15 @@ export class BootstrapPipeline {
     this.#emit(BOOTSTRAP_EVENTS.AUTH_INITIALIZED, { status: 'initialized' })
   }
 
+  async #initializeExperience(engine, config) {
+    const experience = engine.getModule('experience')
+    if (experience) {
+      await experience.initialize()
+      this.#emit(BOOTSTRAP_EVENTS.EXPERIENCE_INITIALIZED, { status: 'initialized' })
+    }
+    return experience
+  }
+
   async #initializeRuntime(engine, config) {
     await engine.initialize()
     await engine.start()
@@ -238,6 +259,7 @@ export class BootstrapPipeline {
     const drizzle = engine.getModule('drizzle')
     const auth = engine.getModule('auth')
     const cms = engine.getModule('cms')
+    const experience = engine.getModule('experience')
     const health = engine.healthCheck()
 
     let dbStatus = 'healthy'
@@ -246,6 +268,7 @@ export class BootstrapPipeline {
     let authStatus = 'healthy'
     let authzStatus = 'healthy'
     let cmsStatus = 'healthy'
+    let experienceStatus = 'healthy'
     let providerStatus = 'healthy'
 
     if (postgres) {
@@ -264,6 +287,10 @@ export class BootstrapPipeline {
       try { const h = await cms.health(); cmsStatus = h?.status || 'healthy' } catch { cmsStatus = 'unhealthy' }
     }
 
+    if (experience) {
+      try { const h = await experience.health(); experienceStatus = h?.status || 'healthy' } catch { experienceStatus = 'unhealthy' }
+    }
+
     const result = {
       database: dbStatus,
       repository: repoStatus,
@@ -271,6 +298,7 @@ export class BootstrapPipeline {
       authentication: authStatus,
       authorization: authzStatus,
       cms: cmsStatus,
+      experience: experienceStatus,
       providers: providerStatus,
       application: dbStatus === 'healthy' ? 'ready' : 'degraded',
     }

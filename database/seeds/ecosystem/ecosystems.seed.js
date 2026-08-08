@@ -9,7 +9,7 @@
 
 export const ECOSYSTEMS_SEED = [
   {
-    destinationSlug: 'valdivia',
+    destinationSlug: 'valdi',
     name: 'Valdivia Tourism Ecosystem',
     slug: 'valdivia-ecosystem',
     type: 'tourism',

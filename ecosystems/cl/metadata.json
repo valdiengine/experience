@@ -1,0 +1,24 @@
+{
+  "country": {
+    "code": "cl",
+    "name": "Chile",
+    "flag": "🇨🇱",
+    "currency": "CLP",
+    "timezone": "America/Santiago",
+    "defaultLocale": "es-CL",
+    "supportedLocales": ["es-CL", "es", "en"],
+    "enabledCategories": [
+      "tourism",
+      "accommodation",
+      "restaurant",
+      "events",
+      "services",
+      "marine"
+    ],
+    "enabledModules": [
+      "reservations",
+      "availability",
+      "notifications"
+    ]
+  }
+}

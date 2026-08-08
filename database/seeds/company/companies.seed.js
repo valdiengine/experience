@@ -10,7 +10,7 @@
 export const COMPANIES_SEED = [
   {
     tenantSlug: 'valdi-platform',
-    destinationSlug: 'valdivia',
+    destinationSlug: 'valdi',
     name: 'Albasie',
     slug: 'albasie',
     type: 'business',
@@ -39,7 +39,7 @@ export const COMPANIES_SEED = [
   },
   {
     tenantSlug: 'valdi-platform',
-    destinationSlug: 'valdivia',
+    destinationSlug: 'valdi',
     name: 'Secnet',
     slug: 'secnet',
     type: 'business',
@@ -68,7 +68,7 @@ export const COMPANIES_SEED = [
   },
   {
     tenantSlug: 'valdi-platform',
-    destinationSlug: 'valdivia',
+    destinationSlug: 'valdi',
     name: 'ESR Motos',
     slug: 'esr-motos',
     type: 'business',
@@ -97,7 +97,7 @@ export const COMPANIES_SEED = [
   },
   {
     tenantSlug: 'valdi-platform',
-    destinationSlug: 'valdivia',
+    destinationSlug: 'valdi',
     name: 'Hospedaje Demo',
     slug: 'hospedaje-demo',
     type: 'business',

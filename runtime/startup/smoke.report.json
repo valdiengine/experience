@@ -1,30 +1,31 @@
 {
   "phase": "P13.5.6 — End-to-End Runtime Smoke Test",
-  "startedAt": "1970-01-01T00:00:00.406Z",
-  "finishedAt": "1970-01-01T00:00:00.433Z",
+  "startedAt": "1970-01-01T00:00:00.538Z",
+  "finishedAt": "1970-01-01T00:00:00.634Z",
   "summary": {
     "passed": 79,
     "failed": 0,
     "total": 79,
     "score": 100,
-    "startupDurationMs": 27,
+    "startupDurationMs": 96,
     "shutdownDurationMs": 1,
     "bootstrapStepDurations": {
       "loadConfiguration": 1,
-      "buildRuntime": 1,
-      "registerProviders": 0,
+      "buildRuntime": 0,
+      "registerProviders": 36,
       "initializeRepositories": 0,
-      "initializeCapabilities": 1,
+      "initializeCapabilities": 0,
       "initializeCMS": 0,
       "initializeAuthentication": 0,
-      "initializeRuntime": 7,
+      "initializeExperience": 0,
+      "initializeRuntime": 42,
       "healthCheck": 4
     },
     "startupStages": [
       {
         "from": "started",
         "to": "runtime_ready",
-        "ms": 16
+        "ms": 87
       },
       {
         "from": "runtime_ready",
@@ -34,7 +35,7 @@
       {
         "from": "repositories_ready",
         "to": "capabilities_ready",
-        "ms": 8
+        "ms": 6
       },
       {
         "from": "capabilities_ready",
@@ -44,12 +45,12 @@
       {
         "from": "contexts_ready",
         "to": "health_ready",
-        "ms": 0
+        "ms": 1
       },
       {
         "from": "health_ready",
         "to": "completed",
-        "ms": 1
+        "ms": 0
       }
     ],
     "health": {

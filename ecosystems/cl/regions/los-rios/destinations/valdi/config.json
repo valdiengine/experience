@@ -1,0 +1,110 @@
+{
+  "destination": {
+    "slug": "valdi",
+    "name": "Valdi",
+    "description": "Plataforma de gestión turística",
+    "type": "tourism-platform",
+    "geography": {
+      "country": "cl",
+      "region": "los-rios",
+      "coordinates": [-41.7545, -73.1269]
+    },
+    "domains": {
+      "primary": "valdi.app",
+      "www": "www.valdi.app",
+      "subdomains": {
+        "api": "api.valdi.app",
+        "admin": "admin.valdi.app"
+      }
+    },
+    "branding": {
+      "logo": "/assets/ecosystems/cl/los-rios/valdi/logo.svg",
+      "favicon": "/assets/ecosystems/cl/los-rios/valdi/favicon.svg",
+      "colors": {
+        "primary": "#c8a55c",
+        "secondary": "#1a1a2e",
+        "accent": "#e8d5a3"
+      },
+      "fonts": {
+        "display": "Inter",
+        "body": "Inter"
+      }
+    },
+    "i18n": {
+      "defaultLocale": "es-CL",
+      "supportedLocales": ["es-CL", "es", "en"],
+      "fallbackLocale": "es"
+    },
+    "maps": {
+      "provider": "mapbox",
+      "defaultCenter": [-41.7545, -73.1269],
+      "defaultZoom": 12,
+      "style": "mapbox://styles/mapbox/outdoors-v12"
+    },
+    "seo": {
+      "defaultTitle": "Valdi — {destination}",
+      "defaultDescription": "Plataforma de gestión turística para destinos",
+      "ogImage": "/assets/ecosystems/cl/los-rios/valdi/og-image.jpg",
+      "socialCards": {}
+    },
+    "analytics": {
+      "enabled": true,
+      "providers": ["google-analytics"]
+    },
+    "enabledCategories": [
+      "tourism",
+      "accommodation",
+      "restaurant",
+      "events",
+      "services"
+    ],
+    "enabledModules": [
+      "reservations",
+      "availability",
+      "notifications",
+      "gallery",
+      "media",
+      "maps",
+      "analytics",
+      "pwa"
+    ],
+    "navigation": {
+      "header": {
+        "items": [
+          { "label": "Inicio", "path": "/" },
+          { "label": "Explorar", "path": "/explore" },
+          { "label": "Reservar", "path": "/booking" },
+          { "label": "Nosotros", "path": "/about" },
+          { "label": "Contacto", "path": "/contact" }
+        ]
+      },
+      "footer": {
+        "columns": [
+          {
+            "title": "Explorar",
+            "items": [
+              { "label": "Destinos", "path": "/destinations" },
+              { "label": "Servicios", "path": "/services" },
+              { "label": "Experiencias", "path": "/experiences" }
+            ]
+          },
+          {
+            "title": "Empresa",
+            "items": [
+              { "label": "Nosotros", "path": "/about" },
+              { "label": "Contacto", "path": "/contact" },
+              { "label": "Blog", "path": "/blog" }
+            ]
+          },
+          {
+            "title": "Legal",
+            "items": [
+              { "label": "Términos", "path": "/terms" },
+              { "label": "Privacidad", "path": "/privacy" }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

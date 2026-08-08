@@ -1,0 +1,64 @@
+{
+  "routing": {
+    "strategies": [
+      {
+        "name": "subdomain",
+        "priority": 1,
+        "description": "Resolve by subdomain (company.destination.tld)"
+      },
+      {
+        "name": "hostname",
+        "priority": 2,
+        "description": "Resolve by hostname (destination.tld)"
+      },
+      {
+        "name": "path",
+        "priority": 3,
+        "description": "Resolve by URL path (/cc/region/dest/company)"
+      },
+      {
+        "name": "query",
+        "priority": 4,
+        "description": "Resolve by query parameter (?ecosystem=cc-region-dest)"
+      },
+      {
+        "name": "header",
+        "priority": 5,
+        "description": "Resolve by HTTP header (X-Ecosystem)"
+      }
+    ],
+    "defaults": {
+      "platform": "valdi",
+      "country": "cl",
+      "region": "los-rios",
+      "destination": "valdi"
+    }
+  },
+  "domains": {
+    "valdi.app": {
+      "country": "cl",
+      "region": "los-rios",
+      "destination": "valdi"
+    },
+    "natales.app": {
+      "country": "cl",
+      "region": "magallanes",
+      "destination": "natales"
+    },
+    "puntaarenas.app": {
+      "country": "cl",
+      "region": "magallanes",
+      "destination": "puntaarenas"
+    },
+    "chiloe.app": {
+      "country": "cl",
+      "region": "los-lagos",
+      "destination": "chiloe"
+    },
+    "coyhaique.app": {
+      "country": "cl",
+      "region": "aysen",
+      "destination": "coyhaique"
+    }
+  }
+}

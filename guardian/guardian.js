@@ -18,6 +18,7 @@ import { AIGuardian } from './ai.guardian.js';
 import { DatabaseGuardian } from './database.guardian.js';
 import { StorageGuardian } from './storage.guardian.js';
 import { MediaGuardian } from './media.guardian.js';
+import { ExperienceEngineGuardian } from './experience.guardian.js';
 import { ReportGenerator } from './report.generator.js';
 import fs from 'fs';
 import path from 'path';
@@ -51,6 +52,7 @@ export class GuardianOrchestrator {
       database: null,
       storage: null,
       media: null,
+      experience: null,
       violations: [],
       warnings: [],
       score: 0,
@@ -68,7 +70,8 @@ export class GuardianOrchestrator {
       ai: new AIGuardian(),
       database: new DatabaseGuardian(),
       storage: new StorageGuardian(),
-      media: new MediaGuardian()
+      media: new MediaGuardian(),
+      experience: new ExperienceEngineGuardian()
     };
   }
 
@@ -125,6 +128,9 @@ export class GuardianOrchestrator {
 
     console.log('[GUARDIAN] Running Storage Guardian...');
     this.results.storage = await this.guardians.storage.run();
+
+    console.log('[GUARDIAN] Running Experience Engine Guardian...');
+    this.results.experience = await this.guardians.experience.validateExperienceEngine();
 
     // Calculate score
     this.calculateScore();

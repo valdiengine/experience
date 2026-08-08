@@ -1,0 +1,51 @@
+{
+  "company": {
+    "id": "albasie",
+    "slug": "albasie",
+    "name": "Albasie",
+    "type": "tourism-operator",
+    "destination": "valdi",
+    "description": "Operador turístico especializado en experiencias patrimoniales",
+    "branding": {
+      "logo": "/assets/companies/cl/los-rios/valdi/albasie/logo.svg",
+      "colors": {
+        "primary": "#2d5a27",
+        "secondary": "#1a1a2e"
+      },
+      "overrides": {
+        "applyDestinationBranding": true,
+        "except": ["logo", "primaryColor"]
+      }
+    },
+    "contact": {
+      "email": "info@albasie.cl",
+      "phone": "+56 9 1234 5678",
+      "whatsapp": "+56912345678",
+      "address": {
+        "street": "Calle Principal 123",
+        "city": "Puerto Varas",
+        "region": "Los Ríos",
+        "country": "CL"
+      }
+    },
+    "social": {
+      "instagram": "https://instagram.com/albasie",
+      "facebook": "https://facebook.com/albasie",
+      "tripadvisor": "https://tripadvisor.com/albasie"
+    },
+    "enabledCategories": ["tourism", "events"],
+    "enabledModules": ["reservations", "availability", "notifications"],
+    "team": [
+      {
+        "id": "usr-001",
+        "name": "Juan Pérez",
+        "role": "Guía Turístico",
+        "avatar": "/assets/companies/cl/los-rios/valdi/albasie/team/juan.jpg"
+      }
+    ],
+    "catalog": {
+      "products": "/assets/companies/cl/los-rios/valdi/albasie/catalog/products.json",
+      "services": "/assets/companies/cl/los-rios/valdi/albasie/catalog/services.json"
+    }
+  }
+}

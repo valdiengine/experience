@@ -12,7 +12,7 @@ export const DESTINATIONS_SEED = [
     regionCode: 'LR',
     code: 'VAL',
     name: 'Valdivia',
-    slug: 'valdivia',
+    slug: 'valdi',
     type: 'tourism',
     description: 'Ciudad universitaria, cultural y tecnológica del sur de Chile. Conocida por sus industrias, gastronomía y cercanía a los bosques valdivianos.',
     coordinates: { lat: -39.8199, lng: -73.2454 },
