@@ -65,8 +65,8 @@ export class ConfigurationLoader {
       await this.loadCountryConfigs()
       await this.loadRegionConfigs()
       await this.loadDestinationConfigs()
-      await this.loadCompanyConfigs()
     }
+    await this.loadCompanyConfigs()
   }
 
   async loadConfigurationsFromSource() {
@@ -259,10 +259,41 @@ export class ConfigurationLoader {
           header: {
             items: [
               { label: 'Inicio', path: '/' },
-              { label: 'Servicios', path: '/servicios' },
-              { label: 'Portfolio', path: '/portfolio' },
+              { label: 'Explorar', path: '/explorar' },
+              { label: 'Empresas', path: '/empresas' },
               { label: 'Nosotros', path: '/nosotros' },
               { label: 'Contacto', path: '/contacto' }
+            ]
+          },
+          footer: {
+            columns: [
+              {
+                id: 'explorar',
+                title: 'Explorar',
+                items: [
+                  { label: 'Destinos', path: '/explorar' },
+                  { label: 'Empresas', path: '/empresas' },
+                  { label: 'Experiencias', path: '/experiencias' }
+                ]
+              },
+              {
+                id: 'nosotros',
+                title: 'Nosotros',
+                items: [
+                  { label: 'Historia', path: '/nosotros' },
+                  { label: 'Equipo', path: '/nosotros/equipo' },
+                  { label: 'Contacto', path: '/contacto' }
+                ]
+              },
+              {
+                id: 'legal',
+                title: 'Legal',
+                items: [
+                  { label: 'Privacidad', path: '/privacidad' },
+                  { label: 'Términos', path: '/terminos' },
+                  { label: 'Cookies', path: '/cookies' }
+                ]
+              }
             ]
           }
         },
@@ -361,21 +392,172 @@ export class ConfigurationLoader {
       'cl-los-rios-valdi-albasie': {
         slug: 'albasie',
         name: 'Albasie',
-        type: 'tourism-operator',
+        type: 'boat',
         destination: 'valdi',
+        description: 'Fabricación de embarcaciones semirígidas de fiberglass de alta calidad en el sur de Chile',
         branding: {
           colors: {
-            primary: '#2d5a27'
+            primary: '#1a3a5c',
+            secondary: '#0d2137',
+            accent: '#3d7b9e'
+          },
+          fonts: {
+            display: 'Montserrat',
+            body: 'Open Sans'
+          }
+        },
+        navigation: {
+          header: {
+            items: [
+              { label: 'Inicio', path: '/#inicio' },
+              { label: 'Modelos', path: '/#modelos' },
+              { label: 'Cotizar', path: '/#cotizar' },
+              { label: 'Contacto', path: '/#contacto' }
+            ]
+          },
+          footer: {
+            columns: [
+              {
+                id: 'navegacion',
+                title: 'Navegación',
+                items: [
+                  { label: 'Inicio', path: '/#inicio' },
+                  { label: 'Modelos', path: '/#modelos' },
+                  { label: 'Cotizar', path: '/#cotizar' },
+                  { label: 'Contacto', path: '/#contacto' }
+                ]
+              },
+              {
+                id: 'legal',
+                title: 'Legal',
+                items: [
+                  { label: 'Privacidad', path: '/privacidad' },
+                  { label: 'Términos', path: '/terminos' }
+                ]
+              }
+            ]
+          }
+        },
+        hero: {
+          title: 'Albasie',
+          subtitle: 'Embarcaciones de Fiberglass',
+          description: 'Fabricación de embarcaciones semirígidas de alta calidad para pesca, turismo y trabajo. Engineeringhaus Chile.',
+          cta: {
+            primary: {
+              label: 'Cotiza tu Embarcación',
+              action: 'scroll',
+              target: '#cotizar'
+            },
+            secondary: {
+              label: 'Ver Modelos',
+              action: 'scroll',
+              target: '#modelos'
+            }
           }
         },
         contact: {
           email: 'info@albasie.cl',
-          phone: '+56 9 1234 5678'
+          phone: '+56 9 XXXX XXXX',
+          whatsapp: '+569XXXXXXXX',
+          address: {
+            city: 'Valdivia',
+            region: 'Los Ríos',
+            country: 'CL'
+          }
         },
         social: {
           instagram: 'https://instagram.com/albasie'
         },
-        enabledModules: ['reservations', 'availability', 'notifications']
+        experience: {
+          type: 'boat'
+        },
+        capabilities: {
+          hero: { enabled: true },
+          gallery: { enabled: true },
+          quote: {
+            enabled: true,
+            configuration: {
+              title: 'Cotización de Embarcaciones Albasie',
+              description: 'Solicite una cotización personalizada para nuestras embarcaciones. Complete el formulario y nos contactaremos con usted.',
+              currency: 'CLP',
+              options: [
+                {
+                  id: 'albasie-835',
+                  label: 'Albasie 8.35',
+                  description: 'Embarcación semirígida 8.35m - ideal para pesca y turismo',
+                  price: 8500000,
+                  category: 'boat'
+                },
+                {
+                  id: 'albasie-970',
+                  label: 'Albasie 9.70',
+                  description: 'Embarcación semirígida 9.70m - mayor capacidad y confort',
+                  price: 12500000,
+                  category: 'boat'
+                },
+                {
+                  id: 'engine-150',
+                  label: 'Motor 150HP',
+                  description: 'Motor fueraborda 150HP - rendimiento óptimo',
+                  price: 2800000,
+                  category: 'engine'
+                },
+                {
+                  id: 'engine-250',
+                  label: 'Motor 250HP',
+                  description: 'Motor fueraborda 250HP - máxima potencia',
+                  price: 4500000,
+                  category: 'engine'
+                },
+                {
+                  id: 'trailer',
+                  label: 'Trailer',
+                  description: 'Trailer para transporte terrestre',
+                  price: 1500000,
+                  category: 'accessory'
+                }
+              ],
+              customerFields: [
+                { id: 'name', type: 'text', label: 'Nombre completo', required: true },
+                { id: 'email', type: 'email', label: 'Correo electrónico', required: true },
+                { id: 'phone', type: 'phone', label: 'Teléfono', required: false },
+                { id: 'message', type: 'textarea', label: 'Mensaje o comentarios', required: false }
+              ],
+              taxConfiguration: {
+                enabled: true,
+                rate: 0.19
+              }
+            }
+          },
+          contact: { enabled: true },
+          installableApp: {
+            enabled: true,
+            name: 'Albasie',
+            shortName: 'Albasie',
+            startUrl: '/albasie/',
+            scope: '/albasie/',
+            display: 'standalone',
+            backgroundColor: '#ffffff',
+            themeColor: '#1a3a5c',
+            icons: [
+              {
+                src: '/assets/icons/albasie-icon-192.png',
+                sizes: '192x192',
+                type: 'image/png'
+              },
+              {
+                src: '/assets/icons/albasie-icon-512.png',
+                sizes: '512x512',
+                type: 'image/png'
+              }
+            ]
+          }
+        },
+        enabledModules: ['gallery', 'notifications'],
+        seo: {
+          title: 'Albasie - Embarcaciones de Fiberglass en Chile',
+          description: 'Fabricación de embarcaciones semirígidas de fiberglass de alta calidad en Chile. Cotiza tu embarcación hoy.'
+        }
       }
     }
 
@@ -507,6 +689,38 @@ export class ConfigurationLoader {
       destinationsLoaded: this.#destinationConfigs.size,
       companiesLoaded: this.#companyConfigs.size
     }
+  }
+
+  getCompanyConfig(countryCode, regionCode, destinationCode, companySlug) {
+    if (!countryCode || !regionCode || !destinationCode || !companySlug) {
+      return null
+    }
+    const key = `${countryCode}-${regionCode}-${destinationCode}-${companySlug}`
+    return this.#companyConfigs.get(key) || null
+  }
+
+  getDestinationRegion(countryCode, destinationCode) {
+    if (!countryCode || !destinationCode) {
+      return null
+    }
+    for (const [key, destConfig] of this.#destinationConfigs) {
+      if (destConfig.slug === destinationCode && destConfig.country === countryCode) {
+        return destConfig.region || null
+      }
+    }
+    return null
+  }
+
+  getDestinationConfig(countryCode, destinationCode) {
+    if (!countryCode || !destinationCode) {
+      return null
+    }
+    for (const [key, destConfig] of this.#destinationConfigs) {
+      if (destConfig.slug === destinationCode && destConfig.country === countryCode) {
+        return destConfig || null
+      }
+    }
+    return null
   }
 
   async stop() {

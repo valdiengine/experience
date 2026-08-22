@@ -6,6 +6,11 @@
   "description": "Dronestica ecosystem platform — ESM runtime entry",
   "scripts": {
     "start": "node runtime/startup/application.start.js",
-    "smoke": "node runtime/startup/smoke.test.js"
+    "smoke": "node runtime/startup/smoke.test.js",
+    "dev": "node web/start.web.js"
+  },
+  "dependencies": {
+    "pg": "^8.13.1",
+    "web-push": "^3.6.7"
   }
 }
