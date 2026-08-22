@@ -87,9 +87,14 @@ const campaignService = createPushCampaignService({
 })
 
 function sendJson(res, statusCode, data) {
-  res.statusCode = statusCode
+  const safeStatus = isValidHttpStatus(statusCode) ? statusCode : 500
+  res.statusCode = safeStatus
   res.setHeader('Content-Type', 'application/json')
   res.end(JSON.stringify(data))
+}
+
+function isValidHttpStatus(code) {
+  return typeof code === 'number' && Number.isInteger(code) && code >= 100 && code <= 599
 }
 
 function getSessionId(req) {
@@ -124,10 +129,19 @@ export function createOwnerAPIHandler() {
           return
         }
 
-        const result = authenticateOwner(email, password)
+        const result = await authenticateOwner(email, password)
 
         if (!result.success) {
-          sendJson(res, 401, { error: 'Unauthorized', message: result.error })
+          const errorCode = result.error
+          if (errorCode === 'INFRASTRUCTURE_UNAVAILABLE') {
+            sendJson(res, 503, { error: 'Service Unavailable', message: 'Infrastructure temporarily unavailable' })
+          } else if (errorCode === 'NO_ACTIVE_GRANT') {
+            sendJson(res, 403, { error: 'Forbidden', message: result.error })
+          } else if (errorCode === 'AMBIGUOUS_APPLICATION') {
+            sendJson(res, 409, { error: 'Conflict', message: 'Multiple applications available for this user. Application selection required.' })
+          } else {
+            sendJson(res, 401, { error: 'Unauthorized', message: result.error })
+          }
           return
         }
 

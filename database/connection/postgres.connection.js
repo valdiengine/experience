@@ -32,14 +32,9 @@ export function createPool() {
     user: config.user,
     password: config.password,
     ssl: sslConfig,
-    min: poolConfig.min,
     max: poolConfig.max,
-    acquireTimeout: poolConfig.acquireTimeout,
-    idleTimeout: poolConfig.idleTimeout,
-    connectionTimeout: 5000,
-    statements: {
-      max: 1000,
-    },
+    idleTimeoutMillis: poolConfig.idleTimeoutMillis,
+    connectionTimeoutMillis: poolConfig.connectionTimeoutMillis,
   })
 
   pool.on('error', (err) => {

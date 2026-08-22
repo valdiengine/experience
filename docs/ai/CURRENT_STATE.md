@@ -1,7 +1,7 @@
 # CURRENT_STATE.md
 
 > Exact snapshot of project state. Update after each completed phase.
-> Last updated: **PLATFORM v4.2 — INFRASTRUCTURE COMPLETE** (2026-08-07)
+> Last updated: **PLATFORM v4.3 — OWNER-SESSION-1 COMPLETE** (2026-08-22)
 
 ## Platform Status
 
@@ -139,6 +139,8 @@
 | 100 | P14.1 | API Layer Integration | Integration |
 | 101 | P14.1.5 | API Layer Integration Validation | Validation |
 | 102 | P14.1.6 | Integration Validation Corrections | Corrections |
+| 103 | OWNER-SESSION-0 | Infrastructure Discovery / Persistence & Security Contract | Owner |
+| 104 | OWNER-SESSION-1 | Persistent Owner Identity + Persistent Application Grants | Owner |
 
 ## Registered Capabilities (32)
 
@@ -832,3 +834,60 @@ HTTP Request → ApiServer → Middleware → Router → BusinessController.list
 ## Next
 
 See `docs/ai/NEXT_PHASE.md` for pending work.
+
+---
+
+## OWNER-SESSION-1 — Persistent Owner Identity + Persistent Application Grants
+
+### What Changed
+
+1. Replaced in-memory owner authentication with persistent PostgreSQL identity
+2. Owner credentials stored as scrypt hash (N=32768, r=8, p=1) in `public.users` table
+3. Application grants stored in `owner_application_grants` table with permissions array
+4. Session tokens remain in-memory (Map-based) — OWNER-SESSION-2 boundary
+5. Removed legacy startup provisioning: `#bootstrapStagingOwner` from web.server.js
+6. Removed `registerOwner`/`getOwnerCount` imports from web.server.js
+7. Added explicit staging provisioning via CLI: `owner-staging-migrate.js`, `owner-staging-bootstrap.js`, `owner-staging-update.js`
+8. HTTP status boundary hardened: 503 for INFRASTRUCTURE_UNAVAILABLE, 409 for AMBIGUOUS_APPLICATION, 403 for NO_ACTIVE_GRANT
+
+### Current Owner Architecture
+
+**Persistent (PostgreSQL):**
+- Owner identity (email, name, applicationId)
+- Password hash (scrypt N=32768, r=8, p=1)
+- Application grants (permissions array per owner/application pair)
+- Grant audit trail (created_at, revoked_at)
+
+**In-Memory (process-local):**
+- Authenticated Owner sessions (Map-based, 24h TTL)
+- Session validation and extension
+- Session invalidation on logout
+
+### Files Created
+
+| File | Purpose |
+|------|---------|
+| `web/owner/repositories/owner-identity.repository.js` | PostgreSQL repository for owner identity |
+| `web/owner/services/owner-identity.service.js` | Identity service (authenticate, hash, verify) |
+| `web/owner/services/owner-authorization.service.js` | Grant authorization service |
+| `web/owner/password/owner-password.module.js` | scrypt password hashing module |
+| `web/owner/bootstrap/owner-staging-migrate.js` | Migration CLI (runs 0006) |
+| `web/owner/bootstrap/owner-staging-bootstrap.js` | Bootstrap CLI (creates initial owner) |
+| `web/owner/bootstrap/owner-staging-update.js` | Update CLI (grant management) |
+| `database/migrations/0006_owner_identity_grants/index.js` | Schema migration |
+
+### Physical Staging Certification
+
+- PostgreSQL/Neon Owner login works
+- valdi.app/albasie grant verified
+- Mi Negocio and Contenido portal pages preserved
+- Legacy startup provisioning removed from runtime
+- STAGING_OWNER_* variables removed from runtime
+- HTTP status boundary hardening deployed and verified
+- 73/73 OWNER-SESSION-1 tests passing
+- 12/12 owner-stage-1-1-wiring tests passing
+- 20/20 owner-stage-2-e2e tests passing
+
+### Next
+
+OWNER-SESSION-2 — Persistent Sessions (multi-process/multi-worker session persistence)

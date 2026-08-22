@@ -1368,8 +1368,11 @@
 | P12.2.5 | Platform Architecture Review Gate | ✅ |
 | P13.0 | Accommodation Capability (MVP Foundation) | ✅ |
 | P13.1 | Business Capability (Aggregate Root Foundation) | ✅ |
+| OWNER-SESSION-0 | Infrastructure Discovery / Persistence & Security Contract | ✅ |
+| OWNER-SESSION-1 | Persistent Owner Identity + Persistent Application Grants | ✅ |
+| OWNER-SESSION-2 | Persistent Sessions / Multi-Process Session Contract | Planned |
 
-**Progreso:** 74/74 fases completadas (100%) ✅
+**Progreso:** 77/77 fases completadas (100%) ✅
 
 ---
 
@@ -1471,6 +1474,21 @@
 ### P13.6 — Payment Capability (Commercial Domain)
 - **Status:** Completed
 - **What it does:** Implements Payment Capability following the same architecture, conventions and quality standards as P13.0-P13.5. Pure commercial payment domain with complete lifecycle: creation, authorization, capture, settlement, refunds, disputes, and archival. Zero gateway knowledge (no Stripe, MercadoPago, Transbank). 14 files created in `capabilities/payment/`: capability, manager, service, workflow, validation, schema, events, errors, permissions, calculation, fees, refund, search, status, README. Architecture document: `docs/architecture/PAYMENT-CAPABILITY.md`. Registered in `capabilities/core/register.js`. All architecture rules enforced: PAY-001 through PAY-010.
+
+### OWNER-SESSION-0 — Infrastructure Discovery / Persistence & Security Contract
+- **Status:** Completed
+- **What it does:** Discovered baseline Owner portal implementation (in-memory authentication, no PostgreSQL). Defined target persistent architecture: PostgreSQL owner identity, password hash storage, application grants. Established security contract for Owner portal: persistent credentials, grant-based authorization, session isolation. All legacy startup provisioning (STAGING_OWNER_*, #bootstrapStagingOwner) identified for removal.
+
+### OWNER-SESSION-1 — Persistent Owner Identity + Persistent Application Grants
+- **Status:** Completed
+- **What it does:** Replaces in-memory owner authentication with persistent PostgreSQL identity. Owner credentials (scrypt hash), application grants, and session tokens stored in PostgreSQL via migration 0006. Staging provisioning/update CLIs (owner-staging-migrate.js, owner-staging-bootstrap.js, owner-staging-update.js) provide explicit lifecycle management. Auth cutover: `authenticateOwner` now resolves against PostgreSQL; legacy `#bootstrapStagingOwner` and `registerOwner`/`getOwnerCount` removed from web.server.js. HTTP status boundary hardened: 503 for INFRASTRUCTURE_UNAVAILABLE, 409 for AMBIGUOUS_APPLICATION, 403 for NO_ACTIVE_GRANT. Sessions remain in-memory/process-local (OWNER-SESSION-2 boundary). Physical staging certification: PostgreSQL/Neon Owner login works, valdi.app/albasie grant works, Mi Negocio and Contenido preserved.
+- **Files created:** owner-identity.repository.js, owner-identity.service.js, owner-authorization.service.js, owner-password.module.js (scrypt), 0006_owner_identity_grants migration, 3 bootstrap CLIs
+- **Files modified:** owner.api.js, owner.auth.js, owner.middleware.js, web.server.js, database.config.js, postgres.connection.js
+- **Next:** OWNER-SESSION-2 — Persistent Sessions (multi-process/multi-worker session persistence)
+
+### OWNER-SESSION-2 — Persistent Sessions / Multi-Process Session Contract
+- **Status:** Planned
+- **Scope:** Replace in-memory Map-based sessions with persistent session storage (Redis or PostgreSQL). Enable multi-process/multi-worker session sharing. Maintain session TTL, extension, and invalidation semantics.
 
 ### Archivos en Disco No Registrados
 - `capabilities/catalog/catalog.capability.js` â€” Placeholder (P1-3)

@@ -1,44 +1,54 @@
 /**
  * Owner Authentication & Session Management
  *
- * OWNER-1: Business Owner Portal Foundation
+ * OWNER-SESSION-1: Persistent Owner Identity with PostgreSQL
  *
- * Provides secure authentication for business owners:
- * - Password hashing with bcrypt
- * - Session management
- * - Secure session validation
+ * TEMPORARY COMPATIBILITY LAYER (until runtime cutover):
+ * - ownerStore: in-memory store for web.server.js bootstrap compatibility
+ * - registerOwner: in-memory registration for bootstrap
+ * - getOwnerCount: in-memory count for bootstrap idempotency check
+ * - createTestOwner: test fixture (uses in-memory store)
  *
- * Uses Node.js crypto for password hashing when bcrypt is unavailable.
+ * PERSISTENT AUTHENTICATION (uses PostgreSQL):
+ * - hashPassword / verifyPassword: scrypt module
+ * - authenticateOwner: authenticates against PostgreSQL, resolves grants
+ *
+ * IN-MEMORY SESSION MANAGEMENT (unchanged until OWNER-SESSION-2):
+ * - sessions Map
+ * - validateSession
+ * - invalidateSession
+ * - getSessionOwner
+ * - extendSession
+ * - cleanupExpiredSessions
+ * - getSessionCount
+ *
+ * FAIL-CLOSED: No in-memory fallback for PostgreSQL authentication.
+ * If PostgreSQL is unavailable, authentication fails with INFRASTRUCTURE_UNAVAILABLE.
  */
 
 import { createOwnerSession, generateSessionId, generateId, isValidEmail } from './owner.identity.js'
-import { createHash, randomBytes } from 'crypto'
+
+import * as identityService from './services/owner-identity.service.js'
+import { hashPassword as scryptHash, verifyPassword as scryptVerify } from './password/owner-password.module.js'
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000
 
+/**
+ * Temporary compatibility layer: in-memory owner store
+ * Used by web.server.js bootstrap until explicit PostgreSQL provisioning.
+ * NOT used by authenticateOwner.
+ */
 const sessions = new Map()
 const ownerStore = new Map()
 
-export function hashPassword(password) {
-  if (!password || typeof password !== 'string' || password.length < 8) {
-    throw new Error('Password must be at least 8 characters')
-  }
+// ============================================================
+// TEMPORARY COMPATIBILITY FUNCTIONS
+// ============================================================
 
-  const salt = randomBytes(16).toString('hex')
-  const hash = createHash('sha256').update(password + salt).digest('hex')
-  return `${salt}$${hash}`
-}
-
-export function verifyPassword(password, storedHash) {
-  if (!password || !storedHash) return false
-
-  const parts = storedHash.split('$')
-  if (parts.length !== 2) return false
-  const [salt, hash] = parts
-  const hashCheck = createHash('sha256').update(password + salt).digest('hex')
-  return hashCheck === hash
-}
-
+/**
+ * Temporary: In-memory owner registration for web.server.js bootstrap.
+ * NOT used for PostgreSQL authentication.
+ */
 export function registerOwner(ownerData) {
   const { email, password, name, applicationId } = ownerData
 
@@ -60,20 +70,19 @@ export function registerOwner(ownerData) {
   }
 
   const ownerId = 'owner_' + generateId()
-  const passwordHash = hashPassword(password)
 
   const owner = Object.freeze({
     id: ownerId,
     email: email.toLowerCase(),
     name: name || email.split('@')[0],
-    passwordHash,
+    passwordHash: hashPassword(password),
     applicationId,
     createdAt: new Date().toISOString()
   })
 
   ownerStore.set(email.toLowerCase(), owner)
 
-  console.log(`[OwnerAuth] Owner registered: ${email} for ${applicationId}`)
+  console.log(`[OwnerAuth] Owner registered (in-memory): ${email} for ${applicationId}`)
 
   return {
     id: ownerId,
@@ -83,32 +92,91 @@ export function registerOwner(ownerData) {
   }
 }
 
-export function authenticateOwner(email, password) {
+/**
+ * Temporary: In-memory owner count for web.server.js bootstrap idempotency.
+ */
+export function getOwnerCount() {
+  return ownerStore.size
+}
+
+/**
+ * Temporary: Test fixture using in-memory store.
+ */
+export function createTestOwner(applicationId = 'valdi.app/albasie') {
+  const testEmail = `test.owner.${Date.now()}@example.com`
+  return registerOwner({
+    email: testEmail,
+    password: 'TestPassword123!',
+    name: 'Test Owner',
+    applicationId
+  })
+}
+
+// ============================================================
+// PERSISTENT AUTHENTICATION
+// ============================================================
+
+export function hashPassword(password) {
+  return scryptHash(password)
+}
+
+export function verifyPassword(password, storedHash) {
+  return scryptVerify(password, storedHash)
+}
+
+/**
+ * Authenticate owner against PostgreSQL persistent identity.
+ *
+ * Flow:
+ * 1. Validate credentials against users table
+ * 2. Resolve ALL active, non-expired grants for that user
+ * 3. Handle grant states:
+ *    - 0 grants: NO_ACTIVE_GRANT (403)
+ *    - 1 grant: create session with grant's applicationId/role/permissions
+ *    - >1 grants: AMBIGUOUS_APPLICATION (403)
+ *
+ * No hardcoded applicationId. No in-memory fallback.
+ */
+export async function authenticateOwner(email, password) {
   if (!email || !password) {
     return { success: false, error: 'Email and password are required' }
   }
 
-  const owner = ownerStore.get(email.toLowerCase())
-  if (!owner) {
-    return { success: false, error: 'Invalid credentials' }
+  // Step 1: Authenticate against PostgreSQL
+  const authResult = await identityService.authenticateOwnerUser(email, password)
+
+  if (!authResult.success) {
+    return authResult
   }
 
-  const passwordValid = verifyPassword(password, owner.passwordHash)
-  if (!passwordValid) {
-    return { success: false, error: 'Invalid credentials' }
+  const user = authResult.user
+
+  // Step 2: Find ALL active, non-expired grants for this user
+  const grants = await identityService.getActiveGrantsForUser(user.id)
+
+  // Step 3: Handle grant states
+  if (grants.length === 0) {
+    return { success: false, error: 'NO_ACTIVE_GRANT' }
   }
+
+  if (grants.length > 1) {
+    return { success: false, error: 'AMBIGUOUS_APPLICATION' }
+  }
+
+  // Step 4: Exactly one valid grant - use it
+  const grant = grants[0]
 
   const sessionId = generateSessionId()
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
 
   const session = createOwnerSession({
     id: sessionId,
-    ownerId: owner.id,
-    ownerEmail: owner.email,
-    ownerName: owner.name,
-    applicationId: owner.applicationId,
-    role: 'business_owner',
-    permissions: [
+    ownerId: user.id,
+    ownerEmail: user.email,
+    ownerName: user.name,
+    applicationId: grant.application_id,
+    role: grant.role,
+    permissions: grant.permissions || [
       'application:read',
       'business:edit_info',
       'inbox:read',
@@ -122,7 +190,7 @@ export function authenticateOwner(email, password) {
 
   sessions.set(sessionId, session)
 
-  console.log(`[OwnerAuth] Session created for ${owner.email}, expires ${expiresAt}`)
+  console.log(`[OwnerAuth] Session created for ${user.email} on ${grant.application_id}, expires ${expiresAt}`)
 
   return {
     success: true,
@@ -138,6 +206,10 @@ export function authenticateOwner(email, password) {
     }
   }
 }
+
+// ============================================================
+// IN-MEMORY SESSION MANAGEMENT (unchanged)
+// ============================================================
 
 export function validateSession(sessionId) {
   if (!sessionId || typeof sessionId !== 'string') {
@@ -204,22 +276,8 @@ export function cleanupExpiredSessions() {
   return cleaned
 }
 
-export function getOwnerCount() {
-  return ownerStore.size
-}
-
 export function getSessionCount() {
   return sessions.size
-}
-
-export function createTestOwner(applicationId = 'valdi.app/albasie') {
-  const testEmail = `test.owner.${Date.now()}@example.com`
-  return registerOwner({
-    email: testEmail,
-    password: 'TestPassword123!',
-    name: 'Test Owner',
-    applicationId
-  })
 }
 
 export function forTesting_onlyClearAllData() {
@@ -231,14 +289,14 @@ export default {
   hashPassword,
   verifyPassword,
   registerOwner,
+  getOwnerCount,
+  createTestOwner,
   authenticateOwner,
   validateSession,
   invalidateSession,
   getSessionOwner,
   extendSession,
   cleanupExpiredSessions,
-  getOwnerCount,
   getSessionCount,
-  createTestOwner,
   forTesting_onlyClearAllData
 }

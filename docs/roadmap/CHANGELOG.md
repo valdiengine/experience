@@ -4,6 +4,62 @@
 
 ---
 
+## v4.3 — OWNER-SESSION-1 Complete (2026-08-22)
+
+### Platform Release 4.3 — PERSISTENT OWNER IDENTITY
+
+**Status:** OWNER-SESSION-1 COMPLETE
+
+- **Next:** OWNER-SESSION-2 — Persistent Sessions
+
+#### Key Deliverables
+
+- PostgreSQL Owner Identity: owner identity, password hash (scrypt), application grants
+- Migration 0006: `public.users` + `owner_application_grants` schema
+- Staging Provisioning CLI: migrate, bootstrap, update lifecycle
+- Auth Cutover: `authenticateOwner` resolves against PostgreSQL
+- Runtime Auth Cutover: removed `#bootstrapStagingOwner`, `registerOwner`, `getOwnerCount` from web.server.js
+- HTTP Boundary Hardening: 503 INFRASTRUCTURE_UNAVAILABLE, 409 AMBIGUOUS_APPLICATION, 403 NO_ACTIVE_GRANT
+- Sessions remain in-memory (OWNER-SESSION-2 boundary)
+
+#### Physical Staging Certification
+
+- PostgreSQL/Neon Owner login works
+- valdi.app/albasie grant works
+- Mi Negocio and Contenido preserved
+- Legacy startup provisioning removed
+- STAGING_OWNER_* removed from runtime
+- HTTP status boundary deployed and verified
+
+#### Files Created
+
+- `web/owner/repositories/owner-identity.repository.js` — PostgreSQL repository
+- `web/owner/services/owner-identity.service.js` — Identity service
+- `web/owner/services/owner-authorization.service.js` — Grant authorization service
+- `web/owner/password/owner-password.module.js` — scrypt module
+- `web/owner/bootstrap/owner-staging-migrate.js` — Migration CLI
+- `web/owner/bootstrap/owner-staging-bootstrap.js` — Bootstrap CLI
+- `web/owner/bootstrap/owner-staging-update.js` — Update CLI
+- `database/migrations/0006_owner_identity_grants/index.js` — Schema migration
+- `docs/owner/OWNER_SESSION_1_FINAL_REPORT.md` — Certification report
+
+#### Files Modified
+
+- `web/owner/owner.api.js` — await authenticateOwner, HTTP status mapping
+- `web/owner/owner.auth.js` — PostgreSQL authentication, scrypt password verification
+- `web/owner/owner.middleware.js` — INFRASTRUCTURE_UNAVAILABLE → 503
+- `web/web.server.js` — removed bootstrapStagingOwner, registerOwner, getOwnerCount
+- `database/config/database.config.js` — TURISTIC_ENV=staging support
+- `database/connection/postgres.connection.js` — pg.Pool options normalization
+
+#### Test Results
+
+- OWNER-SESSION-1 test suite: 73/73 PASS
+- owner-stage-1-1-wiring: 12/12 PASS
+- owner-stage-2-e2e: 20/20 PASS
+
+---
+
 ## v4.2 — Product Runtime (2026-08-07)
 
 ### Platform Release 4.2 — STORAGE INTEGRATION COMPLETE

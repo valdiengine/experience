@@ -18,10 +18,9 @@ const DEFAULTS = {
     password: process.env.POSTGRES_PASSWORD || 'postgres',
     ssl: false,
     pool: {
-      min: 2,
       max: 10,
-      acquireTimeout: 30000,
-      idleTimeout: 600000,
+      idleTimeoutMillis: 600000,
+      connectionTimeoutMillis: 30000,
     },
     logging: true,
     schema: 'public',
@@ -34,10 +33,9 @@ const DEFAULTS = {
     password: process.env.POSTGRES_PASSWORD || 'postgres',
     ssl: false,
     pool: {
-      min: 1,
       max: 5,
-      acquireTimeout: 10000,
-      idleTimeout: 30000,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
     },
     logging: false,
     schema: 'public',
@@ -50,11 +48,24 @@ const DEFAULTS = {
     password: process.env.POSTGRES_PASSWORD || '',
     ssl: { mode: 'require', rejectUnauthorized: false },
     pool: {
-      min: 10,
       max: 50,
-      acquireTimeout: 30000,
-      idleTimeout: 300000,
-      maxQueue: 100,
+      idleTimeoutMillis: 300000,
+      connectionTimeoutMillis: 30000,
+    },
+    logging: false,
+    schema: 'public',
+  },
+  staging: {
+    host: process.env.POSTGRES_HOST,
+    port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
+    database: process.env.POSTGRES_DB,
+    user: process.env.POSTGRES_USER,
+    password: process.env.POSTGRES_PASSWORD,
+    ssl: { rejectUnauthorized: true },
+    pool: {
+      max: 2,
+      idleTimeoutMillis: 60000,
+      connectionTimeoutMillis: 10000,
     },
     logging: false,
     schema: 'public',
@@ -78,8 +89,12 @@ const ENV_MAPPINGS = {
 
 /**
  * Get current environment
+ * TURISTIC_ENV takes precedence for environment-specific config
  */
 export function getEnvironment() {
+  if (process.env.TURISTIC_ENV === 'staging') {
+    return 'staging'
+  }
   return process.env.NODE_ENV || 'development'
 }
 
@@ -112,11 +127,9 @@ export function getPoolConfig() {
   const poolSize = parseInt(process.env.DATABASE_POOL_SIZE || '10', 10)
 
   return {
-    min: config.pool.min,
     max: Math.min(config.pool.max, poolSize),
-    acquireTimeout: config.pool.acquireTimeout,
-    idleTimeout: config.pool.idleTimeout,
-    maxQueue: config.pool.maxQueue || 100,
+    idleTimeoutMillis: config.pool.idleTimeoutMillis,
+    connectionTimeoutMillis: config.pool.connectionTimeoutMillis,
   }
 }
 
@@ -127,12 +140,12 @@ export function getSslConfig() {
   const config = getDatabaseConfig()
   const sslEnv = process.env.DATABASE_SSL
 
-  if (sslEnv === 'true' || sslEnv === '1') {
-    return { mode: 'require', rejectUnauthorized: false }
-  }
-
   if (sslEnv === 'verify') {
     return { mode: 'require', rejectUnauthorized: true }
+  }
+
+  if (sslEnv === 'true' || sslEnv === '1') {
+    throw new Error('DATABASE_SSL=true is not supported. Use DATABASE_SSL=verify or omit.')
   }
 
   return config.ssl || false
@@ -169,20 +182,39 @@ export function validateConfig() {
   const env = getEnvironment()
   const errors = []
 
-  if (!config.host && env === 'production') {
-    errors.push('POSTGRES_HOST is required in production')
-  }
-
-  if (!config.database) {
-    errors.push('POSTGRES_DB is required')
-  }
-
-  if (!config.user) {
-    errors.push('POSTGRES_USER is required')
-  }
-
-  if (env === 'production' && !config.password) {
-    errors.push('POSTGRES_PASSWORD is required in production')
+  if (env === 'staging') {
+    if (!config.host) {
+      errors.push('POSTGRES_HOST is required in staging')
+    }
+    if (!config.database) {
+      errors.push('POSTGRES_DB is required in staging')
+    }
+    if (!config.user) {
+      errors.push('POSTGRES_USER is required in staging')
+    }
+    if (!config.password) {
+      errors.push('POSTGRES_PASSWORD is required in staging')
+    }
+  } else if (env === 'production') {
+    if (!config.host) {
+      errors.push('POSTGRES_HOST is required in production')
+    }
+    if (!config.database) {
+      errors.push('POSTGRES_DB is required')
+    }
+    if (!config.user) {
+      errors.push('POSTGRES_USER is required')
+    }
+    if (!config.password) {
+      errors.push('POSTGRES_PASSWORD is required in production')
+    }
+  } else {
+    if (!config.database) {
+      errors.push('POSTGRES_DB is required')
+    }
+    if (!config.user) {
+      errors.push('POSTGRES_USER is required')
+    }
   }
 
   return {

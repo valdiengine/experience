@@ -28,7 +28,6 @@ import { createNotificationService, createInMemoryNotificationPersistence } from
 import { EmailNotificationAdapter, SMTPEmailProvider, MockEmailProvider } from './business/notification/adapters/email/index.js'
 import { WhatsAppNotificationAdapter, MockWhatsAppProvider, MetaGraphWhatsAppProvider, TwilioWhatsAppProvider } from './business/notification/adapters/whatsapp/index.js'
 import { createOwnerAPIHandler, createOwnerRouter } from './owner/owner.api.js'
-import { registerOwner, getOwnerCount } from './owner/owner.auth.js'
 
 function generateUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -163,40 +162,6 @@ export class PublicWebServer {
     return createOwnerRouter(ownerHandler)
   }
 
-  #bootstrapStagingOwner() {
-    const env = process.env.TURISTIC_ENV || process.env.NODE_ENV || 'development'
-    if (env !== 'staging') {
-      return
-    }
-
-    const email = process.env.STAGING_OWNER_EMAIL
-    const password = process.env.STAGING_OWNER_PASSWORD
-    const name = process.env.STAGING_OWNER_NAME
-    const applicationId = process.env.STAGING_OWNER_APPLICATION_ID || 'valdi.app/albasie'
-
-    if (!email || !password) {
-      console.log('[OwnerBootstrap] STAGING_OWNER_EMAIL and STAGING_OWNER_PASSWORD not set - skipping owner bootstrap')
-      return
-    }
-
-    if (getOwnerCount() > 0) {
-      console.log('[OwnerBootstrap] Owner accounts already exist - skipping bootstrap (idempotent)')
-      return
-    }
-
-    try {
-      const result = registerOwner({
-        email,
-        password,
-        name: name || email.split('@')[0],
-        applicationId
-      })
-      console.log(`[OwnerBootstrap] Staging owner bootstrapped for ${applicationId}`)
-    } catch (error) {
-      console.error('[OwnerBootstrap] Failed to bootstrap staging owner:', error.message)
-    }
-  }
-
   #resolveNotificationContext(request, notificationConfig) {
     const context = {}
     const eventConfig = notificationConfig?.events?.business_interaction_created
@@ -260,8 +225,6 @@ export class PublicWebServer {
     })
 
     this.#initializeContentProvider()
-
-    this.#bootstrapStagingOwner()
 
     this.#middleware = [
       createStaticMiddleware({

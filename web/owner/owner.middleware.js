@@ -3,6 +3,17 @@
  *
  * Provides secure authentication and authorization middleware
  * for the Owner Portal.
+ *
+ * Authentication validates session (in-memory).
+ * Authorization resolves current persistent grant from PostgreSQL.
+ *
+ * CORE INVARIANTS:
+ * - Session proves identity (authentication)
+ * - Persistent grant proves authorization
+ * - Authentication and authorization are SEPARATE
+ *
+ * req.isOwnerAuthenticated = true only when session is valid
+ * req.authorizationError captures grant resolution failures
  */
 
 import {
@@ -17,6 +28,8 @@ import {
   hasPermission
 } from './owner.identity.js'
 
+import * as authorizationService from './services/owner-authorization.service.js'
+
 export function createOwnerAuthMiddleware() {
   return async function ownerAuthMiddleware(req, res, next) {
     const authHeader = req.headers.authorization
@@ -26,18 +39,45 @@ export function createOwnerAuthMiddleware() {
       const session = validateSession(sessionId)
 
       if (session) {
-        req.owner = getSessionOwner(sessionId)
+        const owner = getSessionOwner(sessionId)
+
+        req.owner = owner
         req.ownerSession = session
         req.isOwnerAuthenticated = true
+        req.authorizationError = null
+
+        try {
+          const authResult = await authorizationService.authorizeRequest({
+            userId: owner.id,
+            applicationId: owner.applicationId
+          })
+
+          if (authResult.authorized) {
+            req.owner.grant = authResult.grant
+            req.authorizationError = null
+          } else {
+            req.owner.grant = null
+            req.authorizationError = authResult.error
+          }
+        } catch (error) {
+          if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+            req.owner.grant = null
+            req.authorizationError = 'INFRASTRUCTURE_UNAVAILABLE'
+          } else {
+            throw error
+          }
+        }
       } else {
         req.owner = null
         req.ownerSession = null
         req.isOwnerAuthenticated = false
+        req.authorizationError = 'INVALID_SESSION'
       }
     } else {
       req.owner = null
       req.ownerSession = null
       req.isOwnerAuthenticated = false
+      req.authorizationError = 'INVALID_SESSION'
     }
 
     next()
@@ -45,13 +85,22 @@ export function createOwnerAuthMiddleware() {
 }
 
 export function requireOwnerAuth(req, res, next) {
-  if (!req.isOwnerAuthenticated || !req.owner) {
-    res.statusCode = 401
-    res.setHeader('Content-Type', 'application/json')
-    res.end(JSON.stringify({
-      error: 'Unauthorized',
-      message: 'Authentication required'
-    }))
+  if (!req.isOwnerAuthenticated) {
+    if (req.authorizationError === 'INFRASTRUCTURE_UNAVAILABLE') {
+      res.statusCode = 503
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({
+        error: 'Service Unavailable',
+        message: 'Infrastructure temporarily unavailable'
+      }))
+    } else {
+      res.statusCode = 401
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({
+        error: 'Unauthorized',
+        message: 'Authentication required'
+      }))
+    }
     return
   }
   next()
@@ -59,17 +108,36 @@ export function requireOwnerAuth(req, res, next) {
 
 export function requireOwnerPermission(permission) {
   return (req, res, next) => {
-    if (!req.isOwnerAuthenticated || !req.owner) {
-      res.statusCode = 401
+    if (!req.isOwnerAuthenticated) {
+      if (req.authorizationError === 'INFRASTRUCTURE_UNAVAILABLE') {
+        res.statusCode = 503
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({
+          error: 'Service Unavailable',
+          message: 'Infrastructure temporarily unavailable'
+        }))
+      } else {
+        res.statusCode = 401
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({
+          error: 'Unauthorized',
+          message: 'Authentication required'
+        }))
+      }
+      return
+    }
+
+    if (req.authorizationError === 'INFRASTRUCTURE_UNAVAILABLE') {
+      res.statusCode = 503
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({
-        error: 'Unauthorized',
-        message: 'Authentication required'
+        error: 'Service Unavailable',
+        message: 'Infrastructure temporarily unavailable'
       }))
       return
     }
 
-    if (!hasPermission(req.ownerSession, permission)) {
+    if (!authorizationService.hasPermission(req.owner.grant?.permissions, permission)) {
       res.statusCode = 403
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({
@@ -85,12 +153,31 @@ export function requireOwnerPermission(permission) {
 
 export function requireOwnerApplicationAccess(applicationIdParam = 'applicationId') {
   return (req, res, next) => {
-    if (!req.isOwnerAuthenticated || !req.owner) {
-      res.statusCode = 401
+    if (!req.isOwnerAuthenticated) {
+      if (req.authorizationError === 'INFRASTRUCTURE_UNAVAILABLE') {
+        res.statusCode = 503
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({
+          error: 'Service Unavailable',
+          message: 'Infrastructure temporarily unavailable'
+        }))
+      } else {
+        res.statusCode = 401
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({
+          error: 'Unauthorized',
+          message: 'Authentication required'
+        }))
+      }
+      return
+    }
+
+    if (req.authorizationError === 'INFRASTRUCTURE_UNAVAILABLE') {
+      res.statusCode = 503
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({
-        error: 'Unauthorized',
-        message: 'Authentication required'
+        error: 'Service Unavailable',
+        message: 'Infrastructure temporarily unavailable'
       }))
       return
     }
@@ -122,7 +209,7 @@ export function requireOwnerApplicationAccess(applicationIdParam = 'applicationI
 }
 
 export function buildOwnerContext(req) {
-  if (!req.isOwnerAuthenticated || !req.owner) {
+  if (!req.isOwnerAuthenticated) {
     return null
   }
 
@@ -131,8 +218,8 @@ export function buildOwnerContext(req) {
     email: req.owner.email,
     name: req.owner.name,
     applicationId: req.owner.applicationId,
-    role: req.owner.role,
-    permissions: req.owner.permissions
+    role: req.owner.grant?.role || req.owner.role,
+    permissions: req.owner.grant?.permissions || req.owner.permissions
   }
 }
 
