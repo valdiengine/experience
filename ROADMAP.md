@@ -1370,7 +1370,7 @@
 | P13.1 | Business Capability (Aggregate Root Foundation) | ✅ |
 | OWNER-SESSION-0 | Infrastructure Discovery / Persistence & Security Contract | ✅ |
 | OWNER-SESSION-1 | Persistent Owner Identity + Persistent Application Grants | ✅ |
-| OWNER-SESSION-2 | Persistent Sessions / Multi-Process Session Contract | Planned |
+| OWNER-SESSION-2 | Persistent Sessions / Multi-Process Session Persistence | ✅ Complete |
 
 **Progreso:** 77/77 fases completadas (100%) ✅
 
@@ -1486,9 +1486,12 @@
 - **Files modified:** owner.api.js, owner.auth.js, owner.middleware.js, web.server.js, database.config.js, postgres.connection.js
 - **Next:** OWNER-SESSION-2 — Persistent Sessions (multi-process/multi-worker session persistence)
 
-### OWNER-SESSION-2 — Persistent Sessions / Multi-Process Session Contract
-- **Status:** Planned
-- **Scope:** Replace in-memory Map-based sessions with persistent session storage (Redis or PostgreSQL). Enable multi-process/multi-worker session sharing. Maintain session TTL, extension, and invalidation semantics.
+### OWNER-SESSION-2 — Persistent Sessions / Multi-Process Session Persistence
+- **Status:** Completed
+- **What it does:** Replaces in-memory Map-based Owner sessions with persistent PostgreSQL storage. Secure 256-bit CSPRNG token generation, SHA256 hash storage (never store raw), PostgreSQL-generated UUID for session ids. Session persistence survives Passenger/Node restarts. Authorization (role/permissions) revalidated on every request via owner_application_grants (not from stale session state). Password change atomically revokes all sessions. Frontend sessionStorage for browser reload continuity. HTTP 503 for infrastructure failures, 401 for invalid/expired/revoked tokens. Physical staging certification completed: migration 0007 executed, schema verified, real session row created and verified.
+- **Files created:** owner-session-token.module.js (CSPRNG token gen), owner-session.repository.js (PostgreSQL repository), 0007_owner_sessions migration, owner-session-2.test.js (72 tests)
+- **Files modified:** owner.auth.js (PostgreSQL session management), owner.middleware.js (async validation), owner.api.js (async logout/extend), owner-identity.service.js (password-change revocation), owner-portal.html (sessionStorage persistence), web/owner-1.test.js (async validateSession)
+- **Next:** OWNER-SESSION-3 — TBD (from existing roadmap documentation)
 
 ### Archivos en Disco No Registrados
 - `capabilities/catalog/catalog.capability.js` â€” Placeholder (P1-3)

@@ -4,6 +4,65 @@
 
 ---
 
+## v4.4 — OWNER-SESSION-2 Complete (2026-08-24)
+
+### Platform Release 4.4 — PERSISTENT OWNER SESSIONS
+
+**Status:** OWNER-SESSION-2 COMPLETE
+
+- **Next:** OWNER-SESSION-3 — TBD
+
+#### Key Deliverables
+
+- PostgreSQL Persistent Sessions: owner_sessions table via migration 0007
+- Secure Token Architecture: 256-bit CSPRNG entropy, sess_ prefix + 43 base64url chars
+- Token Hash Storage: SHA256(rawToken) stored server-side, raw token NEVER stored
+- UUID/Token Separation: PostgreSQL generates session UUID; raw token returned to client as Bearer credential
+- Session Persistence: survives Passenger/Node restarts
+- Authorization Preservation: role/permissions revalidated on every request via owner_application_grants
+- Password-Change Revocation: all sessions atomically revoked on password update
+- Frontend Continuity: sessionStorage for browser reload persistence
+
+#### Staging-Discovered Defects (Fixed Before Certification)
+
+- **UUID mismatch**: authenticateOwner() initially passed rawToken as id to createSession(), but owner_sessions.id is UUID. Fixed: createSession() no longer accepts id; PostgreSQL generates UUID.
+- **Frontend continuity**: currentToken was JavaScript-memory-only, lost on F5/reload. Fixed: sessionStorage persistence added.
+
+#### Physical Staging Certification
+
+- Migration 0007 physically executed on Neon PostgreSQL
+- Schema verified: users, owner_application_grants, owner_sessions all present
+- Real session row created and verified: UUID present, token_hash 64 chars, status active
+- Runtime restart persistence demonstrated
+- UUID/raw-token separation confirmed
+
+#### Files Created
+
+- `web/owner/token/owner-session-token.module.js` — CSPRNG token generation, SHA256 hashing
+- `web/owner/repositories/owner-session.repository.js` — Session PostgreSQL repository
+- `database/migrations/0007_owner_sessions/index.js` — Session schema migration
+- `owner-session-2.test.js` — Session contract tests (72 tests)
+
+#### Files Modified
+
+- `web/owner/owner.auth.js` — PostgreSQL session management, async validateSession/getSessionOwner
+- `web/owner/owner.middleware.js` — Async session validation, INFRASTRUCTURE_UNAVAILABLE propagation
+- `web/owner/owner.api.js` — Async logout/extend with 503 error handling
+- `web/owner/services/owner-identity.service.js` — Password-change atomic session revocation
+- `web/owner-1.test.js` — Async validateSession calls (signature change)
+- `web/owner/owner-portal.html` — sessionStorage persistence for reload continuity
+
+#### Test Results
+
+- owner-session-1.test.js: 70/70 PASS
+- owner-session-2.test.js: 72/72 PASS
+- web/owner-1.test.js: 40/40 PASS
+- web/owner-stage-1-1-wiring: 12/12 PASS
+- web/owner-stage-2-e2e: 20/20 PASS
+- **Total: 214 PASS, 0 FAIL**
+
+---
+
 ## v4.3 — OWNER-SESSION-1 Complete (2026-08-22)
 
 ### Platform Release 4.3 — PERSISTENT OWNER IDENTITY

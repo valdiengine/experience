@@ -1,7 +1,7 @@
 # CURRENT_STATE.md
 
 > Exact snapshot of project state. Update after each completed phase.
-> Last updated: **PLATFORM v4.3 — OWNER-SESSION-1 COMPLETE** (2026-08-22)
+> Last updated: **PLATFORM v4.4 — OWNER-SESSION-2 COMPLETE** (2026-08-24)
 
 ## Platform Status
 
@@ -141,6 +141,7 @@
 | 102 | P14.1.6 | Integration Validation Corrections | Corrections |
 | 103 | OWNER-SESSION-0 | Infrastructure Discovery / Persistence & Security Contract | Owner |
 | 104 | OWNER-SESSION-1 | Persistent Owner Identity + Persistent Application Grants | Owner |
+| 105 | OWNER-SESSION-2 | Persistent Sessions / Multi-Process Session Persistence | Owner |
 
 ## Registered Capabilities (32)
 
@@ -890,4 +891,109 @@ See `docs/ai/NEXT_PHASE.md` for pending work.
 
 ### Next
 
-OWNER-SESSION-2 — Persistent Sessions (multi-process/multi-worker session persistence)
+OWNER-SESSION-3 — TBD (from existing roadmap documentation)
+
+---
+
+## OWNER-SESSION-2 — Persistent Sessions / Multi-Process Session Persistence
+
+### What Changed
+
+1. PostgreSQL owner_sessions table via migration 0007
+2. Secure token generation: 256-bit CSPRNG entropy, sess_ prefix + 43 base64url chars
+3. Token stored as SHA256 hash in PostgreSQL, never stored raw
+4. PostgreSQL generates UUID for session id; raw token returned to client as Bearer credential
+5. Session persistence survives Passenger/Node restarts
+6. Authorization (role/permissions) revalidated on every request via owner_application_grants
+7. Password change atomically revokes all sessions for that user
+8. Frontend sessionStorage persistence for browser reload continuity
+
+### Current Owner Architecture
+
+**Persistent (PostgreSQL):**
+- Owner identity (email, name) — `public.users`
+- Password hash (scrypt) — `public.users`
+- Application grants (role, permissions) — `owner_application_grants`
+- Session tokens (SHA256 hash) — `owner_sessions`
+- Session UUIDs (PostgreSQL-generated) — `owner_sessions`
+
+**Browser (sessionStorage):**
+- Raw Bearer token for HTTP authentication
+- Survives page reload/navigation
+- Cleared on tab/browser close
+
+**In-Memory (none for authentication):**
+- Session Map removed entirely for Owner authentication
+- Not authoritative for any Owner session
+
+### Token Security Model
+
+- **Raw token**: 256-bit CSPRNG, `sess_` + 43 base64url chars, returned to client ONCE
+- **Stored hash**: SHA256(rawToken), 64-char hex, stored server-side
+- **DB id**: PostgreSQL gen_random_uuid(), never exposed to client
+- **Never**: logged, embedded in HTML, inserted in URLs, printed to console
+
+### Session Validation Flow
+
+```
+Bearer token (raw)
+  → validate format (sess_ prefix, 47 chars)
+  → SHA256 hash
+  → PostgreSQL: WHERE token_hash = hash AND status = 'active' AND expires_at > NOW()
+  → valid session
+```
+
+Authorization after validation:
+```
+authorizeRequest({ userId, applicationId })
+  → PostgreSQL owner_application_grants revalidation
+  → current grant role/permissions
+```
+
+### Failure Semantics
+
+| Condition | HTTP Status |
+|-----------|-------------|
+| Invalid token format | 401 |
+| Unknown token | 401 |
+| Expired token | 401 |
+| Revoked token | 401 |
+| PostgreSQL unavailable (session) | 503 |
+| PostgreSQL unavailable (authz) | 503 |
+
+### Files Created
+
+| File | Purpose |
+|------|---------|
+| `web/owner/token/owner-session-token.module.js` | Secure token generation (CSPRNG, SHA256) |
+| `web/owner/repositories/owner-session.repository.js` | Session PostgreSQL repository |
+| `database/migrations/0007_owner_sessions/index.js` | Session schema migration |
+| `owner-session-2.test.js` | Session contract tests (72 tests) |
+
+### Files Modified
+
+| File | Purpose |
+|------|---------|
+| `web/owner/owner.auth.js` | PostgreSQL session management |
+| `web/owner/owner.middleware.js` | Async session validation |
+| `web/owner/owner.api.js` | Async logout/extend |
+| `web/owner/services/owner-identity.service.js` | Password-change session revocation |
+| `web/owner-1.test.js` | Async validateSession calls |
+| `web/owner/owner-portal.html` | sessionStorage persistence |
+
+### Physical Staging Certification
+
+- Migration 0007 physically executed on Neon PostgreSQL
+- Schema verified: users, owner_application_grants, owner_sessions all present
+- Real session row created and verified (UUID, token_hash length 64, status active)
+- Runtime restart persistence demonstrated
+- UUID/raw-token separation physically verified (sess_ token NOT stored as DB id)
+
+### Test Evidence
+
+- owner-session-1.test.js: 70 PASS, 0 FAIL
+- owner-session-2.test.js: 72 PASS, 0 FAIL
+- web/owner-1.test.js: 40 PASS, 0 FAIL
+- web/owner-stage-1-1-wiring.test.js: 12 PASS, 0 FAIL
+- web/owner-stage-2-e2e.test.js: 20 PASS, 0 FAIL
+- **Total: 214 PASS, 0 FAIL**

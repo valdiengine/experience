@@ -1,54 +1,52 @@
 /**
  * Owner Authentication & Session Management
  *
- * OWNER-SESSION-1: Persistent Owner Identity with PostgreSQL
+ * OWNER-SESSION-2: Persistent Sessions with PostgreSQL
  *
- * TEMPORARY COMPATIBILITY LAYER (until runtime cutover):
- * - ownerStore: in-memory store for web.server.js bootstrap compatibility
+ * COMPATIBILITY LAYER (bootstrap/testing only):
+ * - ownerStore: in-memory owner registration (NOT used for authentication)
  * - registerOwner: in-memory registration for bootstrap
- * - getOwnerCount: in-memory count for bootstrap idempotency check
- * - createTestOwner: test fixture (uses in-memory store)
+ * - getOwnerCount: in-memory count for bootstrap idempotency
+ * - createTestOwner: test fixture
  *
- * PERSISTENT AUTHENTICATION (uses PostgreSQL):
+ * PERSISTENT AUTHENTICATION (PostgreSQL):
  * - hashPassword / verifyPassword: scrypt module
- * - authenticateOwner: authenticates against PostgreSQL, resolves grants
+ * - authenticateOwner: authenticates against PostgreSQL, creates persistent session
  *
- * IN-MEMORY SESSION MANAGEMENT (unchanged until OWNER-SESSION-2):
- * - sessions Map
- * - validateSession
- * - invalidateSession
- * - getSessionOwner
- * - extendSession
- * - cleanupExpiredSessions
- * - getSessionCount
+ * PERSISTENT SESSIONS (PostgreSQL):
+ * - validateSession: token → hash → DB lookup
+ * - invalidateSession: token → hash → revoke
+ * - extendSession: token → hash → update expires_at
+ * - getSessionOwner: returns identity context for middleware
+ * - cleanupExpiredSessions: deletes expired sessions
+ * - getSessionCount: counts active sessions
  *
- * FAIL-CLOSED: No in-memory fallback for PostgreSQL authentication.
- * If PostgreSQL is unavailable, authentication fails with INFRASTRUCTURE_UNAVAILABLE.
+ * AUTHORIZATION (unchanged from SESSION-1):
+ * - authorizeRequest(): called by middleware AFTER session validation
+ * - grant revalidation on every request
+ *
+ * FAIL-CLOSED: If PostgreSQL is unavailable during session operations,
+ * functions propagate INFRASTRUCTURE_UNAVAILABLE.
  */
 
-import { createOwnerSession, generateSessionId, generateId, isValidEmail } from './owner.identity.js'
-
+import { createOwnerSession, generateId, isValidEmail } from './owner.identity.js'
+import { generateSecureSessionId, hashSessionToken, isValidTokenFormat } from './token/owner-session-token.module.js'
 import * as identityService from './services/owner-identity.service.js'
 import { hashPassword as scryptHash, verifyPassword as scryptVerify } from './password/owner-password.module.js'
+import * as sessionRepo from './repositories/owner-session.repository.js'
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000
 
 /**
- * Temporary compatibility layer: in-memory owner store
- * Used by web.server.js bootstrap until explicit PostgreSQL provisioning.
- * NOT used by authenticateOwner.
+ * Compatibility layer: in-memory owner store for bootstrap.
+ * NOT used for authentication (which uses PostgreSQL).
  */
-const sessions = new Map()
 const ownerStore = new Map()
 
 // ============================================================
-// TEMPORARY COMPATIBILITY FUNCTIONS
+// COMPATIBILITY FUNCTIONS (bootstrap/testing)
 // ============================================================
 
-/**
- * Temporary: In-memory owner registration for web.server.js bootstrap.
- * NOT used for PostgreSQL authentication.
- */
 export function registerOwner(ownerData) {
   const { email, password, name, applicationId } = ownerData
 
@@ -92,16 +90,10 @@ export function registerOwner(ownerData) {
   }
 }
 
-/**
- * Temporary: In-memory owner count for web.server.js bootstrap idempotency.
- */
 export function getOwnerCount() {
   return ownerStore.size
 }
 
-/**
- * Temporary: Test fixture using in-memory store.
- */
 export function createTestOwner(applicationId = 'valdi.app/albasie') {
   const testEmail = `test.owner.${Date.now()}@example.com`
   return registerOwner({
@@ -125,17 +117,16 @@ export function verifyPassword(password, storedHash) {
 }
 
 /**
- * Authenticate owner against PostgreSQL persistent identity.
+ * Authenticate owner against PostgreSQL and create persistent session.
  *
  * Flow:
  * 1. Validate credentials against users table
- * 2. Resolve ALL active, non-expired grants for that user
+ * 2. Resolve ALL active, non-expired grants
  * 3. Handle grant states:
  *    - 0 grants: NO_ACTIVE_GRANT (403)
- *    - 1 grant: create session with grant's applicationId/role/permissions
+ *    - 1 grant: create persistent session
  *    - >1 grants: AMBIGUOUS_APPLICATION (403)
- *
- * No hardcoded applicationId. No in-memory fallback.
+ * 4. Return raw session token to client ONCE
  */
 export async function authenticateOwner(email, password) {
   if (!email || !password) {
@@ -163,125 +154,240 @@ export async function authenticateOwner(email, password) {
     return { success: false, error: 'AMBIGUOUS_APPLICATION' }
   }
 
-  // Step 4: Exactly one valid grant - use it
+  // Step 4: Exactly one valid grant - create persistent session
   const grant = grants[0]
 
-  const sessionId = generateSessionId()
+  const rawToken = generateSecureSessionId()
+  const tokenHash = hashSessionToken(rawToken)
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
 
-  const session = createOwnerSession({
-    id: sessionId,
-    ownerId: user.id,
-    ownerEmail: user.email,
-    ownerName: user.name,
+  await sessionRepo.createSession({
+    userId: user.id,
     applicationId: grant.application_id,
-    role: grant.role,
-    permissions: grant.permissions || [
-      'application:read',
-      'business:edit_info',
-      'inbox:read',
-      'inbox:manage',
-      'quotes:view',
-      'pwa:view',
-      'notifications:edit_settings'
-    ],
+    tokenHash,
     expiresAt
   })
 
-  sessions.set(sessionId, session)
-
   console.log(`[OwnerAuth] Session created for ${user.email} on ${grant.application_id}, expires ${expiresAt}`)
 
+  // Return session object with RAW token in id field
+  // Client stores this token and sends as Bearer token
   return {
     success: true,
     session: {
-      id: session.id,
-      ownerId: session.ownerId,
-      ownerEmail: session.ownerEmail,
-      ownerName: session.ownerName,
-      applicationId: session.applicationId,
-      role: session.role,
-      permissions: session.permissions,
-      expiresAt: session.expiresAt
+      id: rawToken,
+      ownerId: user.id,
+      ownerEmail: user.email,
+      ownerName: user.name,
+      applicationId: grant.application_id,
+      role: grant.role,
+      permissions: grant.permissions || [
+        'application:read',
+        'business:edit_info',
+        'inbox:read',
+        'inbox:manage',
+        'quotes:view',
+        'pwa:view',
+        'notifications:edit_settings'
+      ],
+      expiresAt
     }
   }
 }
 
 // ============================================================
-// IN-MEMORY SESSION MANAGEMENT (unchanged)
+// PERSISTENT SESSION MANAGEMENT
 // ============================================================
 
-export function validateSession(sessionId) {
+/**
+ * Validate a session token.
+ *
+ * - Validates token format
+ * - Hashes token
+ * - Looks up in PostgreSQL
+ * - Returns session if active and not expired
+ *
+ * Returns null for: invalid format, unknown hash, expired, revoked
+ *
+ * Note: The session row only contains user_id, application_id, and timing fields.
+ * Identity (email/name) must be loaded separately via getSessionOwner().
+ * Authorization (role/permissions) is resolved separately via authorizeRequest().
+ */
+export async function validateSession(sessionId) {
   if (!sessionId || typeof sessionId !== 'string') {
     return null
   }
 
-  const session = sessions.get(sessionId)
+  if (!isValidTokenFormat(sessionId)) {
+    return null
+  }
+
+  const tokenHash = hashSessionToken(sessionId)
+
+  let session
+  try {
+    session = await sessionRepo.findSessionByTokenHash(tokenHash)
+  } catch (error) {
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+      const err = new Error('INFRASTRUCTURE_UNAVAILABLE')
+      err.code = 'INFRASTRUCTURE_UNAVAILABLE'
+      throw err
+    }
+    throw error
+  }
+
   if (!session) {
     return null
   }
 
-  if (new Date(session.expiresAt) < new Date()) {
-    sessions.delete(sessionId)
+  return {
+    id: session.id,
+    ownerId: session.user_id,
+    applicationId: session.application_id,
+    expiresAt: session.expires_at,
+    createdAt: session.created_at
+  }
+}
+
+/**
+ * Get session owner identity.
+ *
+ * Loads user identity (email, name) from the users table.
+ * Authorization (role, permissions) is handled separately by authorizeRequest()
+ * in the middleware, which resolves the current grant on every request.
+ *
+ * Returns null if session is invalid or user not found.
+ */
+export async function getSessionOwner(sessionId) {
+  const session = await validateSession(sessionId)
+  if (!session) {
     return null
   }
 
-  return session
-}
-
-export function invalidateSession(sessionId) {
-  if (!sessionId) return false
-  return sessions.delete(sessionId)
-}
-
-export function getSessionOwner(sessionId) {
-  const session = validateSession(sessionId)
-  if (!session) return null
+  const user = await identityService.getUserById(session.ownerId)
+  if (!user) {
+    return null
+  }
 
   return {
     id: session.ownerId,
-    email: session.ownerEmail,
-    name: session.ownerName,
-    applicationId: session.applicationId,
-    role: session.role,
-    permissions: session.permissions
+    email: user.email,
+    name: user.name,
+    applicationId: session.applicationId
   }
 }
 
-export function extendSession(sessionId) {
-  const session = sessions.get(sessionId)
-  if (!session) return false
+/**
+ * Invalidate (revoke) a session.
+ *
+ * - Hashes token
+ * - Updates status to 'revoked' in PostgreSQL
+ *
+ * Returns true on success or if session already revoked/nonexistent.
+ * Throws INFRASTRUCTURE_UNAVAILABLE on DB error.
+ */
+export async function invalidateSession(sessionId) {
+  if (!sessionId) return false
 
-  const newExpiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
-  const updatedSession = { ...session, expiresAt: newExpiresAt, lastActivityAt: new Date().toISOString() }
-  sessions.set(sessionId, Object.freeze(updatedSession))
-  return true
-}
+  if (!isValidTokenFormat(sessionId)) {
+    return false
+  }
 
-export function cleanupExpiredSessions() {
-  const now = new Date()
-  let cleaned = 0
+  const tokenHash = hashSessionToken(sessionId)
 
-  for (const [id, session] of sessions.entries()) {
-    if (new Date(session.expiresAt) < now) {
-      sessions.delete(id)
-      cleaned++
+  try {
+    const result = await sessionRepo.revokeSession(tokenHash)
+    return result !== null
+  } catch (error) {
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+      const err = new Error('INFRASTRUCTURE_UNAVAILABLE')
+      err.code = 'INFRASTRUCTURE_UNAVAILABLE'
+      throw err
     }
+    throw error
   }
-
-  if (cleaned > 0) {
-    console.log(`[OwnerAuth] Cleaned up ${cleaned} expired sessions`)
-  }
-
-  return cleaned
 }
 
-export function getSessionCount() {
-  return sessions.size
+/**
+ * Extend session TTL.
+ *
+ * - Session must be currently active
+ * - Session must not be expired
+ * - Sets new expires_at = now + SESSION_TTL_MS
+ *
+ * Returns true on success, false if session not found/expired/revoked.
+ * Throws INFRASTRUCTURE_UNAVAILABLE on DB error.
+ */
+export async function extendSession(sessionId) {
+  if (!sessionId) return false
+
+  if (!isValidTokenFormat(sessionId)) {
+    return false
+  }
+
+  const tokenHash = hashSessionToken(sessionId)
+  const newExpiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+
+  try {
+    const updated = await sessionRepo.extendSession(tokenHash, newExpiresAt)
+    return updated !== null
+  } catch (error) {
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+      const err = new Error('INFRASTRUCTURE_UNAVAILABLE')
+      err.code = 'INFRASTRUCTURE_UNAVAILABLE'
+      throw err
+    }
+    throw error
+  }
+}
+
+/**
+ * Cleanup expired sessions.
+ *
+ * Calls repository cleanup with current timestamp as cutoff.
+ *
+ * Returns count of deleted sessions.
+ * Throws INFRASTRUCTURE_UNAVAILABLE on DB error.
+ */
+export async function cleanupExpiredSessions() {
+  const cutoff = new Date().toISOString()
+
+  try {
+    const count = await sessionRepo.cleanupExpiredSessions(cutoff)
+    if (count > 0) {
+      console.log(`[OwnerAuth] Cleaned up ${count} expired sessions`)
+    }
+    return count
+  } catch (error) {
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+      const err = new Error('INFRASTRUCTURE_UNAVAILABLE')
+      err.code = 'INFRASTRUCTURE_UNAVAILABLE'
+      throw err
+    }
+    throw error
+  }
+}
+
+/**
+ * Count active sessions.
+ *
+ * Returns count of all active (not expired, not revoked) sessions.
+ * Throws INFRASTRUCTURE_UNAVAILABLE on DB error.
+ */
+export async function getSessionCount() {
+  try {
+    return await sessionRepo.countActiveSessions()
+  } catch (error) {
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+      const err = new Error('INFRASTRUCTURE_UNAVAILABLE')
+      err.code = 'INFRASTRUCTURE_UNAVAILABLE'
+      throw err
+    }
+    throw error
+  }
 }
 
 export function forTesting_onlyClearAllData() {
-  sessions.clear()
   ownerStore.clear()
 }
 
@@ -293,8 +399,8 @@ export default {
   createTestOwner,
   authenticateOwner,
   validateSession,
-  invalidateSession,
   getSessionOwner,
+  invalidateSession,
   extendSession,
   cleanupExpiredSessions,
   getSessionCount,

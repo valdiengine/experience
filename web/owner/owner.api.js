@@ -159,7 +159,15 @@ export function createOwnerAPIHandler() {
       const sessionId = getSessionId(req)
 
       if (sessionId) {
-        invalidateSession(sessionId)
+        try {
+          await invalidateSession(sessionId)
+        } catch (error) {
+          if (error.code === 'INFRASTRUCTURE_UNAVAILABLE') {
+            sendJson(res, 503, { error: 'Service Unavailable', message: 'Infrastructure temporarily unavailable' })
+            return
+          }
+          throw error
+        }
       }
 
       sendJson(res, 200, { success: true, message: 'Logged out successfully' })
@@ -184,13 +192,33 @@ export function createOwnerAPIHandler() {
         return
       }
 
-      const extended = extendSession(sessionId)
+      let extended
+      try {
+        extended = await extendSession(sessionId)
+      } catch (error) {
+        if (error.code === 'INFRASTRUCTURE_UNAVAILABLE') {
+          sendJson(res, 503, { error: 'Service Unavailable', message: 'Infrastructure temporarily unavailable' })
+          return
+        }
+        throw error
+      }
+
       if (!extended) {
         sendJson(res, 401, { error: 'Unauthorized', message: 'Session not found' })
         return
       }
 
-      const session = validateSession(sessionId)
+      let session
+      try {
+        session = await validateSession(sessionId)
+      } catch (error) {
+        if (error.code === 'INFRASTRUCTURE_UNAVAILABLE') {
+          sendJson(res, 503, { error: 'Service Unavailable', message: 'Infrastructure temporarily unavailable' })
+          return
+        }
+        throw error
+      }
+
       sendJson(res, 200, {
         success: true,
         session: {

@@ -6,6 +6,7 @@
  */
 
 import * as repo from '../repositories/owner-identity.repository.js'
+import * as sessionRepo from '../repositories/owner-session.repository.js'
 import { hashPassword, verifyPassword } from '../password/owner-password.module.js'
 import { transaction } from '../../../database/connection/postgres.connection.js'
 
@@ -152,6 +153,8 @@ export async function updateStagingOwnerIdentity({ userId, applicationId, email,
       passwordHash,
       name
     }, client)
+
+    await sessionRepo.revokeAllSessionsForUser(userId, client)
 
     return {
       user: updatedUser,

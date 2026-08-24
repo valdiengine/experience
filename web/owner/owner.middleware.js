@@ -4,8 +4,8 @@
  * Provides secure authentication and authorization middleware
  * for the Owner Portal.
  *
- * Authentication validates session (in-memory).
- * Authorization resolves current persistent grant from PostgreSQL.
+ * Authentication: validates persistent session from PostgreSQL
+ * Authorization: resolves current persistent grant from PostgreSQL
  *
  * CORE INVARIANTS:
  * - Session proves identity (authentication)
@@ -18,7 +18,6 @@
 
 import {
   validateSession,
-  invalidateSession,
   getSessionOwner
 } from './owner.auth.js'
 
@@ -36,10 +35,37 @@ export function createOwnerAuthMiddleware() {
 
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const sessionId = authHeader.substring(7)
-      const session = validateSession(sessionId)
+
+      let session
+      try {
+        session = await validateSession(sessionId)
+      } catch (error) {
+        if (error.code === 'INFRASTRUCTURE_UNAVAILABLE') {
+          req.owner = null
+          req.ownerSession = null
+          req.isOwnerAuthenticated = false
+          req.authorizationError = 'INFRASTRUCTURE_UNAVAILABLE'
+          next()
+          return
+        }
+        throw error
+      }
 
       if (session) {
-        const owner = getSessionOwner(sessionId)
+        let owner
+        try {
+          owner = await getSessionOwner(sessionId)
+        } catch (error) {
+          if (error.code === 'INFRASTRUCTURE_UNAVAILABLE') {
+            req.owner = null
+            req.ownerSession = null
+            req.isOwnerAuthenticated = false
+            req.authorizationError = 'INFRASTRUCTURE_UNAVAILABLE'
+            next()
+            return
+          }
+          throw error
+        }
 
         req.owner = owner
         req.ownerSession = session

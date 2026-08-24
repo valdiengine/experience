@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portal del Propietario - Turistic OS</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --success: #059669;
+      --danger: #dc2626;
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-400: #9ca3af;
+      --gray-500: #6b7280;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --gray-900: #111827;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-900);
+      line-height: 1.5;
+    }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+
+    .login-page {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .login-card {
+      background: white;
+      padding: 2rem;
+      border-radius: 0.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .login-card h1 {
+      font-size: 1.5rem;
+      margin-bottom: 1.5rem;
+      text-align: center;
+      color: var(--gray-800);
+    }
+
+    .form-group { margin-bottom: 1rem; }
+
+    .form-group label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin-bottom: 0.25rem;
+      color: var(--gray-700);
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--gray-300);
+      border-radius: 0.375rem;
+      font-size: 1rem;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem 1rem;
+      border: none;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      width: 100%;
+    }
+
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-danger { background: var(--danger); color: white; }
+
+    .error-message {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: var(--danger);
+      padding: 0.75rem;
+      border-radius: 0.375rem;
+      margin-bottom: 1rem;
+      font-size: 0.875rem;
+    }
+
+    .dashboard { display: none; }
+    .dashboard.active { display: block; }
+
+    .header {
+      background: white;
+      border-bottom: 1px solid var(--gray-200);
+      padding: 1rem 0;
+      margin-bottom: 2rem;
+    }
+
+    .header-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header h1 { font-size: 1.25rem; }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .user-name { font-size: 0.875rem; color: var(--gray-600); }
+
+    .nav {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+    }
+
+    .nav-item {
+      padding: 0.5rem 1rem;
+      border-radius: 0.375rem;
+      text-decoration: none;
+      color: var(--gray-600);
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--gray-200);
+      background: white;
+    }
+
+    .nav-item:hover { background: var(--gray-50); }
+    .nav-item.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .card {
+      background: white;
+      border-radius: 0.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card h2 {
+      font-size: 1.125rem;
+      margin-bottom: 1rem;
+      color: var(--gray-800);
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat {
+      background: var(--gray-50);
+      padding: 1rem;
+      border-radius: 0.375rem;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--gray-500);
+      text-transform: uppercase;
+    }
+
+    .capability-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .capability-badge {
+      display: inline-flex;
+      padding: 0.25rem 0.75rem;
+      background: var(--gray-100);
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--gray-700);
+    }
+
+    .capability-badge.enabled {
+      background: #d1fae5;
+      color: var(--success);
+    }
+
+    .table { width: 100%; border-collapse: collapse; }
+
+    .table th, .table td {
+      padding: 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid var(--gray-200);
+    }
+
+    .table th {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: var(--gray-500);
+    }
+
+    .table td { font-size: 0.875rem; }
+
+    .status-badge {
+      display: inline-flex;
+      padding: 0.125rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+
+    .status-badge.active { background: #d1fae5; color: #065f46; }
+
+    .empty-state {
+      text-align: center;
+      padding: 3rem;
+      color: var(--gray-500);
+    }
+
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      color: var(--gray-500);
+    }
+
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 2px solid var(--gray-200);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .section { display: none; }
+    .section.active { display: block; }
+
+    @media (max-width: 640px) {
+      .header-content {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: flex-start;
+      }
+      .stats { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div id="loginPage" class="login-page">
+    <div class="login-card">
+      <h1>Portal del Propietario</h1>
+      <div id="loginError" class="error-message" style="display: none;"></div>
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="email">Correo electrónico</label>
+          <input type="email" id="email" name="email" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="password">Contraseña</label>
+          <input type="password" id="password" name="password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary" id="loginBtn">Iniciar sesión</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="dashboard" class="dashboard">
+    <header class="header">
+      <div class="container header-content">
+        <h1>Portal del Propietario</h1>
+        <div class="user-info">
+          <span class="user-name" id="userName"></span>
+          <button class="btn btn-danger" id="logoutBtn">Cerrar sesión</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <nav class="nav">
+        <button class="nav-item active" data-section="overview">Resumen</button>
+        <button class="nav-item" data-section="business">Mi Negocio</button>
+        <button class="nav-item" data-section="content">Contenido</button>
+        <button class="nav-item" data-section="media">Multimedia</button>
+        <button class="nav-item" data-section="inbox">Bandeja de Entrada</button>
+        <button class="nav-item" data-section="quotes">Cotizaciones</button>
+        <button class="nav-item" data-section="notifications">Notificaciones</button>
+      </nav>
+
+      <section id="overview" class="section active">
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-value" id="statQuotes">0</div>
+            <div class="stat-label">Cotizaciones</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value" id="statInbox">0</div>
+            <div class="stat-label">Mensajes</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Mi Aplicación</h2>
+          <p><strong>ID:</strong> <span id="appId">-</span></p>
+          <p><strong>Estado:</strong> <span class="status-badge active">Activo</span></p>
+        </div>
+
+        <div class="card">
+          <h2>Capacidades</h2>
+          <div id="capabilities" class="capability-list"></div>
+        </div>
+      </section>
+
+      <section id="business" class="section">
+        <div class="card">
+          <h2>Información del Negocio</h2>
+          <form id="businessForm">
+            <div class="form-group">
+              <label for="businessName">Nombre del negocio</label>
+              <input type="text" id="businessName" name="name">
+            </div>
+            <div class="form-group">
+              <label for="description">Descripción</label>
+              <textarea id="description" name="description" rows="4"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="contactPhone">Teléfono</label>
+              <input type="text" id="contactPhone" name="contactPhone">
+            </div>
+            <div class="form-group">
+              <label for="contactEmail">Correo de contacto</label>
+              <input type="email" id="contactEmail" name="contactEmail">
+            </div>
+            <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+          </form>
+        </div>
+      </section>
+
+      <section id="content" class="section">
+        <div class="card">
+          <h2>Contenido del negocio</h2>
+          <div id="contentStatus" style="margin-bottom:1rem;padding:0.5rem;background:#f3f4f6;border-radius:0.375rem;font-size:0.875rem;">
+            <span id="contentStatusLabel">Cargando...</span>
+          </div>
+          <form id="contentForm">
+            <div class="form-group">
+              <label for="contentBusinessName">Nombre del negocio</label>
+              <input type="text" id="contentBusinessName" name="businessName" maxlength="100">
+            </div>
+            <div class="form-group">
+              <label for="contentShortDescription">Descripción corta</label>
+              <input type="text" id="contentShortDescription" name="shortDescription" maxlength="200">
+            </div>
+            <div class="form-group">
+              <label for="contentDescription">Descripción</label>
+              <textarea id="contentDescription" name="description" rows="6" maxlength="5000"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="contentPhone">Teléfono</label>
+              <input type="text" id="contentPhone" name="phone" maxlength="20">
+            </div>
+            <div class="form-group">
+              <label for="contentEmail">Correo electrónico</label>
+              <input type="email" id="contentEmail" name="email" maxlength="100">
+            </div>
+            <div class="form-group">
+              <label for="contentWebsite">Sitio web</label>
+              <input type="text" id="contentWebsite" name="website" maxlength="200" placeholder="https://...">
+            </div>
+            <div class="form-group">
+              <label for="contentAddress">Dirección</label>
+              <input type="text" id="contentAddress" name="address" maxlength="300">
+            </div>
+            <div class="form-group">
+              <label for="contentHours">Horario de atención</label>
+              <textarea id="contentHours" name="openingHours" rows="2" maxlength="500"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="contentCtaText">Texto del botón</label>
+              <input type="text" id="contentCtaText" name="ctaText" maxlength="50">
+            </div>
+            <div class="form-group">
+              <label for="contentCtaUrl">URL del botón</label>
+              <input type="text" id="contentCtaUrl" name="ctaUrl" maxlength="200" placeholder="/reserva">
+            </div>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+              <button type="submit" class="btn btn-primary">Guardar borrador</button>
+              <button type="button" class="btn" id="previewContentBtn" style="background:#e5e7eb;color:#374151;">Vista previa</button>
+              <button type="button" class="btn" id="publishContentBtn" style="background:#059669;color:white;">Publicar cambios</button>
+              <button type="button" class="btn btn-danger" id="discardContentBtn">Descartar cambios</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section id="media" class="section">
+        <div class="card">
+          <h2>Multimedia</h2>
+          <div id="mediaUpload" style="margin-bottom:1rem;">
+            <form id="mediaUploadForm" enctype="multipart/form-data" style="display:flex;gap:0.5rem;align-items:center;">
+              <input type="file" id="mediaFile" name="file" accept="image/jpeg,image/png,image/webp" style="flex:1;">
+              <button type="submit" class="btn btn-primary">Subir imagen</button>
+            </form>
+            <div id="mediaUploadStatus" style="margin-top:0.5rem;font-size:0.875rem;"></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:1rem;">
+          <h3>Imagen destacada</h3>
+          <div id="featuredImage">
+            <div class="empty-state">No hay imagen destacada</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:1rem;">
+          <h3>Galería</h3>
+          <div id="mediaGallery">
+            <div class="empty-state">No hay imágenes en la galería</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="inbox" class="section">
+        <div class="card">
+          <h2>Bandeja de Entrada</h2>
+          <div id="inboxList">
+            <div class="empty-state">No hay mensajes</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="quotes" class="section">
+        <div class="card">
+          <h2>Cotizaciones</h2>
+          <div id="quotesList">
+            <div class="empty-state">No hay cotizaciones</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="notifications" class="section">
+        <div class="card">
+          <h2>Notificaciones</h2>
+          <div class="stats">
+            <div class="stat">
+              <div class="stat-value" id="pushSubscribers">-</div>
+              <div class="stat-label">Suscriptores activos</div>
+            </div>
+          </div>
+          <button class="btn btn-primary" id="newCampaignBtn" style="margin: 1rem 0;">Nueva notificación</button>
+        </div>
+
+        <div class="card" style="margin-top: 1rem;">
+          <h3>Últimos envíos</h3>
+          <div id="campaignList">
+            <div class="empty-state">No hay campañas enviadas</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const API_BASE = '/api/v1/owner'
+    const OWNER_SESSION_TOKEN_KEY = 'turistic_owner_session_token'
+    let currentToken = sessionStorage.getItem(OWNER_SESSION_TOKEN_KEY) || null
+    let currentSession = null
+
+    function ownerFetch(url, options = {}) {
+      if (!currentToken) {
+        return Promise.reject(new Error('No autenticado'))
+      }
+      return fetch(url, {
+        ...options,
+        headers: {
+          ...options.headers,
+          Authorization: `Bearer ${currentToken}`
+        }
+      })
+    }
+
+    const loginPage = document.getElementById('loginPage')
+    const dashboard = document.getElementById('dashboard')
+    const loginForm = document.getElementById('loginForm')
+    const loginError = document.getElementById('loginError')
+    const loginBtn = document.getElementById('loginBtn')
+    const logoutBtn = document.getElementById('logoutBtn')
+
+    async function checkSession() {
+      if (!currentToken) {
+        showLogin()
+        return
+      }
+      try {
+        const res = await ownerFetch(`${API_BASE}/me`)
+        if (res.ok) {
+          const data = await res.json()
+          showDashboard(data.owner)
+        } else if (res.status === 401) {
+          sessionStorage.removeItem(OWNER_SESSION_TOKEN_KEY)
+          currentToken = null
+          showLogin()
+        } else {
+          showLogin()
+        }
+      } catch {
+        showLogin()
+      }
+    }
+
+    function showLogin() {
+      loginPage.style.display = 'flex'
+      dashboard.classList.remove('active')
+    }
+
+    function showDashboard(owner) {
+      currentSession = owner
+      loginPage.style.display = 'none'
+      dashboard.classList.add('active')
+
+      document.getElementById('userName').textContent = owner.name || owner.email
+      document.getElementById('appId').textContent = owner.applicationId
+
+      const caps = owner.applicationId.includes('albasie')
+        ? ['quote', 'gallery', 'contact', 'pwa']
+        : ['pwa']
+
+      const capsContainer = document.getElementById('capabilities')
+      capsContainer.innerHTML = caps.map(c =>
+        `<span class="capability-badge enabled">${c}</span>`
+      ).join('')
+    }
+
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault()
+      loginError.style.display = 'none'
+      loginBtn.disabled = true
+
+      const email = document.getElementById('email').value
+      const password = document.getElementById('password').value
+
+      try {
+        const res = await fetch(`${API_BASE}/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        })
+
+        const data = await res.json()
+
+        if (res.ok && data.success) {
+          currentToken = data.session.id
+          sessionStorage.setItem(OWNER_SESSION_TOKEN_KEY, currentToken)
+          showDashboard(data.session)
+        } else {
+          loginError.textContent = data.message || data.error || 'Error de autenticación'
+          loginError.style.display = 'block'
+        }
+      } catch (err) {
+        loginError.textContent = 'Error de conexión'
+        loginError.style.display = 'block'
+      } finally {
+        loginBtn.disabled = false
+      }
+    })
+
+    logoutBtn.addEventListener('click', async () => {
+      if (currentToken) {
+        try {
+          const res = await ownerFetch(`${API_BASE}/logout`, { method: 'POST' })
+          if (res.ok || res.status === 401) {
+            sessionStorage.removeItem(OWNER_SESSION_TOKEN_KEY)
+            currentToken = null
+            showLogin()
+          } else if (res.status === 503) {
+            alert('Error de conexión con el servidor. Intente nuevamente.')
+          }
+        } catch {
+          alert('Error de conexión. El token se preservó.')
+        }
+      } else {
+        showLogin()
+      }
+    })
+
+    document.querySelectorAll('.nav-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'))
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'))
+        btn.classList.add('active')
+        document.getElementById(btn.dataset.section).classList.add('active')
+      })
+    })
+
+    document.getElementById('businessForm').addEventListener('submit', async (e) => {
+      e.preventDefault()
+      const formData = new FormData(e.target)
+      const data = Object.fromEntries(formData)
+
+      try {
+        const res = await ownerFetch(`${API_BASE}/business`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        })
+
+        if (res.ok) {
+          alert('Cambios guardados')
+        } else {
+          const err = await res.json()
+          alert('Error: ' + (err.message || 'Error desconocido'))
+        }
+      } catch {
+        alert('Error de conexión')
+      }
+    })
+
+    checkSession()
+
+    async function loadPushStatus() {
+      try {
+        const res = await ownerFetch(`${API_BASE}/push`)
+        if (res.ok) {
+          const data = await res.json()
+          document.getElementById('pushSubscribers').textContent = data.push?.subscribers || 0
+        }
+      } catch {}
+    }
+
+    async function loadCampaigns() {
+      try {
+        const res = await ownerFetch(`${API_BASE}/push/campaigns`)
+        if (res.ok) {
+          const data = await res.json()
+          const container = document.getElementById('campaignList')
+          if (data.campaigns && data.campaigns.length > 0) {
+            container.innerHTML = `
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Título</th>
+                    <th>Estado</th>
+                    <th>Audiencia</th>
+                    <th>Enviados</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${data.campaigns.map(c => `
+                    <tr>
+                      <td>${new Date(c.createdAt).toLocaleDateString('es-ES')}</td>
+                      <td>${escapeHtml(c.title)}</td>
+                      <td><span class="status-badge ${getStatusClass(c.status)}">${getStatusLabel(c.status)}</span></td>
+                      <td>${c.audienceCount || 0}</td>
+                      <td>${c.sent || 0}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            `
+          } else {
+            container.innerHTML = '<div class="empty-state">No hay campañas enviadas</div>'
+          }
+        }
+      } catch {}
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div')
+      div.textContent = text
+      return div.innerHTML
+    }
+
+    function getStatusClass(status) {
+      const map = {
+        'draft': '',
+        'sending': 'active',
+        'sent': 'active',
+        'partial': 'active',
+        'failed': ''
+      }
+      return map[status] || ''
+    }
+
+    function getStatusLabel(status) {
+      const map = {
+        'draft': 'Borrador',
+        'sending': 'Enviando',
+        'sent': 'Enviada',
+        'partial': 'Envío parcial',
+        'failed': 'Fallida'
+      }
+      return map[status] || status
+    }
+
+    document.getElementById('newCampaignBtn').addEventListener('click', () => {
+      showCampaignModal()
+    })
+
+    function showCampaignModal(campaign = null) {
+      const isEdit = campaign !== null
+      const modal = document.createElement('div')
+      modal.id = 'campaignModal'
+      modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000;'
+      modal.innerHTML = `
+        <div style="background:white;padding:2rem;border-radius:0.5rem;width:100%;max-width:500px;max-height:90vh;overflow-y:auto;">
+          <h2 style="margin-bottom:1rem;">${isEdit ? 'Editar' : 'Nueva'} Notificación</h2>
+          <form id="campaignForm">
+            <div class="form-group">
+              <label for="campaignTitle">Título (máx. 80 caracteres)</label>
+              <input type="text" id="campaignTitle" name="title" maxlength="80" required value="${isEdit ? escapeHtml(campaign.title) : ''}">
+            </div>
+            <div class="form-group">
+              <label for="campaignBody">Mensaje (máx. 240 caracteres)</label>
+              <textarea id="campaignBody" name="body" rows="3" maxlength="240" required>${isEdit ? escapeHtml(campaign.body) : ''}</textarea>
+            </div>
+            <div class="form-group">
+              <label for="campaignUrl">URL de destino</label>
+              <input type="text" id="campaignUrl" name="url" value="${isEdit ? escapeHtml(campaign.url || '/') : '/'}">
+            </div>
+            <div id="campaignError" style="color:#dc2626;margin-bottom:1rem;display:none;"></div>
+            <div style="display:flex;gap:0.5rem;justify-content:flex-end;">
+              <button type="button" class="btn" id="cancelCampaignBtn" style="background:#e5e7eb;color:#374151;">Cancelar</button>
+              <button type="submit" class="btn btn-primary">Vista previa</button>
+            </div>
+          </form>
+        </div>
+      `
+      document.body.appendChild(modal)
+
+      document.getElementById('cancelCampaignBtn').addEventListener('click', () => {
+        modal.remove()
+      })
+
+      document.getElementById('campaignForm').addEventListener('submit', async (e) => {
+        e.preventDefault()
+        const title = document.getElementById('campaignTitle').value.trim()
+        const body = document.getElementById('campaignBody').value.trim()
+        const url = document.getElementById('campaignUrl').value.trim()
+
+        if (!title || !body) {
+          const err = document.getElementById('campaignError')
+          err.textContent = 'Título y mensaje son requeridos'
+          err.style.display = 'block'
+          return
+        }
+
+        if (!isEdit) {
+          try {
+            const res = await ownerFetch(`${API_BASE}/push/campaigns`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ title, body, url })
+            })
+            const data = await res.json()
+            if (!res.ok || !data.success) {
+              const err = document.getElementById('campaignError')
+              err.textContent = data.error || 'Error al crear campaña'
+              err.style.display = 'block'
+              return
+            }
+            campaign = data.campaign
+          } catch (err) {
+            const errEl = document.getElementById('campaignError')
+            errEl.textContent = 'Error de conexión'
+            errEl.style.display = 'block'
+            return
+          }
+        }
+
+        modal.remove()
+        showPreviewModal(campaign)
+      })
+    }
+
+    function showPreviewModal(campaign) {
+      const modal = document.createElement('div')
+      modal.id = 'previewModal'
+      modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000;'
+      modal.innerHTML = `
+        <div style="background:white;padding:2rem;border-radius:0.5rem;width:100%;max-width:400px;">
+          <h2 style="margin-bottom:1rem;">Vista previa</h2>
+          <div style="background:#f3f4f6;padding:1rem;border-radius:0.375rem;margin-bottom:1rem;">
+            <div style="font-size:0.75rem;color:#6b7280;margin-bottom:0.25rem;">${campaign.applicationId?.split('/')[1] || 'App'}</div>
+            <div style="font-weight:600;margin-bottom:0.5rem;">${escapeHtml(campaign.title)}</div>
+            <div style="font-size:0.875rem;color:#374151;">${escapeHtml(campaign.body)}</div>
+          </div>
+          <p style="margin-bottom:1rem;font-size:0.875rem;color:#6b7280;">
+            Se enviará a <strong>${campaign.audienceCount || 0}</strong> suscriptores.
+          </p>
+          <div style="display:flex;gap:0.5rem;justify-content:flex-end;">
+            <button type="button" class="btn" id="cancelPreviewBtn" style="background:#e5e7eb;color:#374151;">Cancelar</button>
+            <button type="button" class="btn btn-primary" id="confirmSendBtn" style="background:#059669;">Enviar</button>
+          </div>
+        </div>
+      `
+      document.body.appendChild(modal)
+
+      document.getElementById('cancelPreviewBtn').addEventListener('click', () => {
+        modal.remove()
+      })
+
+      document.getElementById('confirmSendBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('confirmSendBtn')
+        btn.disabled = true
+        btn.textContent = 'Enviando...'
+
+        try {
+          const res = await ownerFetch(`${API_BASE}/push/campaigns/${campaign.id}/send`, {
+            method: 'POST'
+          })
+          const data = await res.json()
+          if (res.ok && data.success) {
+            modal.remove()
+            loadCampaigns()
+            loadPushStatus()
+          } else {
+            alert('Error: ' + (data.error || 'Error al enviar'))
+            btn.disabled = false
+            btn.textContent = 'Enviar'
+          }
+        } catch {
+          alert('Error de conexión')
+          btn.disabled = false
+          btn.textContent = 'Enviar'
+        }
+      })
+    }
+
+    const navItems = document.querySelectorAll('.nav-item')
+    navItems.forEach(btn => {
+      btn.addEventListener('click', () => {
+        navItems.forEach(b => b.classList.remove('active'))
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'))
+        btn.classList.add('active')
+        document.getElementById(btn.dataset.section).classList.add('active')
+
+        if (btn.dataset.section === 'notifications') {
+          loadPushStatus()
+          loadCampaigns()
+        }
+        if (btn.dataset.section === 'content') {
+          loadContent()
+        }
+        if (btn.dataset.section === 'media') {
+          loadMedia()
+        }
+        if (btn.dataset.section === 'business') {
+          loadBusiness()
+        }
+      })
+    })
+
+    async function loadContent() {
+      try {
+        const res = await ownerFetch(`${API_BASE}/content`)
+        if (res.ok) {
+          const data = await res.json()
+          const statusEl = document.getElementById('contentStatusLabel')
+          if (data.isPublished) {
+            statusEl.textContent = 'Publicado'
+            statusEl.style.color = '#059669'
+          } else {
+            statusEl.textContent = 'Borrador'
+            statusEl.style.color = '#6b7280'
+          }
+          if (data.content && data.content.fields) {
+            const fields = data.content.fields
+            document.getElementById('contentBusinessName').value = fields.businessName || ''
+            document.getElementById('contentShortDescription').value = fields.shortDescription || ''
+            document.getElementById('contentDescription').value = fields.description || ''
+            document.getElementById('contentPhone').value = fields.phone || ''
+            document.getElementById('contentEmail').value = fields.email || ''
+            document.getElementById('contentWebsite').value = fields.website || ''
+            document.getElementById('contentAddress').value = fields.address || ''
+            document.getElementById('contentHours').value = fields.openingHours || ''
+            document.getElementById('contentCtaText').value = fields.ctaText || ''
+            document.getElementById('contentCtaUrl').value = fields.ctaUrl || ''
+          }
+        }
+      } catch {}
+    }
+
+    async function loadBusiness() {
+      try {
+        const res = await ownerFetch(`${API_BASE}/business`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.business) {
+            document.getElementById('businessName').value = data.business.name || ''
+            document.getElementById('description').value = data.business.description || ''
+            document.getElementById('contactPhone').value = data.business.contactPhone || ''
+            document.getElementById('contactEmail').value = data.business.contactEmail || ''
+          } else {
+            document.getElementById('businessName').value = ''
+            document.getElementById('description').value = ''
+            document.getElementById('contactPhone').value = ''
+            document.getElementById('contactEmail').value = ''
+          }
+        }
+      } catch {}
+    }
+
+    document.getElementById('contentForm').addEventListener('submit', async (e) => {
+      e.preventDefault()
+      const formData = new FormData(e.target)
+      const data = Object.fromEntries(formData)
+
+      try {
+        const res = await ownerFetch(`${API_BASE}/content/draft`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        })
+
+        if (res.ok) {
+          const statusEl = document.getElementById('contentStatusLabel')
+          statusEl.textContent = 'Borrador guardado'
+          statusEl.style.color = '#2563eb'
+          loadContent()
+        } else {
+          const err = await res.json()
+          alert('Error: ' + (err.error || 'Error desconocido'))
+        }
+      } catch {
+        alert('Error de conexión')
+      }
+    })
+
+    document.getElementById('previewContentBtn').addEventListener('click', async () => {
+      try {
+        const res = await ownerFetch(`${API_BASE}/content/preview`)
+        if (res.ok) {
+          const data = await res.json()
+          alert('Vista previa: ' + (data.isDraft ? 'Tiene cambios sin publicar' : 'Sin cambios'))
+        }
+      } catch {
+        alert('Error de conexión')
+      }
+    })
+
+    document.getElementById('publishContentBtn').addEventListener('click', async () => {
+      if (!confirm('¿Publicar los cambios? Esta acción hará los cambios visibles para los visitantes.')) {
+        return
+      }
+
+      try {
+        const res = await ownerFetch(`${API_BASE}/content/publish`, {
+          method: 'POST'
+        })
+
+        if (res.ok) {
+          const statusEl = document.getElementById('contentStatusLabel')
+          statusEl.textContent = 'Publicado'
+          statusEl.style.color = '#059669'
+          loadContent()
+          alert('Cambios publicados exitosamente')
+        } else {
+          const err = await res.json()
+          alert('Error: ' + (err.error || 'Error al publicar'))
+        }
+      } catch {
+        alert('Error de conexión')
+      }
+    })
+
+    document.getElementById('discardContentBtn').addEventListener('click', async () => {
+      if (!confirm('¿Descartar todos los cambios?')) {
+        return
+      }
+
+      try {
+        const res = await ownerFetch(`${API_BASE}/content/draft`, {
+          method: 'DELETE'
+        })
+
+        if (res.ok) {
+          loadContent()
+          alert('Cambios descartados')
+        } else {
+          const err = await res.json()
+          alert('Error: ' + (err.error || 'Error al descartar'))
+        }
+      } catch {
+        alert('Error de conexión')
+      }
+    })
+
+    async function loadMedia() {
+      try {
+        const res = await ownerFetch(`${API_BASE}/media`)
+        if (res.ok) {
+          const data = await res.json()
+          renderFeaturedImage(data.featured)
+          renderGallery(data.media || [])
+        }
+      } catch {}
+    }
+
+    function renderFeaturedImage(featured) {
+      const container = document.getElementById('featuredImage')
+      if (!featured) {
+        container.innerHTML = '<div class="empty-state">No hay imagen destacada</div>'
+        return
+      }
+      container.innerHTML = `
+        <div style="display:flex;gap:1rem;align-items:center;">
+          <img src="${featured.url}" alt="${escapeHtml(featured.originalName || '')}" style="max-width:200px;max-height:150px;object-fit:cover;border-radius:0.375rem;">
+          <div>
+            <p style="font-size:0.875rem;color:#6b7280;margin-bottom:0.5rem;">${escapeHtml(featured.originalName || '')}</p>
+            <button type="button" class="btn btn-danger" onclick="removeFeatured()">Quitar como destacada</button>
+          </div>
+        </div>
+      `
+    }
+
+    function renderGallery(media) {
+      const container = document.getElementById('mediaGallery')
+      if (media.length === 0) {
+        container.innerHTML = '<div class="empty-state">No hay imágenes en la galería</div>'
+        return
+      }
+      container.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:1rem;">
+          ${media.map(m => `
+            <div style="position:relative;border:1px solid #e5e7eb;border-radius:0.375rem;overflow:hidden;">
+              <img src="${m.url}" alt="${escapeHtml(m.originalName || '')}" style="width:100%;aspect-ratio:1;object-fit:cover;">
+              <div style="position:absolute;top:0.25rem;right:0.25rem;display:flex;gap:0.25rem;">
+                ${!m.isFeatured ? `<button type="button" class="btn" style="padding:0.25rem;background:rgba(255,255,255,0.9);" onclick="setFeatured('${m.id}')" title="Usar como destacada">★</button>` : ''}
+                ${m.galleryOrder === null ? `<button type="button" class="btn" style="padding:0.25rem;background:rgba(255,255,255,0.9);" onclick="addToGallery('${m.id}')" title="Agregar a galería">+</button>` : `<button type="button" class="btn" style="padding:0.25rem;background:rgba(255,255,255,0.9);" onclick="removeFromGallery('${m.id}')" title="Quitar de galería">−</button>`}
+                <button type="button" class="btn" style="padding:0.25rem;background:rgba(255,255,255,0.9);" onclick="deleteMedia('${m.id}')" title="Eliminar">✕</button>
+              </div>
+              ${m.isFeatured ? '<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(5,150,105,0.9);color:white;text-align:center;font-size:0.75rem;padding:0.25rem;">Destacada</div>' : ''}
+            </div>
+          `).join('')}
+        </div>
+      `
+    }
+
+    window.setFeatured = async function(mediaId) {
+      try {
+        const res = await ownerFetch(`${API_BASE}/media/${mediaId}/featured`, {
+          method: 'POST'
+        })
+        if (res.ok) {
+          loadMedia()
+        }
+      } catch {}
+    }
+
+    window.removeFeatured = async function() {
+      try {
+        const res = await ownerFetch(`${API_BASE}/media/featured`, {
+          method: 'DELETE'
+        })
+        if (res.ok) {
+          loadMedia()
+        }
+      } catch {}
+    }
+
+    window.addToGallery = async function(mediaId) {
+      try {
+        const res = await ownerFetch(`${API_BASE}/media/${mediaId}/gallery`, {
+          method: 'POST'
+        })
+        if (res.ok) {
+          loadMedia()
+        }
+      } catch {}
+    }
+
+    window.removeFromGallery = async function(mediaId) {
+      try {
+        const res = await ownerFetch(`${API_BASE}/media/${mediaId}/gallery`, {
+          method: 'DELETE'
+        })
+        if (res.ok) {
+          loadMedia()
+        }
+      } catch {}
+    }
+
+    window.deleteMedia = async function(mediaId) {
+      if (!confirm('¿Eliminar esta imagen?')) {
+        return
+      }
+      try {
+        const res = await ownerFetch(`${API_BASE}/media/${mediaId}`, {
+          method: 'DELETE'
+        })
+        if (res.ok) {
+          loadMedia()
+        } else {
+          const data = await res.json()
+          alert('Error: ' + (data.error || 'No se puede eliminar'))
+        }
+      } catch {}
+    }
+
+    document.getElementById('mediaUploadForm').addEventListener('submit', async (e) => {
+      e.preventDefault()
+      const statusEl = document.getElementById('mediaUploadStatus')
+      const fileInput = document.getElementById('mediaFile')
+      const file = fileInput.files[0]
+
+      if (!file) {
+        statusEl.textContent = 'Seleccione una imagen'
+        statusEl.style.color = '#dc2626'
+        return
+      }
+
+      statusEl.textContent = 'Subiendo...'
+      statusEl.style.color = '#6b7280'
+
+      const formData = new FormData()
+      formData.append('file', file)
+
+      try {
+        const res = await ownerFetch(`${API_BASE}/media`, {
+          method: 'POST',
+          body: formData
+        })
+
+        if (res.ok) {
+          statusEl.textContent = 'Imagen subida exitosamente'
+          statusEl.style.color = '#059669'
+          fileInput.value = ''
+          loadMedia()
+        } else {
+          const data = await res.json()
+          statusEl.textContent = 'Error: ' + (data.error || 'Error al subir')
+          statusEl.style.color = '#dc2626'
+        }
+      } catch {
+        statusEl.textContent = 'Error de conexión'
+        statusEl.style.color = '#dc2626'
+      }
+    })
+  </script>
+</body>
+</html>
