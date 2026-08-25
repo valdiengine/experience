@@ -1,7 +1,7 @@
 # CURRENT_STATE.md
 
 > Exact snapshot of project state. Update after each completed phase.
-> Last updated: **PLATFORM v4.4 — OWNER-SESSION-2 COMPLETE** (2026-08-24)
+> Last updated: **PLATFORM v4.5 — OWNER-SESSION-3 COMPLETE** (2026-08-24)
 
 ## Platform Status
 
@@ -142,6 +142,7 @@
 | 103 | OWNER-SESSION-0 | Infrastructure Discovery / Persistence & Security Contract | Owner |
 | 104 | OWNER-SESSION-1 | Persistent Owner Identity + Persistent Application Grants | Owner |
 | 105 | OWNER-SESSION-2 | Persistent Sessions / Multi-Process Session Persistence | Owner |
+| 106 | OWNER-SESSION-3 | Session Lifecycle Management + Operational Cleanup | Owner |
 
 ## Registered Capabilities (32)
 
@@ -997,3 +998,132 @@ authorizeRequest({ userId, applicationId })
 - web/owner-stage-1-1-wiring.test.js: 12 PASS, 0 FAIL
 - web/owner-stage-2-e2e.test.js: 20 PASS, 0 FAIL
 - **Total: 214 PASS, 0 FAIL**
+
+---
+
+## OWNER-SESSION-3 — Session Lifecycle Management + Operational Cleanup
+
+### What Changed
+
+1. **Gate 1 — Account State Enforcement**: Reject authentication when `users.status` is not `'active'`, regardless of session validity
+2. **Gate 2 — Session Lifecycle Repository**: Added `findActiveSessionsForUser`, `revokeSessionByIdForUser`, `revokeAllOtherSessionsForUser`
+3. **Gate 3 — Session Management API**: GET/DELETE/POST endpoints for session listing and revocation
+4. **Gate 4 — Owner Portal UI**: "Sesiones" section with current/other session display and revoke controls
+5. **Gate 5 — Operational Cleanup**: Hourly cron job removes expired `active` rows via `cleanupExpiredSessions()`
+
+### Current Owner Architecture
+
+**Persistent (PostgreSQL):**
+- Owner identity (email, name, **status**) — `public.users`
+- Password hash (scrypt) — `public.users`
+- Application grants (role, permissions) — `owner_application_grants`
+- Session tokens (SHA256 hash) — `owner_sessions`
+- Session UUIDs (PostgreSQL-generated) — `owner_sessions`
+
+**Browser (sessionStorage):**
+- Raw Bearer token for HTTP authentication
+- Survives page reload/navigation
+- Cleared on logout or 401
+
+### Account State Enforcement
+
+| Account Status | Behavior |
+|---------------|----------|
+| `active` | Proceed to authorization |
+| `disabled` | Reject authentication (401) |
+| `locked` | Reject authentication (401) |
+| `null` | Reject authentication (401) |
+
+Account status checked BEFORE grant authorization. Authentication vs authorization boundary preserved.
+
+### Session Repository Additions
+
+**findActiveSessionsForUser(userId)** — Lists active, non-expired sessions with safe fields only (id, application_id, created_at, expires_at, status). Never exposes token_hash.
+
+**revokeSessionByIdForUser(sessionId, userId)** — Atomically revokes session with dual-key ownership enforcement (id + user_id). Returns null for all zero-row cases without distinguishing which.
+
+**revokeAllOtherSessionsForUser(userId, currentSessionId)** — Atomically revokes all sessions for user except current. Uses PostgreSQL UUID for identity, not Bearer token.
+
+### Non-Disclosure Contract
+
+DELETE returns 200 for nonexistent/foreign/revoked/expired UUIDs. No way to enumerate other users' sessions via API. Ownership enforced atomically.
+
+### Session API Endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/v1/owner/sessions` | List active sessions |
+| DELETE | `/api/v1/owner/sessions/:sessionId` | Revoke specific session |
+| POST | `/api/v1/owner/sessions/revoke-others` | Revoke all other sessions |
+
+### Owner Portal Sesiones Section
+
+- "Esta sesión" badge for current session (green)
+- "Sesión activa" badge for other sessions (blue)
+- Local browser time formatting via `Intl.DateTimeFormat`
+- applicationId displayed safely (escaped)
+- Current session: no individual revoke button
+- Other sessions: "Cerrar sesión" button
+- "Cerrar las demás sesiones" global action button
+
+### 401/403/503 Handling
+
+| Response | Token Behavior |
+|----------|----------------|
+| 401 | Clears sessionStorage, shows login |
+| 403 | Preserves token, shows error |
+| 503 | Preserves token, shows error |
+| Network error | Preserves token, shows error |
+
+### Operational Cleanup
+
+- `scripts/maintenance/cleanup-expired-owner-sessions.js`
+- Removes expired rows still marked `status = 'active'`
+- Uses existing `cleanupExpiredSessions()` repository function
+- Hourly via cPanel cron
+- Protected environment file: `/home/rodrigo/etc/owner-session-env`
+- Wrapper script: `/home/rodrigo/bin/run-owner-session-cleanup.sh`
+
+### ESM Import Path Defect / Correction
+
+**Defect:** Original script used `../database/...` which resolved to `scripts/database/` (wrong).
+
+**Correction:** Changed to `../../database/...` to reach project root from `scripts/maintenance/`.
+
+**Why process.chdir() didn't fix:** ESM `import()` resolves relative to `import.meta.url`, not `process.cwd()`.
+
+### Files Created
+
+| File | Purpose |
+|------|---------|
+| `scripts/maintenance/cleanup-expired-owner-sessions.js` | Operational cleanup command |
+| `docs/owner/OWNER_SESSION_3_FINAL_REPORT.md` | This completion report |
+
+### Files Modified
+
+| File | Gates | Change |
+|------|-------|--------|
+| `web/owner/owner.auth.js` | 1 | Added `status` to `getSessionOwner()` return |
+| `web/owner/owner.middleware.js` | 1 | Added account-state enforcement check |
+| `web/owner/repositories/owner-session.repository.js` | 2 | Added 3 new repository functions |
+| `web/owner/owner.api.js` | 3 | Added session management handlers/routes |
+| `web/owner/owner-portal.html` | 4 | Added Sesiones nav and UI |
+| `owner-session-2.test.js` | 1-5 | Added 77 new tests |
+
+### Physical Staging Certification
+
+- Two simultaneous sessions created and verified in PostgreSQL
+- Revoke-one: Session B revoked, Session A remained authenticated
+- Revoke-others: All other sessions revoked, Session A remained
+- Passenger restart: Session A re-authenticated via sessionStorage + PostgreSQL
+- Cleanup command: `deleted=0` confirmed, idempotent execution verified
+- CRLF wrapper defect discovered and corrected
+
+### Test Evidence
+
+- owner-session-1.test.js: 73 PASS, 0 FAIL
+- owner-session-2.test.js: 174 PASS, 0 FAIL
+- web/owner-1.test.js: 40 PASS, 0 FAIL
+- web/owner-stage-1-1-wiring.test.js: 12 PASS, 0 FAIL
+- web/owner-stage-2-e2e.test.js: 20 PASS, 0 FAIL
+- **Total: 319 PASS, 0 FAIL**

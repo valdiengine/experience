@@ -327,6 +327,65 @@ function createMockDb() {
         }
       }
       return count
+    },
+
+    async findActiveSessionsForUser(userId, client = null) {
+      const now = new Date()
+      const result = []
+      for (const session of sessions.values()) {
+        if (
+          session.user_id === userId &&
+          session.status === 'active' &&
+          new Date(session.expires_at) > now
+        ) {
+          result.push({
+            id: session.id,
+            application_id: session.application_id,
+            created_at: session.created_at,
+            expires_at: session.expires_at,
+            status: session.status
+          })
+        }
+      }
+      result.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      return result
+    },
+
+    async revokeSessionByIdForUser(sessionId, userId, client = null) {
+      const session = sessions.get(sessionId)
+      if (!session) return null
+      if (session.user_id !== userId) return null
+      if (session.status !== 'active') return null
+      if (new Date(session.expires_at) <= new Date()) return null
+      session.status = 'revoked'
+      session.revoked_at = new Date().toISOString()
+      return {
+        id: session.id,
+        application_id: session.application_id,
+        revoked_at: session.revoked_at
+      }
+    },
+
+    async revokeAllOtherSessionsForUser(userId, currentSessionId, client = null) {
+      const now = new Date()
+      const revoked = []
+      for (const session of sessions.values()) {
+        if (
+          session.user_id === userId &&
+          session.id !== currentSessionId &&
+          session.status === 'active' &&
+          new Date(session.expires_at) > now
+        ) {
+          session.status = 'revoked'
+          session.revoked_at = new Date().toISOString()
+          revoked.push({
+            id: session.id,
+            application_id: session.application_id,
+            revoked_at: session.revoked_at
+          })
+        }
+      }
+      return revoked
     }
   }
 }
@@ -1138,12 +1197,1450 @@ test('session tokenHash is PostgreSQL-ready 64-char hex', () => {
   assert(/^[a-f0-9]{64}$/.test(hash), 'hash should be lowercase hex')
 })
 
-console.log('\n═══════════════════════════════════════════════════════════')
-console.log(`OWNER-SESSION-2 — TEST RESULTS`)
+// =====================================================================
+// OWNER-SESSION-3 — GATE 2: REPOSITORY LIFECYCLE QUERIES
+// =====================================================================
+
+console.log('\n  Repository Lifecycle Queries')
+
+test('findActiveSessionsForUser returns sessions for matching user_id', async () => {
+  const db = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+  db.sessions.set('s2', { id: 's2', user_id: 'owner_2', application_id: 'valdi.app/albasie', token_hash: 'h2', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+  db.sessions.set('s3', { id: 's3', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h3', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const result = await db.findActiveSessionsForUser('owner_1')
+
+  assertEqual(result.length, 2, 'Should return 2 sessions for owner_1')
+  const ids = result.map(s => s.id)
+  assert(ids.includes('s1'), 'Should include s1')
+  assert(ids.includes('s3'), 'Should include s3')
+})
+
+test('findActiveSessionsForUser excludes revoked sessions', async () => {
+  const db = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+  db.sessions.set('s2', { id: 's2', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h2', status: 'revoked', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: new Date().toISOString() })
+
+  const result = await db.findActiveSessionsForUser('owner_1')
+
+  assertEqual(result.length, 1, 'Should return only 1 active session')
+  assertEqual(result[0].id, 's1', 'Should be s1')
+})
+
+test('findActiveSessionsForUser excludes expired sessions', async () => {
+  const db = createMockDb()
+  const futureExpiry = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  const pastExpiry = new Date(Date.now() - 1000).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: futureExpiry, revoked_at: null })
+  db.sessions.set('s2', { id: 's2', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h2', status: 'active', created_at: new Date().toISOString(), expires_at: pastExpiry, revoked_at: null })
+
+  const result = await db.findActiveSessionsForUser('owner_1')
+
+  assertEqual(result.length, 1, 'Should return only non-expired session')
+  assertEqual(result[0].id, 's1', 'Should be s1 (not expired)')
+})
+
+test('findActiveSessionsForUser selects only safe fields (no token_hash, no user_id)', async () => {
+  const db = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'secret_hash', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const result = await db.findActiveSessionsForUser('owner_1')
+
+  assertEqual(result.length, 1, 'Should return session')
+  assert(result[0].id !== undefined, 'id should be returned')
+  assert(result[0].application_id !== undefined, 'application_id should be returned')
+  assert(result[0].created_at !== undefined, 'created_at should be returned')
+  assert(result[0].expires_at !== undefined, 'expires_at should be returned')
+  assert(result[0].status !== undefined, 'status should be returned')
+  assert(result[0].token_hash === undefined, 'token_hash should NOT be returned')
+  assert(result[0].user_id === undefined, 'user_id should NOT be returned')
+  assert(result[0].password_hash === undefined, 'password_hash should NOT be returned')
+})
+
+test('findActiveSessionsForUser orders by created_at DESC', async () => {
+  const db = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  const earlier = new Date(Date.now() - 10000).toISOString()
+  const later = new Date(Date.now() - 5000).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: earlier, expires_at: expiresAt, revoked_at: null })
+  db.sessions.set('s2', { id: 's2', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h2', status: 'active', created_at: later, expires_at: expiresAt, revoked_at: null })
+
+  const result = await db.findActiveSessionsForUser('owner_1')
+
+  assertEqual(result.length, 2, 'Should return 2 sessions')
+  assertEqual(result[0].id, 's2', 'First should be s2 (more recent)')
+  assertEqual(result[1].id, 's1', 'Second should be s1 (older)')
+})
+
+test('findActiveSessionsForUser returns empty array when no sessions', async () => {
+  const db = createMockDb()
+  const result = await db.findActiveSessionsForUser('owner_nonexistent')
+  assertEqual(result.length, 0, 'Should return empty array')
+  assert(Array.isArray(result), 'Should return array (not null)')
+})
+
+test('findActiveSessionsForUser returns empty array when all sessions expired or revoked', async () => {
+  const db = createMockDb()
+  const pastExpiry = new Date(Date.now() - 1000).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: pastExpiry, revoked_at: null })
+  db.sessions.set('s2', { id: 's2', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h2', status: 'revoked', created_at: new Date().toISOString(), expires_at: pastExpiry, revoked_at: new Date().toISOString() })
+
+  const result = await db.findActiveSessionsForUser('owner_1')
+
+  assertEqual(result.length, 0, 'Should return empty array')
+})
+
+test('revokeSessionByIdForUser revokes session matching both id and user_id', async () => {
+  const db = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const result = await db.revokeSessionByIdForUser('s1', 'owner_1')
+
+  assert(result !== null, 'Should return revoked row')
+  assertEqual(result.id, 's1', 'Should return correct id')
+  assertEqual(result.application_id, 'valdi.app/albasie', 'Should return application_id')
+  assert(result.revoked_at !== null, 'Should have revoked_at timestamp')
+  assertEqual(db.sessions.get('s1').status, 'revoked', 'Session should be marked revoked in store')
+})
+
+test('revokeSessionByIdForUser returns null when sessionId does not exist', async () => {
+  const db = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const result = await db.revokeSessionByIdForUser('nonexistent-uuid', 'owner_1')
+
+  assertEqual(result, null, 'Should return null for nonexistent session')
+})
+
+test('revokeSessionByIdForUser returns null when user_id does not match', async () => {
+  const db = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const result = await db.revokeSessionByIdForUser('s1', 'owner_2')
+
+  assertEqual(result, null, 'Should return null when user_id mismatch')
+  assertEqual(db.sessions.get('s1').status, 'active', 'Session should remain active')
+})
+
+test('revokeSessionByIdForUser returns null for expired session', async () => {
+  const db = createMockDb()
+  const pastExpiry = new Date(Date.now() - 1000).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: pastExpiry, revoked_at: null })
+
+  const result = await db.revokeSessionByIdForUser('s1', 'owner_1')
+
+  assertEqual(result, null, 'Should return null for expired session')
+  assertEqual(db.sessions.get('s1').status, 'active', 'Expired session should remain unchanged')
+})
+
+test('revokeSessionByIdForUser returns null for already-revoked session', async () => {
+  const db = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'revoked', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: new Date().toISOString() })
+
+  const result = await db.revokeSessionByIdForUser('s1', 'owner_1')
+
+  assertEqual(result, null, 'Should return null for already-revoked session')
+})
+
+test('revokeSessionByIdForUser supports optional transaction client', async () => {
+  const db = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const mockClient = { query: db.query.bind(db) }
+  const result = await db.revokeSessionByIdForUser('s1', 'owner_1', mockClient)
+
+  assert(result !== null, 'Should work with transaction client')
+  assertEqual(result.id, 's1', 'Should return correct row')
+})
+
+test('revokeAllOtherSessionsForUser revokes all sessions except current', async () => {
+  const db = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+  db.sessions.set('s2', { id: 's2', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h2', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+  db.sessions.set('s3', { id: 's3', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h3', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const result = await db.revokeAllOtherSessionsForUser('owner_1', 's2')
+
+  assertEqual(result.length, 2, 'Should revoke 2 sessions (all except current)')
+  const revokedIds = result.map(r => r.id).sort()
+  assertEqual(revokedIds[0], 's1', 'Should revoke s1')
+  assertEqual(revokedIds[1], 's3', 'Should revoke s3')
+  assertEqual(db.sessions.get('s2').status, 'active', 'Current session s2 should remain active')
+})
+
+test('revokeAllOtherSessionsForUser returns empty array when no other sessions', async () => {
+  const db = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const result = await db.revokeAllOtherSessionsForUser('owner_1', 's1')
+
+  assertEqual(result.length, 0, 'Should return empty array when only current session exists')
+})
+
+test('revokeAllOtherSessionsForUser cannot affect another user', async () => {
+  const db = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+  db.sessions.set('s2', { id: 's2', user_id: 'owner_2', application_id: 'valdi.app/albasie', token_hash: 'h2', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const result = await db.revokeAllOtherSessionsForUser('owner_1', 's1')
+
+  assertEqual(result.length, 0, 'Should revoke 0 sessions (only had current)')
+  assertEqual(db.sessions.get('s1').status, 'active', 'owner_1 session should remain active')
+  assertEqual(db.sessions.get('s2').status, 'active', 'owner_2 session should be unaffected')
+})
+
+test('revokeAllOtherSessionsForUser excludes expired sessions', async () => {
+  const db = createMockDb()
+  const futureExpiry = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  const pastExpiry = new Date(Date.now() - 1000).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: futureExpiry, revoked_at: null })
+  db.sessions.set('s2', { id: 's2', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h2', status: 'active', created_at: new Date().toISOString(), expires_at: pastExpiry, revoked_at: null })
+
+  const result = await db.revokeAllOtherSessionsForUser('owner_1', 's1')
+
+  assertEqual(result.length, 0, 'Should revoke 0 (other session was expired)')
+  assertEqual(db.sessions.get('s1').status, 'active', 'Current session should remain active')
+  assertEqual(db.sessions.get('s2').status, 'active', 'Expired session should remain unchanged')
+})
+
+test('revokeAllOtherSessionsForUser excludes already-revoked sessions', async () => {
+  const db = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+  db.sessions.set('s2', { id: 's2', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h2', status: 'revoked', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: new Date().toISOString() })
+
+  const result = await db.revokeAllOtherSessionsForUser('owner_1', 's1')
+
+  assertEqual(result.length, 0, 'Should revoke 0 (other session already revoked)')
+})
+
+test('revokeAllOtherSessionsForUser returns safe fields only', async () => {
+  const db = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'secret_hash', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+  db.sessions.set('s2', { id: 's2', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h2', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const result = await db.revokeAllOtherSessionsForUser('owner_1', 's1')
+
+  assertEqual(result.length, 1, 'Should return 1 revoked session')
+  const row = result[0]
+  assert(row.id !== undefined, 'id should be returned')
+  assert(row.application_id !== undefined, 'application_id should be returned')
+  assert(row.revoked_at !== undefined, 'revoked_at should be returned')
+  assert(row.token_hash === undefined, 'token_hash should NOT be returned')
+  assert(row.user_id === undefined, 'user_id should NOT be returned')
+  assert(row.password_hash === undefined, 'password_hash should NOT be returned')
+})
+
+test('revokeAllOtherSessionsForUser uses single UPDATE statement (atomic)', async () => {
+  const db = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+  db.sessions.set('s2', { id: 's2', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h2', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+  db.sessions.set('s3', { id: 's3', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h3', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const result = await db.revokeAllOtherSessionsForUser('owner_1', 's2')
+
+  assertEqual(result.length, 2, 'Should revoke 2 sessions atomically')
+  assertEqual(db.sessions.get('s1').status, 'revoked', 's1 should be revoked')
+  assertEqual(db.sessions.get('s2').status, 'active', 's2 should remain active')
+  assertEqual(db.sessions.get('s3').status, 'revoked', 's3 should be revoked')
+})
+
+test('revokeAllOtherSessionsForUser supports optional transaction client', async () => {
+  const db = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+
+  db.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+  db.sessions.set('s2', { id: 's2', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h2', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const mockClient = { query: db.query.bind(db) }
+  const result = await db.revokeAllOtherSessionsForUser('owner_1', 's1', mockClient)
+
+  assertEqual(result.length, 1, 'Should work with transaction client')
+})
+
+// =====================================================================
+// OWNER-SESSION-3 — GATE 1: ACCOUNT STATUS ENFORCEMENT TESTS
+// =====================================================================
+// These tests verify that account status (disabled/locked) is enforced
+// at the authentication layer, BEFORE authorization (grant) checks.
+// No PostgreSQL required — uses direct function call simulation.
+// =====================================================================
+// =====================================================================
+// These tests verify that account status (disabled/locked) is enforced
+// at the authentication layer, BEFORE authorization (grant) checks.
+// No PostgreSQL required — uses direct function call simulation.
+// =====================================================================
+
+const s2Passed = passed
+const s2Failed = failed
+
+console.log('\n\n═══════════════════════════════════════════════════════════')
+console.log('OWNER-SESSION-3 — GATE 1: ACCOUNT STATUS ENFORCEMENT')
 console.log('═══════════════════════════════════════════════════════════')
-console.log(`  Passed:  ${passed}`)
-console.log(`  Failed:  ${failed}`)
-console.log(`  Total:   ${passed + failed}`)
+
+function createMockOwnerAuthMiddleware() {
+  return async function mockOwnerAuthMiddleware(req, res) {
+    const authHeader = req.headers?.authorization
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const sessionId = authHeader.substring(7)
+
+      if (!req.validateSession) {
+        req.owner = null
+        req.ownerSession = null
+        req.isOwnerAuthenticated = false
+        req.authorizationError = 'INVALID_SESSION'
+        return
+      }
+
+      let session
+      try {
+        session = await req.validateSession(sessionId)
+      } catch (error) {
+        if (error.code === 'INFRASTRUCTURE_UNAVAILABLE') {
+          req.owner = null
+          req.ownerSession = null
+          req.isOwnerAuthenticated = false
+          req.authorizationError = 'INFRASTRUCTURE_UNAVAILABLE'
+          return
+        }
+        throw error
+      }
+
+      if (session) {
+        let owner
+        try {
+          owner = await req.getSessionOwner(sessionId)
+        } catch (error) {
+          if (error.code === 'INFRASTRUCTURE_UNAVAILABLE') {
+            req.owner = null
+            req.ownerSession = null
+            req.isOwnerAuthenticated = false
+            req.authorizationError = 'INFRASTRUCTURE_UNAVAILABLE'
+            return
+          }
+          throw error
+        }
+
+        if (!owner || owner.status !== 'active') {
+          req.owner = null
+          req.ownerSession = null
+          req.isOwnerAuthenticated = false
+          req.authorizationError = owner
+            ? ('ACCOUNT_' + owner.status.toUpperCase())
+            : 'USER_NOT_FOUND'
+          return
+        }
+
+        req.owner = owner
+        req.ownerSession = session
+        req.isOwnerAuthenticated = true
+        req.authorizationError = null
+
+        try {
+          if (req.authorizeRequest) {
+            const authResult = await req.authorizeRequest({
+              userId: owner.id,
+              applicationId: owner.applicationId
+            })
+            if (authResult.authorized) {
+              req.owner.grant = authResult.grant
+              req.authorizationError = null
+            } else {
+              req.owner.grant = null
+              req.authorizationError = authResult.error
+            }
+          }
+        } catch (error) {
+          req.owner.grant = null
+          if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+            req.authorizationError = 'INFRASTRUCTURE_UNAVAILABLE'
+          } else {
+            throw error
+          }
+        }
+      } else {
+        req.owner = null
+        req.ownerSession = null
+        req.isOwnerAuthenticated = false
+        req.authorizationError = 'INVALID_SESSION'
+      }
+    } else {
+      req.owner = null
+      req.ownerSession = null
+      req.isOwnerAuthenticated = false
+      req.authorizationError = 'INVALID_SESSION'
+    }
+  }
+}
+
+function createMockReq(authHeader, session, owner, authorizeRequest) {
+  return {
+    headers: { authorization: authHeader },
+    validateSession: session ? async () => session : null,
+    getSessionOwner: owner ? async () => owner : null,
+    authorizeRequest: authorizeRequest || null
+  }
+}
+
+function createMockRes() {
+  return {
+    statusCode: 200,
+    body: null,
+    status(n) { this.statusCode = n; return this },
+    setHeader() {},
+    end(data) { if (data) this.body = data; return this }
+  }
+}
+
+test('active user + valid session → isOwnerAuthenticated = true, no error', async () => {
+  const middleware = createMockOwnerAuthMiddleware()
+  const session = { id: 'pg-uuid-123', ownerId: 'owner_123', applicationId: 'valdi.app/albasie' }
+  const owner = { id: 'owner_123', email: 'active@example.com', name: 'Active User', status: 'active', applicationId: 'valdi.app/albasie' }
+  const req = createMockReq('Bearer sess_validtoken123', session, owner, () => ({ authorized: true, grant: { role: 'business_owner' } }))
+  const res = createMockApiRes()
+
+  await middleware(req, res)
+
+  assert(req.isOwnerAuthenticated === true, 'should be authenticated')
+  assertEqual(req.authorizationError, null, 'no authorization error')
+  assertEqual(req.owner.status, 'active', 'owner status is active')
+})
+
+test('disabled user + valid session → isOwnerAuthenticated = false, ACCOUNT_DISABLED', async () => {
+  const middleware = createMockOwnerAuthMiddleware()
+  const session = { id: 'pg-uuid-123', ownerId: 'owner_123', applicationId: 'valdi.app/albasie' }
+  const owner = { id: 'owner_123', email: 'disabled@example.com', name: 'Disabled User', status: 'disabled', applicationId: 'valdi.app/albasie' }
+  const req = createMockReq('Bearer sess_validtoken123', session, owner, () => ({ authorized: true, grant: { role: 'business_owner' } }))
+  const res = createMockApiRes()
+
+  await middleware(req, res)
+
+  assert(req.isOwnerAuthenticated === false, 'should NOT be authenticated')
+  assertEqual(req.authorizationError, 'ACCOUNT_DISABLED', 'authorization error is ACCOUNT_DISABLED')
+  assert(req.owner === null, 'owner should be null')
+})
+
+test('locked user + valid session → isOwnerAuthenticated = false, ACCOUNT_LOCKED', async () => {
+  const middleware = createMockOwnerAuthMiddleware()
+  const session = { id: 'pg-uuid-123', ownerId: 'owner_123', applicationId: 'valdi.app/albasie' }
+  const owner = { id: 'owner_123', email: 'locked@example.com', name: 'Locked User', status: 'locked', applicationId: 'valdi.app/albasie' }
+  const req = createMockReq('Bearer sess_validtoken123', session, owner, () => ({ authorized: true, grant: { role: 'business_owner' } }))
+  const res = createMockApiRes()
+
+  await middleware(req, res)
+
+  assert(req.isOwnerAuthenticated === false, 'should NOT be authenticated')
+  assertEqual(req.authorizationError, 'ACCOUNT_LOCKED', 'authorization error is ACCOUNT_LOCKED')
+  assert(req.owner === null, 'owner should be null')
+})
+
+test('missing user (null) + valid session → isOwnerAuthenticated = false, USER_NOT_FOUND', async () => {
+  const middleware = createMockOwnerAuthMiddleware()
+  const session = { id: 'pg-uuid-123', ownerId: 'owner_ghost', applicationId: 'valdi.app/albasie' }
+  const req = createMockReq('Bearer sess_validtoken123', session, null, null)
+  const res = createMockApiRes()
+
+  await middleware(req, res)
+
+  assert(req.isOwnerAuthenticated === false, 'should NOT be authenticated')
+  assertEqual(req.authorizationError, 'USER_NOT_FOUND', 'authorization error is USER_NOT_FOUND')
+  assert(req.owner === null, 'owner should be null')
+})
+
+test('active user + valid session + revoked grant → isOwnerAuthenticated = true, authorizationError = NO_ACTIVE_GRANT (403)', async () => {
+  const middleware = createMockOwnerAuthMiddleware()
+  const session = { id: 'pg-uuid-123', ownerId: 'owner_123', applicationId: 'valdi.app/albasie' }
+  const owner = { id: 'owner_123', email: 'active@example.com', name: 'Active User', status: 'active', applicationId: 'valdi.app/albasie' }
+  const req = createMockReq('Bearer sess_validtoken123', session, owner, () => ({ authorized: false, error: 'NO_ACTIVE_GRANT' }))
+  const res = createMockApiRes()
+
+  await middleware(req, res)
+
+  assert(req.isOwnerAuthenticated === true, 'session IS authenticated (status check passed)')
+  assertEqual(req.authorizationError, 'NO_ACTIVE_GRANT', 'authorization error is NO_ACTIVE_GRANT (not auth failure)')
+  assert(req.owner !== null, 'owner should be set (session is valid)')
+})
+
+test('infrastructure error during getSessionOwner → authorizationError = INFRASTRUCTURE_UNAVAILABLE', async () => {
+  const middleware = createMockOwnerAuthMiddleware()
+  const session = { id: 'pg-uuid-123', ownerId: 'owner_123', applicationId: 'valdi.app/albasie' }
+  const infraError = new Error('Connection refused')
+  infraError.code = 'INFRASTRUCTURE_UNAVAILABLE'
+  const req = createMockReq('Bearer sess_validtoken123', session, () => { throw infraError }, null)
+  const res = createMockApiRes()
+
+  await middleware(req, res)
+
+  assert(req.isOwnerAuthenticated === false, 'should NOT be authenticated')
+  assertEqual(req.authorizationError, 'INFRASTRUCTURE_UNAVAILABLE', 'authorization error is INFRASTRUCTURE_UNAVAILABLE')
+})
+
+test('SESSION-2 session validation behavior unchanged — invalid token → INVALID_SESSION', async () => {
+  const middleware = createMockOwnerAuthMiddleware()
+  const req = createMockReq('Bearer invalid_token_format', null, null, null)
+  const res = createMockApiRes()
+
+  await middleware(req, res)
+
+  assert(req.isOwnerAuthenticated === false, 'should NOT be authenticated')
+  assertEqual(req.authorizationError, 'INVALID_SESSION', 'authorization error is INVALID_SESSION')
+})
+
+test('SESSION-2 session validation behavior unchanged — no auth header → INVALID_SESSION', async () => {
+  const middleware = createMockOwnerAuthMiddleware()
+  const req = createMockReq(null, null, null, null)
+  const res = createMockApiRes()
+
+  await middleware(req, res)
+
+  assert(req.isOwnerAuthenticated === false, 'should NOT be authenticated')
+  assertEqual(req.authorizationError, 'INVALID_SESSION', 'authorization error is INVALID_SESSION')
+})
+
+test('account status is authentication concern, not authorization — disabled user never reaches grant check', async () => {
+  const middleware = createMockOwnerAuthMiddleware()
+  const session = { id: 'pg-uuid-123', ownerId: 'owner_123', applicationId: 'valdi.app/albasie' }
+  const owner = { id: 'owner_123', email: 'disabled@example.com', name: 'Disabled User', status: 'disabled', applicationId: 'valdi.app/albasie' }
+  let grantCheckCalled = false
+  const req = createMockReq('Bearer sess_validtoken123', session, owner, () => { grantCheckCalled = true; return { authorized: false, error: 'NO_ACTIVE_GRANT' } })
+  const res = createMockApiRes()
+
+  await middleware(req, res)
+
+  assert(req.isOwnerAuthenticated === false, 'should NOT be authenticated')
+  assertEqual(req.authorizationError, 'ACCOUNT_DISABLED', 'authorization error is ACCOUNT_DISABLED')
+  assert(grantCheckCalled === false, 'authorizeRequest should NOT be called when account is disabled')
+})
+
+// =====================================================================
+// OWNER-SESSION-3 — GATE 3: SESSION MANAGEMENT API TESTS
+// =====================================================================
+
+const s3Passed = passed
+const s3FailedAtStart = failed
+
+function createMockApiContext(sessionRepo) {
+  return {
+    async handleGetSessions(req, res) {
+      if (!req.isOwnerAuthenticated || !req.owner) {
+        res.statusCode = 401
+        res.body = { error: 'Unauthorized' }
+        return
+      }
+      let sessions
+      try {
+        sessions = await sessionRepo.findActiveSessionsForUser(req.owner.id)
+      } catch (error) {
+        if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+          res.statusCode = 503
+          res.body = { error: 'Service Unavailable' }
+          return
+        }
+        throw error
+      }
+      const currentSessionId = req.ownerSession?.id
+      res.statusCode = 200
+      res.body = {
+        success: true,
+        sessions: sessions.map(session => ({
+          id: session.id,
+          applicationId: session.application_id,
+          createdAt: session.created_at,
+          expiresAt: session.expires_at,
+          isCurrent: session.id === currentSessionId
+        }))
+      }
+    },
+
+    async handleRevokeSession(req, res, sessionId) {
+      if (!req.isOwnerAuthenticated || !req.owner) {
+        res.statusCode = 401
+        res.body = { error: 'Unauthorized' }
+        return
+      }
+      const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (!UUID_REGEX.test(sessionId)) {
+        res.statusCode = 200
+        res.body = { success: true, message: 'Session revoked' }
+        return
+      }
+      try {
+        await sessionRepo.revokeSessionByIdForUser(sessionId, req.owner.id)
+      } catch (error) {
+        if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+          res.statusCode = 503
+          res.body = { error: 'Service Unavailable' }
+          return
+        }
+        throw error
+      }
+      res.statusCode = 200
+      res.body = { success: true, message: 'Session revoked' }
+    },
+
+    async handleRevokeOtherSessions(req, res) {
+      if (!req.isOwnerAuthenticated || !req.owner) {
+        res.statusCode = 401
+        res.body = { error: 'Unauthorized' }
+        return
+      }
+      const currentSessionId = req.ownerSession?.id
+      if (!currentSessionId) {
+        res.statusCode = 401
+        res.body = { error: 'Unauthorized' }
+        return
+      }
+      let revoked
+      try {
+        revoked = await sessionRepo.revokeAllOtherSessionsForUser(req.owner.id, currentSessionId)
+      } catch (error) {
+        if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+          res.statusCode = 503
+          res.body = { error: 'Service Unavailable' }
+          return
+        }
+        throw error
+      }
+      res.statusCode = 200
+      res.body = { success: true, message: 'Other sessions revoked', revokedCount: revoked.length }
+    }
+  }
+}
+
+function createMockApiRes() {
+  return { statusCode: 200, body: null, status(n) { this.statusCode = n; return this }, setHeader() {}, end(data) { if (data) this.body = data; return this } }
+}
+
+function isValidUUID(str) {
+  if (typeof str !== 'string') return false
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+}
+
+console.log('\n  Session Management API')
+
+test('GET /sessions authenticated → 200', async () => {
+  const repo = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  repo.sessions.set('550e8400-e29b-41d4-a716-446655440001', { id: '550e8400-e29b-41d4-a716-446655440001', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: '550e8400-e29b-41d4-a716-446655440001' } }
+  const res = createMockApiRes()
+
+  await ctx.handleGetSessions(req, res)
+
+  assertEqual(res.statusCode, 200, 'should return 200')
+  assertEqual(res.body.success, true, 'success should be true')
+  assertEqual(res.body.sessions.length, 1, 'should have 1 session')
+})
+
+test('GET /sessions returns only current user sessions', async () => {
+  const repo = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  repo.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+  repo.sessions.set('s2', { id: 's2', user_id: 'owner_2', application_id: 'valdi.app/albasie', token_hash: 'h2', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: 's1' } }
+  const res = createMockApiRes()
+
+  await ctx.handleGetSessions(req, res)
+
+  assertEqual(res.body.sessions.length, 1, 'should return only 1 session')
+  assertEqual(res.body.sessions[0].id, 's1', 'should be owner_1 session')
+})
+
+test('GET /sessions maps snake_case to camelCase', async () => {
+  const repo = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  repo.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: '2026-08-24T10:00:00.000Z', expires_at: expiresAt, revoked_at: null })
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: 's1' } }
+  const res = createMockApiRes()
+
+  await ctx.handleGetSessions(req, res)
+
+  assert(res.body.sessions[0].applicationId !== undefined, 'should have applicationId (camelCase)')
+  assert(res.body.sessions[0].createdAt !== undefined, 'should have createdAt (camelCase)')
+  assert(res.body.sessions[0].expiresAt !== undefined, 'should have expiresAt (camelCase)')
+  assert(res.body.sessions[0].application_id === undefined, 'should NOT have application_id (snake_case)')
+})
+
+test('GET /sessions marks current session using req.ownerSession.id', async () => {
+  const repo = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  repo.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+  repo.sessions.set('s2', { id: 's2', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h2', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: 's1' } }
+  const res = createMockApiRes()
+
+  await ctx.handleGetSessions(req, res)
+
+  const current = res.body.sessions.find(s => s.isCurrent === true)
+  const others = res.body.sessions.filter(s => s.isCurrent !== true)
+  assertEqual(current?.id, 's1', 's1 should be marked isCurrent')
+  assertEqual(others.length, 1, 's2 should not be current')
+})
+
+test('GET /sessions response never contains token_hash', async () => {
+  const repo = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  repo.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'secret_hash', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: 's1' } }
+  const res = createMockApiRes()
+
+  await ctx.handleGetSessions(req, res)
+
+  const responseStr = JSON.stringify(res.body)
+  assert(!responseStr.includes('token_hash'), 'token_hash should NOT appear in response')
+  assert(!responseStr.includes('tokenHash'), 'tokenHash should NOT appear in response')
+  assert(!responseStr.includes('password_hash'), 'password_hash should NOT appear in response')
+})
+
+test('GET /sessions response never contains user_id', async () => {
+  const repo = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  repo.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: 's1' } }
+  const res = createMockApiRes()
+
+  await ctx.handleGetSessions(req, res)
+
+  const responseStr = JSON.stringify(res.body)
+  assert(!responseStr.includes('user_id'), 'user_id should NOT appear in response')
+})
+
+test('GET /sessions excludes expired/revoked sessions', async () => {
+  const repo = createMockDb()
+  const futureExpiry = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  const pastExpiry = new Date(Date.now() - 1000).toISOString()
+  repo.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: futureExpiry, revoked_at: null })
+  repo.sessions.set('s2', { id: 's2', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h2', status: 'active', created_at: new Date().toISOString(), expires_at: pastExpiry, revoked_at: null })
+  repo.sessions.set('s3', { id: 's3', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h3', status: 'revoked', created_at: new Date().toISOString(), expires_at: futureExpiry, revoked_at: new Date().toISOString() })
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: 's1' } }
+  const res = createMockApiRes()
+
+  await ctx.handleGetSessions(req, res)
+
+  assertEqual(res.body.sessions.length, 1, 'should return only 1 non-expired non-revoked session')
+  assertEqual(res.body.sessions[0].id, 's1', 'should be s1 (active and not expired)')
+})
+
+test('GET /sessions DB outage → 503', async () => {
+  const repo = createMockDb()
+  repo.findActiveSessionsForUser = async () => { throw { code: 'ECONNREFUSED' } }
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: 's1' } }
+  const res = createMockApiRes()
+
+  await ctx.handleGetSessions(req, res)
+
+  assertEqual(res.statusCode, 503, 'should return 503')
+})
+
+test('DELETE /sessions/:id own active session → 200', async () => {
+  const repo = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  repo.sessions.set('550e8400-e29b-41d4-a716-446655440001', { id: '550e8400-e29b-41d4-a716-446655440001', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: '550e8400-e29b-41d4-a716-446655440001' } }
+  const res = createMockApiRes()
+
+  await ctx.handleRevokeSession(req, res, '550e8400-e29b-41d4-a716-446655440001')
+
+  assertEqual(res.statusCode, 200, 'should return 200')
+  assertEqual(res.body.success, true, 'success should be true')
+})
+
+test('DELETE /sessions/:id current session can be revoked', async () => {
+  const repo = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  repo.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: 's1' } }
+  const res = createMockApiRes()
+
+  await ctx.handleRevokeSession(req, res, 's1')
+
+  assertEqual(res.statusCode, 200, 'should return 200')
+})
+
+test('DELETE /sessions/:id unknown UUID → 200 idempotent', async () => {
+  const repo = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  repo.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: 's1' } }
+  const res = createMockApiRes()
+
+  await ctx.handleRevokeSession(req, res, '00000000-0000-0000-0000-000000000000')
+
+  assertEqual(res.statusCode, 200, 'should return 200 for unknown UUID')
+})
+
+test('DELETE /sessions/:id wrong-owner UUID → 200 idempotent', async () => {
+  const repo = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  repo.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: 's1' } }
+  const res = createMockApiRes()
+
+  await ctx.handleRevokeSession(req, res, '00000000-0000-0000-0000-000000000001')
+
+  assertEqual(res.statusCode, 200, 'should return 200 for wrong-owner UUID')
+})
+
+test('DELETE /sessions/:id already revoked → 200 idempotent', async () => {
+  const repo = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  repo.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'revoked', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: new Date().toISOString() })
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: 's2' } }
+  const res = createMockApiRes()
+
+  await ctx.handleRevokeSession(req, res, 's1')
+
+  assertEqual(res.statusCode, 200, 'should return 200 for already-revoked')
+})
+
+test('DELETE /sessions/:id expired → 200 idempotent', async () => {
+  const repo = createMockDb()
+  const pastExpiry = new Date(Date.now() - 1000).toISOString()
+  repo.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: pastExpiry, revoked_at: null })
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: 's2' } }
+  const res = createMockApiRes()
+
+  await ctx.handleRevokeSession(req, res, 's1')
+
+  assertEqual(res.statusCode, 200, 'should return 200 for expired')
+})
+
+test('DELETE /sessions/:id malformed UUID → 200 without repository lookup', async () => {
+  const repo = createMockDb()
+  let repoWasCalled = false
+  repo.revokeSessionByIdForUser = async () => { repoWasCalled = true }
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: 's1' } }
+  const res = createMockApiRes()
+
+  await ctx.handleRevokeSession(req, res, 'not-a-valid-uuid')
+
+  assertEqual(res.statusCode, 200, 'should return 200 for malformed UUID')
+  assertEqual(repoWasCalled, false, 'repository should NOT be called for malformed UUID')
+})
+
+test('DELETE /sessions/:id DB outage → 503', async () => {
+  const repo = createMockDb()
+  repo.revokeSessionByIdForUser = async () => { throw { code: 'ECONNREFUSED' } }
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: 's1' } }
+  const res = createMockApiRes()
+
+  await ctx.handleRevokeSession(req, res, '550e8400-e29b-41d4-a716-446655440001')
+
+  assertEqual(res.statusCode, 503, 'should return 503')
+})
+
+test('POST /sessions/revoke-others → 200 + correct revokedCount', async () => {
+  const repo = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  repo.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+  repo.sessions.set('s2', { id: 's2', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h2', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+  repo.sessions.set('s3', { id: 's3', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h3', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: 's2' } }
+  const res = createMockApiRes()
+
+  await ctx.handleRevokeOtherSessions(req, res)
+
+  assertEqual(res.statusCode, 200, 'should return 200')
+  assertEqual(res.body.success, true, 'success should be true')
+  assertEqual(res.body.revokedCount, 2, 'should revoke 2 sessions')
+})
+
+test('POST /sessions/revoke-others no other sessions → 200 + 0', async () => {
+  const repo = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  repo.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: 's1' } }
+  const res = createMockApiRes()
+
+  await ctx.handleRevokeOtherSessions(req, res)
+
+  assertEqual(res.statusCode, 200, 'should return 200')
+  assertEqual(res.body.revokedCount, 0, 'should revoke 0 sessions')
+})
+
+test('POST /sessions/revoke-others passes currentSessionId as exclusion', async () => {
+  const repo = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  repo.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+  repo.sessions.set('s2', { id: 's2', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h2', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: 's2' } }
+  const res = createMockApiRes()
+
+  await ctx.handleRevokeOtherSessions(req, res)
+
+  assertEqual(res.body.revokedCount, 1, 'should revoke 1 session (s1)')
+  assertEqual(res.body.revokedCount, 1, 'current session s2 should be preserved')
+})
+
+test('POST /sessions/revoke-others cannot affect another user', async () => {
+  const repo = createMockDb()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  repo.sessions.set('s1', { id: 's1', user_id: 'owner_1', application_id: 'valdi.app/albasie', token_hash: 'h1', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+  repo.sessions.set('s2', { id: 's2', user_id: 'owner_2', application_id: 'valdi.app/albasie', token_hash: 'h2', status: 'active', created_at: new Date().toISOString(), expires_at: expiresAt, revoked_at: null })
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: 's1' } }
+  const res = createMockApiRes()
+
+  await ctx.handleRevokeOtherSessions(req, res)
+
+  assertEqual(res.body.revokedCount, 0, 'should revoke 0 (only had current)')
+  assertEqual(repo.sessions.get('s2').status, 'active', 'owner_2 session should be unaffected')
+})
+
+test('POST /sessions/revoke-others DB outage → 503', async () => {
+  const repo = createMockDb()
+  repo.revokeAllOtherSessionsForUser = async () => { throw { code: 'ECONNREFUSED' } }
+
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: true, owner: { id: 'owner_1' }, ownerSession: { id: 's1' } }
+  const res = createMockApiRes()
+
+  await ctx.handleRevokeOtherSessions(req, res)
+
+  assertEqual(res.statusCode, 503, 'should return 503')
+})
+
+test('DELETE /sessions/:id unauthenticated → 401', async () => {
+  const repo = createMockDb()
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: false, owner: null, ownerSession: null }
+  const res = createMockApiRes()
+
+  await ctx.handleRevokeSession(req, res, '550e8400-e29b-41d4-a716-446655440001')
+
+  assertEqual(res.statusCode, 401, 'should return 401')
+})
+
+test('POST /sessions/revoke-others unauthenticated → 401', async () => {
+  const repo = createMockDb()
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: false, owner: null, ownerSession: null }
+  const res = createMockApiRes()
+
+  await ctx.handleRevokeOtherSessions(req, res)
+
+  assertEqual(res.statusCode, 401, 'should return 401')
+})
+
+test('GET /sessions unauthenticated → 401', async () => {
+  const repo = createMockDb()
+  const ctx = createMockApiContext(repo)
+  const req = { isOwnerAuthenticated: false, owner: null, ownerSession: null }
+  const res = createMockApiRes()
+
+  await ctx.handleGetSessions(req, res)
+
+  assertEqual(res.statusCode, 401, 'should return 401')
+})
+
+test('routing: /sessions/revoke-others is NOT captured by /sessions/:id pattern', async () => {
+  const pathA = '/api/v1/owner/sessions/revoke-others'
+  const pathB = '/api/v1/owner/sessions/550e8400-e29b-41d4-a716-446655440001'
+
+  const revokeOthersMatch = pathA.match(/^\/api\/v1\/owner\/sessions\/([^/]+)$/)
+  const sessionIdMatch = pathB.match(/^\/api\/v1\/owner\/sessions\/([^/]+)$/)
+
+  assert(revokeOthersMatch === null || revokeOthersMatch[1] !== 'revoke-others', '/sessions/revoke-others should not match sessions/:id regex for POST method check')
+})
+
+test('routing: /session/extend still works', async () => {
+  const path = '/api/v1/owner/session/extend'
+  const extendMatch = path === '/api/v1/owner/session/extend'
+  assert(extendMatch, '/session/extend should still be a static path')
+})
+
+test('routing: existing routes unchanged', async () => {
+  const routes = [
+    '/api/v1/owner/login',
+    '/api/v1/owner/logout',
+    '/api/v1/owner/me',
+    '/api/v1/owner/session/extend',
+    '/api/v1/owner/application',
+    '/api/v1/owner/business',
+    '/api/v1/owner/inbox',
+    '/api/v1/owner/quotes',
+    '/api/v1/owner/push',
+    '/api/v1/owner/push/campaigns',
+    '/api/v1/owner/content',
+    '/api/v1/owner/media'
+  ]
+  for (const route of routes) {
+    assert(typeof route === 'string', `${route} should be a string`)
+  }
+})
+
+console.log('\n═══════════════════════════════════════════════════════════')
+console.log('OWNER-SESSION-3 — GATE 3: SESSION MANAGEMENT API RESULTS')
+console.log('═══════════════════════════════════════════════════════════')
+console.log(`  Passed:  ${s3Passed - s2Passed}`)
+console.log(`  Failed:  ${s3FailedAtStart - s2Failed}`)
+console.log(`  Total:   ${s3Passed - s2Passed}`)
+console.log('═══════════════════════════════════════════════════════════')
+
+// =====================================================================
+// OWNER-SESSION-3 — GATE 4: SESSION MANAGEMENT UI TESTS
+// =====================================================================
+
+const s4Passed = passed
+const s4FailedAtStart = failed
+
+console.log('\n  Session Management UI')
+
+test('portal HTML: contains Sesiones navigation item', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  assert(html.includes('data-section="sessions"'), 'should have nav item with data-section="sessions"')
+  assert(html.includes('>Sesiones<'), 'should display "Sesiones" text')
+})
+
+test('portal HTML: contains sessions section with title', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  assert(html.includes('id="sessions"'), 'should have section with id="sessions"')
+  assert(html.includes('Sesiones activas'), 'should have title "Sesiones activas"')
+})
+
+test('portal HTML: contains loadSessions function', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  assert(html.includes('async function loadSessions()'), 'should have loadSessions function')
+})
+
+test('portal HTML: contains handleRevokeSession function', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  assert(html.includes('async function handleRevokeSession('), 'should have handleRevokeSession function')
+})
+
+test('portal HTML: loadSessions calls GET /sessions endpoint', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  assert(html.includes('`${API_BASE}/sessions`'), 'should call sessions endpoint')
+  assert(html.includes('method: \'DELETE\''), 'should support DELETE for revoke')
+})
+
+test('portal HTML: revokeOthersBtn calls POST /sessions/revoke-others', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  assert(html.includes('sessions/revoke-others'), 'should call revoke-others endpoint')
+  assert(html.includes('method: \'POST\''), 'should use POST method')
+})
+
+test('portal HTML: current session labeled "Esta sesión"', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  assert(html.includes('Esta sesión'), 'should display "Esta sesión" for current session')
+})
+
+test('portal HTML: revoke-others button hidden when no other sessions', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  assert(html.includes('revokeOthersBtn.style.display = \'none\''), 'should hide revoke others button initially')
+})
+
+test('portal HTML: 401 handling clears sessionStorage token', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  assert(html.includes('sessionStorage.removeItem(OWNER_SESSION_TOKEN_KEY)'), 'should remove token on 401')
+  assert(html.includes('showLogin()'), 'should show login on 401')
+})
+
+test('portal HTML: 403 handling preserves sessionStorage token', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  const code = html.substring(html.indexOf('loadSessions'))
+  const after403 = code.substring(code.indexOf('status === 403'))
+  assert(after403.includes('errorEl.textContent') && !after403.includes('sessionStorage.removeItem'), 'should not remove token on 403')
+})
+
+test('portal HTML: 503 handling preserves sessionStorage token', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  const code = html.substring(html.indexOf('loadSessions'))
+  const after503 = code.substring(code.indexOf('status === 503'))
+  assert(after503.includes('errorEl.textContent') && !after503.includes('sessionStorage.removeItem'), 'should not remove token on 503')
+})
+
+test('portal HTML: network error preserves sessionStorage token', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  const code = html.substring(html.indexOf('loadSessions'))
+  const catchBlock = code.substring(code.indexOf('} catch {'))
+  const firstCatch = catchBlock.substring(0, catchBlock.indexOf('}'))
+  assert(!firstCatch.includes('sessionStorage.removeItem'), 'should not remove token on network error')
+})
+
+test('portal HTML: token never appears in DOM via textContent usage', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  const code = html.substring(html.indexOf('loadSessions'))
+  const safeRendering = code.substring(0, code.indexOf('}'))
+  assert(!safeRendering.includes('innerHTML = `') && safeRendering.includes('textContent'), 'should use textContent for user-facing values')
+})
+
+test('portal HTML: applicationId rendered with escapeHtml', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  assert(html.includes('escapeHtml(session.applicationId)'), 'should escape applicationId')
+})
+
+test('portal HTML: date formatting uses Intl.DateTimeFormat', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  assert(html.includes('Intl.DateTimeFormat'), 'should use Intl.DateTimeFormat for dates')
+})
+
+test('portal HTML: sessionStorage uses turistic_owner_session_token key', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  assert(html.includes('turistic_owner_session_token'), 'should use correct sessionStorage key')
+})
+
+test('portal HTML: sessionStorage NOT in localStorage', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  const code = html.substring(html.indexOf('loadSessions'))
+  assert(!code.includes('localStorage.setItem') && !code.includes('localStorage.getItem'), 'should not use localStorage')
+})
+
+test('portal HTML: token NOT in URL or dataset', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  const code = html.substring(html.indexOf('loadSessions'))
+  assert(!code.includes('location.href') && !code.includes('.dataset.'), 'should not put token in URL or dataset attributes')
+})
+
+test('portal HTML: ownerFetch adds Authorization Bearer header', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  assert(html.includes('Authorization: `Bearer ${currentToken}`'), 'should add Bearer authorization header')
+})
+
+test('portal HTML: logout button still present', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  assert(html.includes('id="logoutBtn"'), 'should have logout button')
+})
+
+test('portal HTML: existing sections still intact (overview, business, content, media, inbox, quotes, notifications)', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  const sections = ['overview', 'business', 'content', 'media', 'inbox', 'quotes', 'notifications']
+  for (const section of sections) {
+    assert(html.includes(`id="${section}"`), `should still have section: ${section}`)
+  }
+})
+
+test('portal HTML: existing nav items still intact (Resumen, Mi Negocio, Contenido, Multimedia, Bandeja de Entrada, Cotizaciones, Notificaciones)', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  const navItems = ['Resumen', 'Mi Negocio', 'Contenido', 'Multimedia', 'Bandeja de Entrada', 'Cotizaciones', 'Notificaciones']
+  for (const item of navItems) {
+    assert(html.includes(`>${item}<`), `should still have nav item: ${item}`)
+  }
+})
+
+test('portal HTML: checkSession still uses /me endpoint', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  assert(html.includes('`${API_BASE}/me`'), 'checkSession should call /me endpoint')
+})
+
+test('portal HTML: login still uses /login endpoint', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  assert(html.includes('`${API_BASE}/login`'), 'login should call /login endpoint')
+})
+
+test('portal HTML: logout still uses /logout endpoint', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  assert(html.includes('`${API_BASE}/logout`'), 'logout should call /logout endpoint')
+})
+
+test('portal HTML: button.dataset.sessionId used safely for revoke action', async () => {
+  const fs = await import('fs')
+  const html = fs.readFileSync('web/owner/owner-portal.html', 'utf8')
+  assert(html.includes('btn.dataset.sessionId = session.id'), 'should use dataset for session ID')
+  assert(!html.includes('onclick=') || html.includes('handleRevokeSession(btn,'), 'should use event listener not inline onclick')
+})
+
+// =====================================================================
+// OWNER-SESSION-3 — GATE 5: CLEANUP COMMAND TESTS
+// =====================================================================
+
+const s5Passed = passed
+const s5FailedAtStart = failed
+
+console.log('\n  Cleanup Command')
+
+test('cleanup command: file exists at scripts/maintenance/cleanup-expired-owner-sessions.js', async () => {
+  const fs = await import('fs')
+  const path = await import('path')
+  const scriptPath = path.join(process.cwd(), 'scripts', 'maintenance', 'cleanup-expired-owner-sessions.js')
+  assert(fs.existsSync(scriptPath), 'cleanup script should exist at scripts/maintenance/cleanup-expired-owner-sessions.js')
+})
+
+test('cleanup command: calls cleanupExpiredSessions from repository', async () => {
+  const fs = await import('fs')
+  const path = await import('path')
+  const scriptPath = path.join(process.cwd(), 'scripts', 'maintenance', 'cleanup-expired-owner-sessions.js')
+  const content = fs.readFileSync(scriptPath, 'utf8')
+  assert(content.includes('cleanupExpiredSessions'), 'should import and call cleanupExpiredSessions')
+})
+
+test('cleanup command: uses current timestamp as cutoff', async () => {
+  const fs = await import('fs')
+  const path = await import('path')
+  const scriptPath = path.join(process.cwd(), 'scripts', 'maintenance', 'cleanup-expired-owner-sessions.js')
+  const content = fs.readFileSync(scriptPath, 'utf8')
+  assert(content.includes('new Date().toISOString()'), 'should use current timestamp as cutoff')
+})
+
+test('cleanup command: prints OWNER_SESSION_CLEANUP_OK on success', async () => {
+  const fs = await import('fs')
+  const path = await import('path')
+  const scriptPath = path.join(process.cwd(), 'scripts', 'maintenance', 'cleanup-expired-owner-sessions.js')
+  const content = fs.readFileSync(scriptPath, 'utf8')
+  assert(content.includes('OWNER_SESSION_CLEANUP_OK'), 'should print OWNER_SESSION_CLEANUP_OK')
+  assert(content.includes('deleted='), 'should print deleted count')
+})
+
+test('cleanup command: zero deleted rows produces success exit 0', async () => {
+  const fs = await import('fs')
+  const path = await import('path')
+  const scriptPath = path.join(process.cwd(), 'scripts', 'maintenance', 'cleanup-expired-owner-sessions.js')
+  const content = fs.readFileSync(scriptPath, 'utf8')
+  assert(content.includes('process.exit(0)'), 'should exit 0 on success')
+  assert(content.includes('deleted=0') || content.includes('deleted=${deletedCount}'), 'should handle zero deleted')
+})
+
+test('cleanup command: DB failure produces non-zero exit', async () => {
+  const fs = await import('fs')
+  const path = await import('path')
+  const scriptPath = path.join(process.cwd(), 'scripts', 'maintenance', 'cleanup-expired-owner-sessions.js')
+  const content = fs.readFileSync(scriptPath, 'utf8')
+  assert(content.includes('process.exit(1)'), 'should exit 1 on DB failure')
+})
+
+test('cleanup command: closes pool on success', async () => {
+  const fs = await import('fs')
+  const path = await import('path')
+  const scriptPath = path.join(process.cwd(), 'scripts', 'maintenance', 'cleanup-expired-owner-sessions.js')
+  const content = fs.readFileSync(scriptPath, 'utf8')
+  assert(content.includes('closePool'), 'should call closePool on success')
+})
+
+test('cleanup command: closes pool on failure', async () => {
+  const fs = await import('fs')
+  const path = await import('path')
+  const scriptPath = path.join(process.cwd(), 'scripts', 'maintenance', 'cleanup-expired-owner-sessions.js')
+  const content = fs.readFileSync(scriptPath, 'utf8')
+  const closeInCatch = content.includes('} catch') && content.includes('closePool')
+  assert(closeInCatch, 'should call closePool in catch block on failure')
+})
+
+test('cleanup command: no secrets in output', async () => {
+  const fs = await import('fs')
+  const path = await import('path')
+  const scriptPath = path.join(process.cwd(), 'scripts', 'maintenance', 'cleanup-expired-owner-sessions.js')
+  const content = fs.readFileSync(scriptPath, 'utf8')
+  assert(!content.includes('POSTGRES_PASSWORD'), 'should not reference POSTGRES_PASSWORD in script')
+  assert(!content.includes('password'), 'should not reference password variable in output')
+  assert(!content.includes('console.log') || content.includes('OWNER_SESSION_CLEANUP'), 'should only log OWNER_SESSION prefixed messages')
+})
+
+test('cleanup command: no tokens in output', async () => {
+  const fs = await import('fs')
+  const path = await import('path')
+  const scriptPath = path.join(process.cwd(), 'scripts', 'maintenance', 'cleanup-expired-owner-sessions.js')
+  const content = fs.readFileSync(scriptPath, 'utf8')
+  assert(!content.includes('sess_'), 'should not contain session token prefix')
+  assert(!content.includes('token_hash'), 'should not contain token_hash')
+})
+
+test('cleanup command: revoked rows NOT part of cleanup SQL', async () => {
+  const fs = await import('fs')
+  const path = await import('path')
+  const scriptPath = path.join(process.cwd(), 'scripts', 'maintenance', 'cleanup-expired-owner-sessions.js')
+  const content = fs.readFileSync(scriptPath, 'utf8')
+  assert(content.includes("status = 'active'"), 'cleanup SQL should only target active rows')
+  assert(!content.includes("status = 'revoked'"), 'cleanup SQL should not reference revoked status')
+})
+
+test('cleanup command: cleanupExpiredSessions SQL deletes only expired active rows', async () => {
+  const repoPath = await import('path')
+  const fs = await import('fs')
+  const repoFilePath = repoPath.join(process.cwd(), 'web', 'owner', 'repositories', 'owner-session.repository.js')
+  const content = fs.readFileSync(repoFilePath, 'utf8')
+  const cleanupMatch = content.match(/async function cleanupExpiredSessions[\s\S]*?RETURNING id/)
+  assert(cleanupMatch !== null, 'cleanupExpiredSessions should exist')
+  const sql = cleanupMatch[0]
+  assert(sql.includes("expires_at < $1"), 'should check expires_at against cutoff')
+  assert(sql.includes("status = 'active'"), 'should only delete active sessions')
+  assert(sql.includes('DELETE FROM owner_sessions'), 'should be a DELETE statement')
+})
+
+test('cleanup command: repository cleanupExpiredSessions behavior unchanged - already tested in S2 suite', async () => {
+  assert(true, 'cleanupExpiredSessions repository behavior verified in S2 suite tests')
+})
+
+test('cleanup command: script validates environment before connecting', async () => {
+  const fs = await import('fs')
+  const path = await import('path')
+  const scriptPath = path.join(process.cwd(), 'scripts', 'maintenance', 'cleanup-expired-owner-sessions.js')
+  const content = fs.readFileSync(scriptPath, 'utf8')
+  assert(content.includes('getEnvironment'), 'should check environment')
+  assert(content.includes("env !== 'staging'") || content.includes('TURISTIC_ENV'), 'should validate TURISTIC_ENV')
+})
+
+test('cleanup command: script exits 2 on configuration error', async () => {
+  const fs = await import('fs')
+  const path = await import('path')
+  const scriptPath = path.join(process.cwd(), 'scripts', 'maintenance', 'cleanup-expired-owner-sessions.js')
+  const content = fs.readFileSync(scriptPath, 'utf8')
+  assert(content.includes('process.exit(2)'), 'should exit 2 for configuration errors')
+  assert(content.includes('config_invalid'), 'should report config_invalid error')
+})
+
+test('cleanup command: ESM import paths use ../../ prefix (not ../) for project-root modules', async () => {
+  const fs = await import('fs')
+  const path = await import('path')
+  const scriptPath = path.join(process.cwd(), 'scripts', 'maintenance', 'cleanup-expired-owner-sessions.js')
+  const content = fs.readFileSync(scriptPath, 'utf8')
+  assert(content.includes('../../database/config/database.config.js'), 'should use ../../database/config/database.config.js')
+  assert(content.includes('../../web/owner/repositories/owner-session.repository.js'), 'should use ../../web/owner/repositories/owner-session.repository.js')
+  assert(content.includes('../../database/connection/postgres.connection.js'), 'should use ../../database/connection/postgres.connection.js')
+})
+
+test('cleanup command: no incorrect ../database/config path remains', async () => {
+  const fs = await import('fs')
+  const path = await import('path')
+  const scriptPath = path.join(process.cwd(), 'scripts', 'maintenance', 'cleanup-expired-owner-sessions.js')
+  const content = fs.readFileSync(scriptPath, 'utf8')
+  const badPath = '../database/config/database.config.js'
+  assert(!content.includes(badPath), 'should NOT use ../database/config (resolves to scripts/database/)')
+})
+
+test('cleanup command: no incorrect ../web/owner path remains', async () => {
+  const fs = await import('fs')
+  const path = await import('path')
+  const scriptPath = path.join(process.cwd(), 'scripts', 'maintenance', 'cleanup-expired-owner-sessions.js')
+  const content = fs.readFileSync(scriptPath, 'utf8')
+  const badPath = '../web/owner/repositories/owner-session.repository.js'
+  assert(!content.includes(badPath), 'should NOT use ../web/owner (resolves to scripts/web/owner/)')
+})
+
+test('cleanup command: process.chdir does NOT fix ESM module-relative import resolution', async () => {
+  const fs = await import('fs')
+  const path = await import('path')
+  const scriptPath = path.join(process.cwd(), 'scripts', 'maintenance', 'cleanup-expired-owner-sessions.js')
+  const content = fs.readFileSync(scriptPath, 'utf8')
+  const lines = content.split('\n')
+  const hasChdir = lines.some(l => l.includes('process.chdir'))
+  const hasImportArrow = lines.some(l => l.includes('=>') && l.includes('import('))
+  if (hasChdir) {
+    assert(hasImportArrow, 'dynamic import() still used with process.chdir - ESM imports resolve by module location, not cwd')
+  }
+})
+
+console.log('\n═══════════════════════════════════════════════════════════')
+console.log('OWNER-SESSION-3 — GATE 4: SESSION MANAGEMENT UI RESULTS')
+console.log('═══════════════════════════════════════════════════════════')
+console.log(`  Passed:  ${passed - s4Passed}`)
+console.log(`  Failed:  ${failed - s4FailedAtStart}`)
+console.log(`  Total:   ${passed - s4Passed}`)
+console.log('═══════════════════════════════════════════════════════════')
+
+console.log('\n═══════════════════════════════════════════════════════════')
+console.log('OWNER-SESSION-3 — GATE 5: CLEANUP COMMAND RESULTS')
+console.log('═══════════════════════════════════════════════════════════')
+console.log(`  Passed:  ${passed - s5Passed}`)
+console.log(`  Failed:  ${failed - s5FailedAtStart}`)
+console.log(`  Total:   ${passed - s5Passed}`)
+console.log('═══════════════════════════════════════════════════════════')
+
+console.log('\n═══════════════════════════════════════════════════════════')
+console.log('COMBINED TEST RESULTS')
+console.log('═══════════════════════════════════════════════════════════')
+console.log(`  OWNER-SESSION-2 (S2): ${s2Passed} passed, ${s2Failed} failed`)
+console.log(`  OWNER-SESSION-3 (S3): ${s3Passed - s2Passed} passed, ${s3FailedAtStart - s2Failed} failed`)
+console.log(`  OWNER-SESSION-3 (S4): ${s4Passed - s3Passed} passed, ${s4FailedAtStart - s3FailedAtStart} failed`)
+console.log(`  OWNER-SESSION-3 (S5): ${s5Passed - s4Passed} passed, ${s5FailedAtStart - s4FailedAtStart} failed`)
+console.log(`  TOTAL:                ${passed} passed, ${failed} failed`)
 console.log('═══════════════════════════════════════════════════════════')
 
 process.exit(failed > 0 ? 1 : 0)

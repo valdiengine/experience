@@ -12,6 +12,12 @@ import {
 } from './owner.auth.js'
 
 import {
+  findActiveSessionsForUser,
+  revokeSessionByIdForUser,
+  revokeAllOtherSessionsForUser
+} from './repositories/owner-session.repository.js'
+
+import {
   createOwnerAuthMiddleware,
   requireOwnerAuth,
   requireOwnerPermission,
@@ -95,6 +101,11 @@ function sendJson(res, statusCode, data) {
 
 function isValidHttpStatus(code) {
   return typeof code === 'number' && Number.isInteger(code) && code >= 100 && code <= 599
+}
+
+function isValidUUID(str) {
+  if (typeof str !== 'string') return false
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
 }
 
 function getSessionId(req) {
@@ -225,6 +236,91 @@ export function createOwnerAPIHandler() {
           id: session.id,
           expiresAt: session.expiresAt
         }
+      })
+    },
+
+    async handleGetSessions(req, res) {
+      if (!req.isOwnerAuthenticated || !req.owner) {
+        sendJson(res, 401, { error: 'Unauthorized', message: 'Not authenticated' })
+        return
+      }
+
+      let sessions
+      try {
+        sessions = await findActiveSessionsForUser(req.owner.id)
+      } catch (error) {
+        if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+          sendJson(res, 503, { error: 'Service Unavailable', message: 'Infrastructure temporarily unavailable' })
+          return
+        }
+        throw error
+      }
+
+      const currentSessionId = req.ownerSession?.id
+
+      sendJson(res, 200, {
+        success: true,
+        sessions: sessions.map(session => ({
+          id: session.id,
+          applicationId: session.application_id,
+          createdAt: session.created_at,
+          expiresAt: session.expires_at,
+          isCurrent: session.id === currentSessionId
+        }))
+      })
+    },
+
+    async handleRevokeSession(req, res, sessionId) {
+      if (!req.isOwnerAuthenticated || !req.owner) {
+        sendJson(res, 401, { error: 'Unauthorized', message: 'Not authenticated' })
+        return
+      }
+
+      if (!isValidUUID(sessionId)) {
+        sendJson(res, 200, { success: true, message: 'Session revoked' })
+        return
+      }
+
+      try {
+        await revokeSessionByIdForUser(sessionId, req.owner.id)
+      } catch (error) {
+        if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+          sendJson(res, 503, { error: 'Service Unavailable', message: 'Infrastructure temporarily unavailable' })
+          return
+        }
+        throw error
+      }
+
+      sendJson(res, 200, { success: true, message: 'Session revoked' })
+    },
+
+    async handleRevokeOtherSessions(req, res) {
+      if (!req.isOwnerAuthenticated || !req.owner) {
+        sendJson(res, 401, { error: 'Unauthorized', message: 'Not authenticated' })
+        return
+      }
+
+      const currentSessionId = req.ownerSession?.id
+      if (!currentSessionId) {
+        sendJson(res, 401, { error: 'Unauthorized', message: 'No active session' })
+        return
+      }
+
+      let revoked
+      try {
+        revoked = await revokeAllOtherSessionsForUser(req.owner.id, currentSessionId)
+      } catch (error) {
+        if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+          sendJson(res, 503, { error: 'Service Unavailable', message: 'Infrastructure temporarily unavailable' })
+          return
+        }
+        throw error
+      }
+
+      sendJson(res, 200, {
+        success: true,
+        message: 'Other sessions revoked',
+        revokedCount: revoked.length
       })
     },
 
@@ -857,6 +953,14 @@ export function createOwnerRouter(handler) {
       return handler.handleSessionExtend(req, res)
     }
 
+    if (pathname === '/api/v1/owner/sessions' && req.method === 'GET') {
+      return handler.handleGetSessions(req, res)
+    }
+
+    if (pathname === '/api/v1/owner/sessions/revoke-others' && req.method === 'POST') {
+      return handler.handleRevokeOtherSessions(req, res)
+    }
+
     if (pathname === '/api/v1/owner/application' && req.method === 'GET') {
       return handler.handleGetApplication(req, res)
     }
@@ -957,6 +1061,11 @@ export function createOwnerRouter(handler) {
     const deleteMediaMatch = pathname.match(/^\/api\/v1\/owner\/media\/([^/]+)$/)
     if (deleteMediaMatch && req.method === 'DELETE') {
       return handler.handleDeleteMedia(req, res, deleteMediaMatch[1])
+    }
+
+    const deleteSessionMatch = pathname.match(/^\/api\/v1\/owner\/sessions\/([^/]+)$/)
+    if (deleteSessionMatch && req.method === 'DELETE') {
+      return handler.handleRevokeSession(req, res, deleteSessionMatch[1])
     }
 
     res.statusCode = 404

@@ -1371,6 +1371,7 @@
 | OWNER-SESSION-0 | Infrastructure Discovery / Persistence & Security Contract | ✅ |
 | OWNER-SESSION-1 | Persistent Owner Identity + Persistent Application Grants | ✅ |
 | OWNER-SESSION-2 | Persistent Sessions / Multi-Process Session Persistence | ✅ Complete |
+| OWNER-SESSION-3 | Session Lifecycle Management + Operational Cleanup | ✅ Complete |
 
 **Progreso:** 77/77 fases completadas (100%) ✅
 
@@ -1491,7 +1492,14 @@
 - **What it does:** Replaces in-memory Map-based Owner sessions with persistent PostgreSQL storage. Secure 256-bit CSPRNG token generation, SHA256 hash storage (never store raw), PostgreSQL-generated UUID for session ids. Session persistence survives Passenger/Node restarts. Authorization (role/permissions) revalidated on every request via owner_application_grants (not from stale session state). Password change atomically revokes all sessions. Frontend sessionStorage for browser reload continuity. HTTP 503 for infrastructure failures, 401 for invalid/expired/revoked tokens. Physical staging certification completed: migration 0007 executed, schema verified, real session row created and verified.
 - **Files created:** owner-session-token.module.js (CSPRNG token gen), owner-session.repository.js (PostgreSQL repository), 0007_owner_sessions migration, owner-session-2.test.js (72 tests)
 - **Files modified:** owner.auth.js (PostgreSQL session management), owner.middleware.js (async validation), owner.api.js (async logout/extend), owner-identity.service.js (password-change revocation), owner-portal.html (sessionStorage persistence), web/owner-1.test.js (async validateSession)
-- **Next:** OWNER-SESSION-3 — TBD (from existing roadmap documentation)
+- **Next:** OWNER-SESSION-3 — Session Lifecycle Management + Operational Cleanup
+
+### OWNER-SESSION-3 — Session Lifecycle Management + Operational Cleanup
+- **Status:** Completed (2026-08-24)
+- **What it does:** Gate 1: Account state enforcement (reject disabled/locked accounts before authorization). Gate 2: Session lifecycle repository (findActiveSessionsForUser, revokeSessionByIdForUser, revokeAllOtherSessionsForUser). Gate 3: Session management REST API (GET/DELETE/POST). Gate 4: Owner portal "Sesiones" UI section. Gate 5: Operational cleanup command for expired active rows (hourly cron). Physical staging certification completed: two-session lifecycle verified, revoke-one/revoke-others verified, restart persistence verified, cleanup command verified.
+- **Files created:** scripts/maintenance/cleanup-expired-owner-sessions.js (cleanup command), docs/owner/OWNER_SESSION_3_FINAL_REPORT.md (completion report)
+- **Files modified:** owner.auth.js (status field in getSessionOwner), owner.middleware.js (account-state check), owner-session.repository.js (3 new functions), owner.api.js (session handlers/routes), owner-portal.html (Sesiones nav/UI), owner-session-2.test.js (77 new tests)
+- **Next:** Future milestones TBD (see ROADMAP.md for planned work)
 
 ### Archivos en Disco No Registrados
 - `capabilities/catalog/catalog.capability.js` â€” Placeholder (P1-3)

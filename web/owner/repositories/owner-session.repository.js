@@ -117,6 +117,50 @@ export async function countActiveSessions(client = null) {
   return parseInt(result.rows[0].count, 10)
 }
 
+export async function findActiveSessionsForUser(userId, client = null) {
+  const q = client ? client.query.bind(client) : query
+  const result = await q(
+    `SELECT id, application_id, created_at, expires_at, status
+     FROM owner_sessions
+     WHERE user_id = $1
+       AND status = 'active'
+       AND expires_at > NOW()
+     ORDER BY created_at DESC`,
+    [userId]
+  )
+  return result.rows
+}
+
+export async function revokeSessionByIdForUser(sessionId, userId, client = null) {
+  const q = client ? client.query.bind(client) : query
+  const result = await q(
+    `UPDATE owner_sessions
+     SET status = 'revoked', revoked_at = NOW()
+     WHERE id = $1
+       AND user_id = $2
+       AND status = 'active'
+       AND expires_at > NOW()
+     RETURNING id, application_id, revoked_at`,
+    [sessionId, userId]
+  )
+  return result.rows[0] || null
+}
+
+export async function revokeAllOtherSessionsForUser(userId, currentSessionId, client = null) {
+  const q = client ? client.query.bind(client) : query
+  const result = await q(
+    `UPDATE owner_sessions
+     SET status = 'revoked', revoked_at = NOW()
+     WHERE user_id = $1
+       AND id <> $2
+       AND status = 'active'
+       AND expires_at > NOW()
+     RETURNING id, application_id, revoked_at`,
+    [userId, currentSessionId]
+  )
+  return result.rows
+}
+
 export default {
   createSession,
   findSessionByTokenHash,
@@ -125,5 +169,8 @@ export default {
   revokeSessionsForApplication,
   cleanupExpiredSessions,
   extendSession,
-  countActiveSessions
+  countActiveSessions,
+  findActiveSessionsForUser,
+  revokeSessionByIdForUser,
+  revokeAllOtherSessionsForUser
 }

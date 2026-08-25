@@ -252,7 +252,7 @@ export async function validateSession(sessionId) {
 /**
  * Get session owner identity.
  *
- * Loads user identity (email, name) from the users table.
+ * Loads user identity (id, email, name, status) from the users table.
  * Authorization (role, permissions) is handled separately by authorizeRequest()
  * in the middleware, which resolves the current grant on every request.
  *
@@ -273,6 +273,7 @@ export async function getSessionOwner(sessionId) {
     id: session.ownerId,
     email: user.email,
     name: user.name,
+    status: user.status,
     applicationId: session.applicationId
   }
 }

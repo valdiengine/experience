@@ -67,6 +67,17 @@ export function createOwnerAuthMiddleware() {
           throw error
         }
 
+        if (!owner || owner.status !== 'active') {
+          req.owner = null
+          req.ownerSession = null
+          req.isOwnerAuthenticated = false
+          req.authorizationError = owner
+            ? ('ACCOUNT_' + owner.status.toUpperCase())
+            : 'USER_NOT_FOUND'
+          next()
+          return
+        }
+
         req.owner = owner
         req.ownerSession = session
         req.isOwnerAuthenticated = true

@@ -4,6 +4,65 @@
 
 ---
 
+## v4.5 — OWNER-SESSION-3 Complete (2026-08-24)
+
+### Platform Release 4.5 — SESSION LIFECYCLE MANAGEMENT
+
+**Status:** OWNER-SESSION-3 COMPLETE
+
+- **Next:** Future milestones TBD (see ROADMAP.md)
+
+#### Key Deliverables
+
+- **Gate 1 — Account State Enforcement**: Reject authentication when `users.status` is not `'active'`, regardless of session validity. disabled/locked/null accounts return 401 before grant authorization.
+- **Gate 2 — Session Lifecycle Repository**: Added `findActiveSessionsForUser` (safe fields only, no token_hash), `revokeSessionByIdForUser` (dual-key atomic ownership), `revokeAllOtherSessionsForUser` (preserves current session by PostgreSQL UUID).
+- **Gate 3 — Session Management API**: GET `/api/v1/owner/sessions`, DELETE `/api/v1/owner/sessions/:sessionId`, POST `/api/v1/owner/sessions/revoke-others`. Non-disclosure contract: DELETE returns 200 for all zero-row cases.
+- **Gate 4 — Owner Portal UI**: "Sesiones" section with "Esta sesión" (current) and "Sesión activa" (other) badges. Current session has no revoke button. Other sessions show "Cerrar sesión". Global "Cerrar las demás sesiones" button.
+- **Gate 5 — Operational Cleanup**: `scripts/maintenance/cleanup-expired-owner-sessions.js` removes expired `active` rows via existing `cleanupExpiredSessions()`. Hourly cron. Protected environment file.
+
+#### Physical Staging Certification
+
+- Two simultaneous sessions created and verified in PostgreSQL
+- Revoke-one: Session B revoked via UI, Session A remained authenticated, Session B → GET /me returned 401
+- Revoke-others: All other sessions revoked, current session preserved
+- Passenger restart: Session A re-authenticated via sessionStorage + PostgreSQL persistence
+- Cleanup command: `deleted=0` confirmed, idempotent execution verified
+
+#### Staging-Discovered Defects (Fixed Before Certification)
+
+- **ESM import path defect**: Original script used `../database/...` which resolved to `scripts/database/` (wrong). ESM `import()` resolves relative to `import.meta.url`, not `process.cwd()`. Fixed: changed to `../../database/...`.
+- **CRLF wrapper defect**: Wrapper script saved with Windows CRLF line endings caused `MODULE_NOT_FOUND` at execution. Fixed: recreated with LF-only endings.
+- **Cron globbing defect**: Unquoted `*` in crontab generator caused glob expansion, producing malformed entry. Cron rejected with `bad hour` before installation. Fixed: literal asterisks used in cron entry.
+
+#### Test Evidence
+
+- owner-session-1.test.js: 73 PASS
+- owner-session-2.test.js: 174 PASS
+- web/owner-1.test.js: 40 PASS
+- web/owner-stage-1-1-wiring.test.js: 12 PASS
+- web/owner-stage-2-e2e.test.js: 20 PASS
+- **Total: 319 PASS, 0 FAIL**
+
+#### Files Created
+
+- `scripts/maintenance/cleanup-expired-owner-sessions.js` — Operational cleanup command
+- `docs/owner/OWNER_SESSION_3_FINAL_REPORT.md` — Completion report
+
+#### Files Modified
+
+- `web/owner/owner.auth.js` — Added `status` field to `getSessionOwner()` return
+- `web/owner/owner.middleware.js` — Added account-state enforcement check
+- `web/owner/repositories/owner-session.repository.js` — Added 3 new repository functions
+- `web/owner/owner.api.js` — Added session management handlers and routes
+- `web/owner/owner-portal.html` — Added Sesiones navigation and UI
+- `owner-session-2.test.js` — Added 77 new tests
+
+#### NO_MIGRATION_REQUIRED
+
+OWNER-SESSION-3 required ZERO database schema changes. All functionality uses existing `owner_sessions` table columns.
+
+---
+
 ## v4.4 — OWNER-SESSION-2 Complete (2026-08-24)
 
 ### Platform Release 4.4 — PERSISTENT OWNER SESSIONS
