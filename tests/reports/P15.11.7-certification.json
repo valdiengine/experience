@@ -1,0 +1,136 @@
+{
+  "timestamp": "2026-08-25T05:35:00.000Z",
+  "suite": "P15.11.7",
+  "title": "MVP Live Integration & Demonstration Readiness",
+  "baseline": {
+    "platform": "v4.5",
+    "ownerSession3": "14090a5",
+    "gate1Status": "PASS",
+    "gate1Changes": [
+      "web/business/notification/index.js",
+      "web/web.server.js"
+    ],
+    "gate1Wiring": "createFileNotificationPersistence()"
+  },
+  "results": {
+    "total": 33,
+    "passed": 33,
+    "failed": 0,
+    "suites": [
+      {
+        "file": "web/p15.11.7.test.js",
+        "title": "MVP Live Integration",
+        "passed": 24,
+        "failed": 0
+      },
+      {
+        "file": "web/p15.11.7.orchestration.test.js",
+        "title": "Quote-to-Notification Orchestration",
+        "passed": 9,
+        "failed": 0
+      }
+    ]
+  },
+  "fullRegressionMatrix": {
+    "total": 433,
+    "passed": 433,
+    "failed": 0,
+    "skipped": 0,
+    "suites": [
+      { "file": "web/p15.11.0.test.js", "passed": 52 },
+      { "file": "web/p15.11.1.test.js", "passed": 58 },
+      { "file": "web/p15.11.2.test.js", "passed": 70 },
+      { "file": "web/p15.11.3.test.js", "passed": 30 },
+      { "file": "web/p15.11.4.test.js", "passed": 47 },
+      { "file": "web/p15.11.5.test.js", "passed": 51 },
+      { "file": "web/p15.11.6.test.js", "passed": 44 },
+      { "file": "web/p15.11.7.test.js", "passed": 24 },
+      { "file": "web/p15.11.7.orchestration.test.js", "passed": 9 },
+      { "file": "web/quote-form-submission.regression.test.js", "passed": 14 },
+      { "file": "web/mvp-prod-1.test.js", "passed": 34 }
+    ]
+  },
+  "persistence": {
+    "mode": "FILE",
+    "runtimeWiring": "createFileNotificationPersistence()",
+    "storageRoot": "data/notifications/",
+    "verified": true,
+    "gate1Change": true
+  },
+  "orchestration": {
+    "quoteSubmission": "REAL — QuoteCapability.calculateQuote() + handleSubmit()",
+    "interactionCreation": "REAL — ApplicationInbox.create() + BusinessInteraction",
+    "eventEmission": "REAL — Event { type: quote:created }",
+    "notificationCreation": "REAL — NotificationService.createFromEvent()",
+    "channelSelection": "REAL — { email, whatsapp } via config"
+  },
+  "providerModes": {
+    "email": {
+      "implementation": "REAL — SMTPEmailProvider exists",
+      "testPath": "MOCK — MockEmailProvider in certification suite",
+      "livePath": "OPT-IN — EMAIL_PROVIDER=smtp env var required",
+      "certified": "LEVEL_B — via LIVE-1 certification"
+    },
+    "whatsapp": {
+      "implementation": "STUB — Meta/Twilio providers are logging stubs",
+      "testPath": "MOCK — MockWhatsAppProvider in certification suite",
+      "livePath": "BLOCKED — No Meta/Twilio credentials configured",
+      "certified": "VALIDATED — via LIVE-2 validation (no real delivery)"
+    }
+  },
+  "applicationIsolation": {
+    "verified": true,
+    "mechanism": "applicationId-based directory isolation",
+    "storagePaths": "data/notifications/{domain}/{route}/notifications/",
+    "crossTenantLeakage": "NONE — proven by p15.11.7.test.js:690-700"
+  },
+  "failureSemantics": {
+    "invalidQuoteRequest": "TESTED — p15.11.2.test.js schema validation",
+    "unknownApplication": "NOT EXPLICITLY TESTED — defaults to validation error",
+    "invalidSelections": "TESTED — p15.11.2.test.js option validation",
+    "notificationCreationFailure": "TESTED — p15.11.4 retry tests",
+    "providerFailure": "TESTED — p15.11.7.test.js channel independence + p15.11.5/6 mock failure",
+    "persistenceFailure": "NOT TESTED — file persistence assumes functional filesystem"
+  },
+  "security": {
+    "serverSidePricing": "STRONG — QuoteCapability.calculateQuote() is server-side only",
+    "pathTraversal": "PARTIAL — p15.11.2:721 checks output leak, p15.11.3:745 has no-op",
+    "xssHandling": "PARTIAL — customerData tested for crash resistance, not sanitization",
+    "applicationIsolation": "STRONG — multi-tenant directory isolation proven"
+  },
+  "guardian": {
+    "score": 100,
+    "maxScore": 100,
+    "violations": 0,
+    "warnings": 0
+  },
+  "certification": {
+    "scope": "LOCAL_INTEGRATION_CERTIFIED",
+    "classification": "P15.11.7 LOCAL MVP VERTICAL INTEGRATION",
+    "physicalStaging": "NOT CERTIFIED — separate Gate 3",
+    "liveDelivery": "NOT CERTIFIED — EMAIL LEVEL B (LIVE-1), WHATSAPP BLOCKED"
+  },
+  "knownLimitations": [
+    {
+      "item": "WhatsApp real delivery",
+      "status": "BLOCKED — No Meta/Twilio credentials",
+      "severity": "MEDIUM"
+    },
+    {
+      "item": "File persistence failure tolerance",
+      "status": "NOT TESTED — filesystem assumed functional",
+      "severity": "LOW"
+    },
+    {
+      "item": "Path traversal sanitization",
+      "status": "PARTIAL — output leak checked, sanitization not proven",
+      "severity": "LOW"
+    }
+  ],
+  "migrationRequired": false,
+  "neonContacted": false,
+  "stagingContacted": false,
+  "externalProvidersContacted": false,
+  "deployed": false,
+  "status": "CERTIFIED"
+}

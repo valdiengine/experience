@@ -1,0 +1,79 @@
+{
+  "suite": "PROD-STAGE-1-E2E",
+  "title": "Physical Staging E2E & File Persistence Certification",
+  "timestamp": "2026-08-25T05:50:00.000Z",
+  "stagingHost": "https://stage.valdi.app",
+  "testApplication": "valdi.app/albasie",
+  "scope": "PHYSICAL_STAGING",
+  "baseline": {
+    "gate1Status": "PASS",
+    "gate2Status": "PASS",
+    "gate3DefectStatus": "FIXED",
+    "gate3Defect": "NotificationRequest private-field serialization boundary in FileNotificationPersistence.create()",
+    "gate3RootCause": "Object spread of NotificationRequest instance produced empty object; private #fields not enumerable",
+    "gate3Fix": "instanceof NotificationRequest ? .toJSON() : notificationData serialization boundary",
+    "gate3RegressionTest": "web/mvp-prod-1.test.js — FileNotificationPersistence accepts NotificationRequest instance"
+  },
+  "runtimeHashes": {
+    "web/business/notification/index.js": "19DAFA8B85B3EB21FCD31D0197E11DC087DFEC35ADD04E3F14E2A1E648758F73",
+    "web/web.server.js": "5469E3F73B26CAD11FB8B0C618418D2F3C70501EF889FB6A5C927D96705A6FFE",
+    "web/business/notification/persistence/file.notification.persistence.js": "2B55EC7C792B7FA2C45D44BBA06F3D42008BD3C97C0F9D096F96D95DD817C22B"
+  },
+  "physicalQuote": {
+    "requestId": "p15-11-gate3-final-pricing-001",
+    "interactionId": "int_mta8usukxhb2pmbw",
+    "correlationId": "corr_mta8usufl4a993a0",
+    "applicationId": "valdi.app/albasie",
+    "selections": ["albasie-835", "engine-250"],
+    "currency": "CLP",
+    "pricing": {
+      "albasie-835": 8500000,
+      "engine-250": 4500000,
+      "total": 13000000
+    },
+    "statusCode": 201
+  },
+  "persistenceDelta": {
+    "interactionsBefore": 10,
+    "interactionsAfter": 11,
+    "notificationsBefore": 1,
+    "notificationsAfter": 2
+  },
+  "restartPersistence": {
+    "verified": true,
+    "interactionId": "int_mt9lnef90v5y83mt",
+    "notificationId": "notif_mt9lnefoo0m2sjf8",
+    "interactionHash": "a74fedf0699cf1001791c1ad7dde12f82d0e93accb82ef7f2fe2cc697ab74214",
+    "notificationHash": "e31077b1117b1b88cb4430360c7fb94115bda3b1ba047b174dd4aafef656b21d",
+    "survivedRestart": true
+  },
+  "results": {
+    "stagingHealth": "PASS",
+    "quoteSubmission": "PASS",
+    "serverSidePricing": "PASS",
+    "interactionPersistence": "PASS",
+    "notificationPersistence": "PASS",
+    "interactionNotificationLinkage": "PASS",
+    "restartPersistence": "PASS",
+    "applicationIsolation": "PASS",
+    "localRegression": "PASS",
+    "secretScan": "PASS"
+  },
+  "providerModes": {
+    "email": "MOCK",
+    "whatsapp": "MOCK_OR_STUB",
+    "push": "SAFE_FALLBACK"
+  },
+  "externalDeliveryCertified": false,
+  "localRegression": {
+    "total": 434,
+    "passed": 434,
+    "failed": 0,
+    "skipped": 0
+  },
+  "migrationRequired": false,
+  "neonContacted": false,
+  "externalProvidersContacted": false,
+  "deployedDuringClosure": false,
+  "status": "PHYSICAL_STAGING_CERTIFIED"
+}
