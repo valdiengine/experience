@@ -20,6 +20,8 @@ import { registerReservationRoutes } from '../routes/reservation.routes.js';
 import { registerVisitorRoutes } from '../routes/visitor.routes.js';
 import { registerPaymentRoutes } from '../routes/payment.routes.js';
 import { registerReviewRoutes } from '../routes/review.routes.js';
+import { registerQuoteRoutes } from '../routes/quote.routes.js';
+import { registerPushRoutes } from '../routes/push.routes.js';
 
 /**
  * @typedef {Object} ApiBootstrapConfig
@@ -64,6 +66,8 @@ export async function bootstrapApi(config = {}) {
   registerVisitorRoutes(router);
   registerPaymentRoutes(router);
   registerReviewRoutes(router);
+  registerQuoteRoutes(router);
+  registerPushRoutes(router);
 
   server.setRequestHandler(router.getRouter().handle.bind(router.getRouter()));
 

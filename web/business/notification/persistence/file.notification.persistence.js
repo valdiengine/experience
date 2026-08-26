@@ -20,6 +20,7 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
 import { NotificationPersistence } from './notification.persistence.js'
+import { NotificationRequest } from '../notification.model.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -112,9 +113,13 @@ export class FileNotificationPersistence extends NotificationPersistence {
   }
 
   create(notificationData) {
+    const data = notificationData instanceof NotificationRequest
+      ? notificationData.toJSON()
+      : notificationData
+
     const notification = {
-      ...notificationData,
-      createdAt: notificationData.createdAt || new Date().toISOString(),
+      ...data,
+      createdAt: data.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
 

@@ -15,6 +15,7 @@ import { registerReservationRoutes } from './reservation.routes.js';
 import { registerVisitorRoutes } from './visitor.routes.js';
 import { registerPaymentRoutes } from './payment.routes.js';
 import { registerReviewRoutes } from './review.routes.js';
+import { registerQuoteRoutes } from './quote.routes.js';
 
 export class ApiRouter {
   #router;
@@ -67,5 +68,6 @@ export class ApiRouter {
     registerVisitorRoutes(this.#router);
     registerPaymentRoutes(this.#router);
     registerReviewRoutes(this.#router);
+    registerQuoteRoutes(this.#router);
   }
 }

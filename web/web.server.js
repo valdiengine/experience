@@ -24,7 +24,7 @@ import { createWordPressAdapter } from './content/wordpress/wordpress.adapter.js
 import { ConfigurationLoader } from '../experience/loader/configuration.loader.js'
 import { createQuoteAPIHandler } from './api/quote-api.handler.js'
 import { pushAPI, createPushRouter } from './business/push/push.api.js'
-import { createNotificationService, createInMemoryNotificationPersistence } from './business/notification/index.js'
+import { createNotificationService, createFileNotificationPersistence } from './business/notification/index.js'
 import { EmailNotificationAdapter, SMTPEmailProvider, MockEmailProvider } from './business/notification/adapters/email/index.js'
 import { WhatsAppNotificationAdapter, MockWhatsAppProvider, MetaGraphWhatsAppProvider, TwilioWhatsAppProvider } from './business/notification/adapters/whatsapp/index.js'
 import { createOwnerAPIHandler, createOwnerRouter } from './owner/owner.api.js'
@@ -75,7 +75,7 @@ export class PublicWebServer {
   }
 
   #createNotificationService() {
-    const persistence = createInMemoryNotificationPersistence()
+    const persistence = createFileNotificationPersistence()
 
     const emailProvider = this.#createEmailProvider()
     const defaultFrom = process.env.EMAIL_FROM || 'rodrigomedina@valdi.app'
