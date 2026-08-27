@@ -85,6 +85,21 @@ export default {
 
   experienceType: 'company-profile',
 
+  capabilities: {
+    installableApp: {
+      enabled: true,
+      name: 'Albasie - Experiencias Patrimoniales',
+      shortName: 'Albasie',
+      description: 'Operador turístico especializado en experiencias patrimoniales en el sur de Chile',
+      display: 'standalone',
+      themeColor: '#2d5a27',
+      backgroundColor: '#0a0a0a',
+      startUrl: '/albasie/',
+      scope: '/albasie/',
+      offlineFallback: '/offline.html'
+    }
+  },
+
   metadata: {
     companyId: 'albasie',
     founded: '2020',

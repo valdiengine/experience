@@ -11,6 +11,21 @@
  * domain+route isolation across valdi.app/albasie, valdi.app/corral, etc.
  */
 
+import { createApplicationResolver } from '../application/application.resolver.js'
+import { ConfigurationLoader } from '../../experience/loader/configuration.loader.js'
+
+let _resolver = null
+let _configLoader = null
+
+async function getResolver() {
+  if (!_resolver) {
+    _configLoader = new ConfigurationLoader()
+    await _configLoader.initialize()
+    _resolver = createApplicationResolver({ configurationLoader: _configLoader })
+  }
+  return _resolver
+}
+
 const DEFAULT_ICONS = [
   { src: '/icons/icon-72x72.png', sizes: '72x72', type: 'image/png' },
   { src: '/icons/icon-96x96.png', sizes: '96x96', type: 'image/png' },
@@ -192,25 +207,81 @@ async function handleManifest(req, res, maxAge) {
   const slug = match[1]
   const domain = req.domain || 'valdi.app'
 
-  const manifest = {
-    name: 'Valdi App',
-    short_name: 'Valdi',
-    description: 'Experience application',
-    start_url: `/${slug}/`,
-    display: 'standalone',
-    background_color: '#0a0a0a',
-    theme_color: '#c8956c',
-    icons: DEFAULT_ICONS,
-    scope: `/${slug}/`,
-    lang: 'es',
-    categories: ['business'],
-    id: `/tenant/${domain}/${slug}`
-  }
+  try {
+    const appIdDecoded = slug.replace(/__SLASH__/g, '/').replace(/__DOT__/g, '.')
+    if (!appIdDecoded.startsWith(domain)) {
+      throw new Error('Application ID does not match domain')
+    }
 
-  res.statusCode = 200
-  res.setHeader('Content-Type', 'application/manifest+json')
-  res.setHeader('Cache-Control', `public, max-age=${maxAge}`)
-  res.end(JSON.stringify(manifest, null, 2))
+    const route = '/' + appIdDecoded.slice(domain.length).replace(/^\/|\/$/g, '') + '/'
+
+    const resolver = await getResolver()
+    const result = resolver.resolve({ domain, path: route })
+
+    if (!result.success) {
+      throw new Error(result.error || 'Application resolution failed')
+    }
+
+    const resolved = result.resolved
+    const company = resolved.configuration?.company || {}
+    const identity = resolved.identity || {}
+
+    // Load installableApp config directly from company config
+    // The composition code stores company capabilities without the { configuration: ... } wrapper
+    // so we access them directly from the company config's capabilities
+    const companyCapabilities = resolved.configuration?.capabilities || {}
+    const capConfig = companyCapabilities.installableApp || {}
+
+    const tenant = {
+      slug: company.slug || slug.replace(/__DOT__/g, '.').replace(/__SLASH__/g, '/'),
+      domain: identity.domain || domain,
+      name: company.name || 'Valdi App',
+      description: company.description || '',
+      pwa: {
+        name: capConfig.name || company.name || 'Valdi App',
+        shortName: capConfig.shortName || company.shortName || 'Valdi',
+        description: capConfig.description || company.description || '',
+        startUrl: capConfig.startUrl || route,
+        display: capConfig.display || 'standalone',
+        themeColor: capConfig.themeColor || company.branding?.colors?.primary || '#c8956c',
+        backgroundColor: capConfig.backgroundColor || company.branding?.colors?.background || '#0a0a0a',
+        icons: capConfig.icons || DEFAULT_ICONS,
+        scope: capConfig.scope || route,
+        offlineFallback: capConfig.offlineFallback || `${route}offline.html`,
+        lang: capConfig.lang || 'es',
+        categories: capConfig.categories || ['business']
+      }
+    }
+
+    const manifest = generateManifest(tenant, tenant.pwa)
+
+    res.statusCode = 200
+    res.setHeader('Content-Type', 'application/manifest+json')
+    res.setHeader('Cache-Control', `public, max-age=${maxAge}`)
+    res.end(JSON.stringify(manifest, null, 2))
+  } catch (error) {
+    console.warn(`[PWA Middleware] Manifest generation failed for ${slug}: ${error.message}`)
+
+    const manifest = {
+      name: 'Valdi App',
+      short_name: 'Valdi',
+      description: 'Experience application',
+      start_url: `/${slug}/`,
+      display: 'standalone',
+      background_color: '#0a0a0a',
+      theme_color: '#c8956c',
+      icons: DEFAULT_ICONS,
+      scope: `/${slug}/`,
+      lang: 'es',
+      categories: ['business'],
+      id: `/tenant/${domain}/${slug}`
+    }
+
+    res.statusCode = 200
+    res.setHeader('Content-Type', 'application/manifest+json')
+    res.setHeader('Cache-Control', `public, max-age=${maxAge}`)
+    res.end(JSON.stringify(manifest, null, 2))
+  }
 }
 
 async function handleServiceWorker(req, res, pathname, maxAge) {

@@ -225,14 +225,15 @@ export class FilesystemConfigurationSource extends ConfigurationSource {
     return this.#normalizeDestination(config, countryCode, regionCode, destinationCode)
   }
 
-  async loadCompany(countryCode, regionCode, destinationCode, companyCode) {
+  async loadCompany(countryCode, regionCode, destinationCode, companyCode, folder = null) {
     await this.initialize()
 
+    const companyFolder = folder || destinationCode
     const companyPath = path.join(
       'companies',
       countryCode,
       regionCode,
-      destinationCode,
+      companyFolder,
       companyCode,
       'config.js'
     )
@@ -337,25 +338,45 @@ export class FilesystemConfigurationSource extends ConfigurationSource {
   async loadAllCompanies(countryCode, regionCode, destinationCode) {
     await this.initialize()
 
-    const companyDir = path.join(
-      this.#root,
-      'companies',
-      countryCode,
-      regionCode,
-      destinationCode
-    )
+    const companies = {}
 
-    if (!fs.existsSync(companyDir)) {
-      return {}
+    const destinationAliases = {
+      valdi: ['valdivia', 'valdi']
     }
 
-    const companies = {}
-    const entries = fs.readdirSync(companyDir, { withFileTypes: true })
+    const aliases = destinationAliases[destinationCode] || [destinationCode]
 
-    for (const entry of entries) {
-      if (entry.isDirectory() && !entry.name.startsWith('.')) {
-        const companyCode = entry.name
-        companies[companyCode] = await this.loadCompany(countryCode, regionCode, destinationCode, companyCode)
+    for (const alias of aliases) {
+      const companyDir = path.join(
+        this.#root,
+        'companies',
+        countryCode,
+        regionCode,
+        alias
+      )
+
+      if (!fs.existsSync(companyDir)) {
+        continue
+      }
+
+      const entries = fs.readdirSync(companyDir, { withFileTypes: true })
+
+      for (const entry of entries) {
+        if (entry.isDirectory() && !entry.name.startsWith('.')) {
+          const companyCode = entry.name
+          if (!companies[companyCode]) {
+            companies[companyCode] = await this.loadCompany(countryCode, regionCode, destinationCode, companyCode, alias)
+          } else {
+            const existingKeys = Object.keys(companies[companyCode])
+            if (existingKeys.length <= 3) {
+              const alternate = await this.loadCompany(countryCode, regionCode, destinationCode, companyCode, alias)
+              const alternateKeys = Object.keys(alternate)
+              if (alternateKeys.length > 3) {
+                companies[companyCode] = alternate
+              }
+            }
+          }
+        }
       }
     }
 
@@ -515,7 +536,12 @@ export class FilesystemConfigurationSource extends ConfigurationSource {
       team: config.team || [],
       catalog: config.catalog || {},
       providers: config.providers || {},
-      configVersion: config.configVersion || '1.0'
+      configVersion: config.configVersion || '1.0',
+      hero: config.hero || null,
+      experience: config.experience || null,
+      capabilities: config.capabilities || {},
+      seo: config.seo || null,
+      navigation: config.navigation || null
     }
   }
 

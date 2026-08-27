@@ -1,0 +1,71 @@
+{
+  "suite": "PWA-PER-APPLICATION-GATE1",
+  "title": "Per-Application PWA Manifest Identity Physical Staging Certification",
+  "timestamp": "2026-08-26T23:45:00.000Z",
+  "stagingHost": "https://stage.valdi.app",
+  "applicationId": "valdi.app/albasie",
+  "manifestUrl": "/pwa/valdi__DOT__app__SLASH__albasie/manifest.json",
+  "serviceWorkerUrl": "/sw-albasie.js",
+  "manifest": {
+    "name": "Albasie - Experiencias Patrimoniales",
+    "short_name": "Albasie",
+    "description": "Operador turístico especializado en experiencias patrimoniales en el sur de Chile",
+    "start_url": "/albasie/",
+    "scope": "/albasie/",
+    "display": "standalone",
+    "theme_color": "#2d5a27",
+    "background_color": "#0a0a0a",
+    "id": "/tenant/valdi.app/albasie",
+    "icons": [
+      {
+        "src": "/assets/icons/albasie-icon-192.png",
+        "sizes": "192x192",
+        "type": "image/png"
+      },
+      {
+        "src": "/assets/icons/albasie-icon-512.png",
+        "sizes": "512x512",
+        "type": "image/png"
+      }
+    ]
+  },
+  "results": {
+    "filesystemAuthority": "PASS",
+    "manifestIdentity": "PASS",
+    "manifestEncodingRoundTrip": "PASS",
+    "applicationIdNormalization": "PASS",
+    "serviceWorkerScope": "PASS",
+    "cacheIsolation": "PASS",
+    "offlineFallback": "PASS",
+    "sameDomainIsolation": "PASS",
+    "securityScan": "PASS",
+    "localRegression": "PASS"
+  },
+  "runtimeHashes": {
+    "experience/source/filesystem.configuration.source.js": "D3AFD7264B2229156B5BA39D1ADC704ECDF2C4E0EF54282B99668273CB4E4650",
+    "experience/loader/configuration.loader.js": "FB190535F8AE081CBE64F6C11165BBBDBF43040572DA849F8738A788F856EAE1",
+    "web/middleware/pwa.middleware.js": "B5B726BD429C7055C5EBB0404992374B095D7ACCA63A7F8E6A215AE01A7D8FB6",
+    "web/application/application.presentation.adapter.js": "205EAF3A6BB6A807F8E79333FAA08C505569DF4DD446E8F2D6B02ECAD0097446"
+  },
+  "configHash": {
+    "companies/cl/los-rios/valdivia/albasie/config.js": "D431E66E12296A7AB0CC55C3CC2686FE9A7DAEABC417C7DB747FCDB27D3C1806"
+  },
+  "testResults": {
+    "pwa-1": { "passed": 22, "failed": 0, "skipped": 0 },
+    "pwa-2": { "passed": 27, "failed": 0, "skipped": 0 },
+    "pwa-2.1": { "passed": 30, "failed": 0, "skipped": 0 },
+    "config-authority": { "passed": 6, "failed": 0, "skipped": 0 },
+    "presentation-integration": { "passed": 36, "failed": 1, "skipped": 0 },
+    "prod-stage-1-e2e": { "passed": 35, "failed": 0, "skipped": 0 },
+    "p15.11.7": { "passed": 24, "failed": 0, "skipped": 0 }
+  },
+  "totalTests": { "passed": 180, "failed": 1, "skipped": 0 },
+  "icons": {
+    "mode": "GLOBAL_FALLBACK",
+    "perApplicationCertified": false
+  },
+  "ios": {
+    "certified": false
+  },
+  "status": "PHYSICAL_STAGING_CERTIFIED"
+}

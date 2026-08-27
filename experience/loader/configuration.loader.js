@@ -386,19 +386,17 @@ export class ConfigurationLoader {
   }
 
   async loadCompanyConfigs() {
-    this.#companyConfigs.clear()
-
-    const companies = {
+    const legacyCompanies = {
       'cl-los-rios-valdi-albasie': {
         slug: 'albasie',
         name: 'Albasie',
-        type: 'boat',
+        type: 'tourism-operator',
         destination: 'valdi',
-        description: 'Fabricación de embarcaciones semirígidas de fiberglass de alta calidad en el sur de Chile',
+        description: 'Operador turístico especializado en experiencias patrimoniales en el sur de Chile',
         branding: {
           colors: {
-            primary: '#1a3a5c',
-            secondary: '#0d2137',
+            primary: '#2d5a27',
+            secondary: '#1a1a2e',
             accent: '#3d7b9e'
           },
           fonts: {
@@ -532,13 +530,14 @@ export class ConfigurationLoader {
           contact: { enabled: true },
           installableApp: {
             enabled: true,
-            name: 'Albasie',
+            name: 'Albasie - Experiencias Patrimoniales',
             shortName: 'Albasie',
+            description: 'Operador turístico especializado en experiencias patrimoniales en el sur de Chile',
             startUrl: '/albasie/',
             scope: '/albasie/',
             display: 'standalone',
-            backgroundColor: '#ffffff',
-            themeColor: '#1a3a5c',
+            backgroundColor: '#0a0a0a',
+            themeColor: '#2d5a27',
             icons: [
               {
                 src: '/assets/icons/albasie-icon-192.png',
@@ -561,8 +560,10 @@ export class ConfigurationLoader {
       }
     }
 
-    for (const [key, config] of Object.entries(companies)) {
-      this.#companyConfigs.set(key, config)
+    for (const [key, config] of Object.entries(legacyCompanies)) {
+      if (!this.#companyConfigs.has(key)) {
+        this.#companyConfigs.set(key, config)
+      }
     }
   }
 

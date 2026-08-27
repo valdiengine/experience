@@ -310,7 +310,7 @@ export class ApplicationPresentationAdapter {
     const slug = company.slug || 'albasie'
     const domain = identity.domain || 'valdi.app'
     const route = identity.route || `/${slug}`
-    const applicationId = metadata.applicationId || `${domain}${route}`
+    const applicationId = (metadata.applicationId || `${domain}${route}`).replace(/\/$/, '')
 
     const scope = config.scope || `/${slug}/`
     const isRootScope = scope === '/'
@@ -320,7 +320,7 @@ export class ApplicationPresentationAdapter {
       canInstall: enabled,
       isInstalled: false,
       appId: applicationId,
-      manifestUrl: `/pwa/${applicationId.replace(/[^a-zA-Z0-9]/g, '_')}/manifest.json`,
+      manifestUrl: `/pwa/${applicationId.replace(/\//g, '__SLASH__').replace(/\./g, '__DOT__')}/manifest.json`,
       serviceWorkerUrl: `/sw-${slug}.js`,
       serviceWorkerScope: scope,
       config: Object.freeze({
