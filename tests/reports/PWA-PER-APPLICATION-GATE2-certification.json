@@ -1,0 +1,72 @@
+{
+  "suite": "PWA-PER-APPLICATION-GATE2",
+  "title": "Per-Application PWA Visual Identity Physical Staging Certification",
+  "timestamp": "2026-08-27T12:00:00.000Z",
+  "stagingHost": "https://stage.valdi.app",
+  "applicationId": "valdi.app/albasie",
+  "results": {
+    "manifestIcons": "PASS",
+    "favicon": "PASS",
+    "appleTouchIcon": "PASS",
+    "themeColor": "PASS",
+    "iosHomeScreenMetadata": "PASS",
+    "maskableIcon": "PASS",
+    "assetServing": "PASS",
+    "sameDomainIsolation": "PASS",
+    "securityScan": "PASS",
+    "localRegression": "PASS"
+  },
+  "visualIdentity": {
+    "favicon": "/apps/valdi/albasie/icons/favicon.ico",
+    "appleTouchIcon": "/apps/valdi/albasie/icons/apple-touch-icon.png",
+    "themeColor": "#2d5a27",
+    "icons": [
+      {
+        "src": "/apps/valdi/albasie/icons/icon-192.png",
+        "sizes": "192x192",
+        "purpose": "any"
+      },
+      {
+        "src": "/apps/valdi/albasie/icons/icon-512.png",
+        "sizes": "512x512",
+        "purpose": "any"
+      },
+      {
+        "src": "/apps/valdi/albasie/icons/icon-512-maskable.png",
+        "sizes": "512x512",
+        "purpose": "maskable"
+      }
+    ]
+  },
+  "performance": {
+    "classification": "FUNCTIONALLY_ACCEPTABLE",
+    "optimizationRecommended": true,
+    "largeAssets": [
+      {
+        "src": "/apps/valdi/albasie/icons/icon-512.png",
+        "sizeBytes": 675816,
+        "sizeKB": 660
+      },
+      {
+        "src": "/apps/valdi/albasie/icons/icon-512-maskable.png",
+        "sizeBytes": 640693,
+        "sizeKB": 626
+      }
+    ]
+  },
+  "testMatrix": {
+    "visual-identity": { "passed": 27, "failed": 0, "skipped": 0 },
+    "pwa-1": { "passed": 22, "failed": 0, "skipped": 0 },
+    "pwa-2": { "passed": 27, "failed": 0, "skipped": 0 },
+    "pwa-2.1": { "passed": 30, "failed": 0, "skipped": 0 },
+    "config-authority": { "passed": 6, "failed": 0, "skipped": 0 },
+    "presentation.integration": { "passed": 36, "failed": 1, "skipped": 0, "preExistingFailure": "testInternalFieldsNotExposed" },
+    "prod-stage-1-e2e": { "passed": 35, "failed": 0, "skipped": 0 },
+    "p15.11.7": { "passed": 24, "failed": 0, "skipped": 0 }
+  },
+  "totalTests": 207,
+  "totalPassed": 206,
+  "totalFailed": 1,
+  "totalSkipped": 0,
+  "status": "PHYSICAL_STAGING_CERTIFIED"
+}

@@ -329,14 +329,37 @@ export class ApplicationPresentationAdapter {
         description: config.description || company.description || '',
         startUrl: config.startUrl || `/${slug}/`,
         display: config.display || 'standalone',
-        themeColor: config.themeColor || company.themeColor || '#c8956c',
+        themeColor: config.themeColor || company.branding?.colors?.primary || '#c8956c',
         backgroundColor: config.backgroundColor || company.backgroundColor || '#0a0a0a',
-        icons: config.icons || [],
+        icons: this.#validateIcons(config.icons),
+        favicon: PresentationAdapter.validateAssetPath(config.favicon) ? config.favicon : null,
+        appleTouchIcon: PresentationAdapter.validateAssetPath(config.appleTouchIcon) ? config.appleTouchIcon : null,
         scope: scope,
         isRootScope: isRootScope,
         offlineFallback: config.offlineFallback || `/${slug}/offline.html`
       })
     }
+  }
+
+  #validateIcons(icons) {
+    if (!Array.isArray(icons)) {
+      return []
+    }
+    return icons.filter(icon => {
+      if (!icon || typeof icon !== 'object') {
+        return false
+      }
+      if (!PresentationAdapter.validateAssetPath(icon.src)) {
+        return false
+      }
+      if (!icon.sizes || typeof icon.sizes !== 'string') {
+        return false
+      }
+      if (icon.purpose && typeof icon.purpose !== 'string') {
+        return false
+      }
+      return true
+    })
   }
 
   #extractMetadata(ctx) {

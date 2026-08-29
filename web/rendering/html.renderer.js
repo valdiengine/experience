@@ -37,6 +37,9 @@ export class HtmlRenderer {
     const canonical = this.buildCanonical(request)
     const jsonLd = this.buildJsonLd(viewModel, canonical)
 
+    const pwaConfig = viewModel.pwa?.config
+    const pwaEnabled = viewModel.pwa?.enabled
+
     return renderDocument({
       title: seo.title,
       description: seo.description,
@@ -58,10 +61,18 @@ export class HtmlRenderer {
         image: viewModel.heroImage || seo.image
       },
       jsonLd,
-      manifest: viewModel.pwa?.enabled ? viewModel.pwa.manifestUrl : '/manifest.json',
+      manifest: pwaEnabled ? viewModel.pwa.manifestUrl : '/manifest.json',
       body,
       styles: this.renderStyles(viewModel),
-      scripts: this.renderScripts(viewModel)
+      scripts: this.renderScripts(viewModel),
+      favicon: pwaConfig?.favicon || viewModel.branding?.favicon || null,
+      appleTouchIcon: pwaConfig?.appleTouchIcon || viewModel.branding?.appleTouchIcon || null,
+      themeColor: pwaConfig?.themeColor || null,
+      appleWebApp: pwaEnabled ? {
+        capable: true,
+        title: pwaConfig?.name || viewModel.branding?.name || 'Application',
+        statusBarStyle: 'black-translucent'
+      } : null
     })
   }
 

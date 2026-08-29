@@ -96,7 +96,29 @@ export default {
       backgroundColor: '#0a0a0a',
       startUrl: '/albasie/',
       scope: '/albasie/',
-      offlineFallback: '/offline.html'
+      offlineFallback: '/offline.html',
+      icons: [
+        {
+          src: '/apps/valdi/albasie/icons/icon-192.png',
+          sizes: '192x192',
+          type: 'image/png',
+          purpose: 'any'
+        },
+        {
+          src: '/apps/valdi/albasie/icons/icon-512.png',
+          sizes: '512x512',
+          type: 'image/png',
+          purpose: 'any'
+        },
+        {
+          src: '/apps/valdi/albasie/icons/icon-512-maskable.png',
+          sizes: '512x512',
+          type: 'image/png',
+          purpose: 'maskable'
+        }
+      ],
+      favicon: '/apps/valdi/albasie/icons/favicon.ico',
+      appleTouchIcon: '/apps/valdi/albasie/icons/apple-touch-icon.png'
     }
   },
 

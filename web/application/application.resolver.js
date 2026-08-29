@@ -387,11 +387,19 @@ export class ApplicationResolver {
       const mergedCapabilities = composition.capabilities.map(cap => {
         const companyConfig = companyConfigs[cap.name]
         if (companyConfig && typeof companyConfig === 'object') {
+          let config = null
+          if (companyConfig.configuration && typeof companyConfig.configuration === 'object') {
+            config = Object.freeze({ ...cap.configuration || {}, ...companyConfig.configuration })
+          } else if (companyConfig !== null) {
+            const { enabled, ...rest } = companyConfig
+            const hasCapabilityConfig = Object.keys(rest).some(k => k !== 'enabled')
+            if (hasCapabilityConfig) {
+              config = Object.freeze({ ...cap.configuration || {}, ...rest })
+            }
+          }
           return Object.freeze({
             ...cap,
-            configuration: companyConfig.configuration
-              ? Object.freeze({ ...cap.configuration || {}, ...companyConfig.configuration })
-              : (cap.configuration || null)
+            configuration: config
           })
         }
         return cap
@@ -431,7 +439,11 @@ export class ApplicationResolver {
       ownership: Object.freeze({
         type: ownershipResult.ownership,
         matchedBy: ownershipResult.matchedBy,
-        matchedPattern: ownershipResult.matchedPattern
+        matchedPattern: ownershipResult.matchedPattern,
+        company: ownershipResult.company,
+        destination: ownershipResult.destination,
+        zone: ownershipResult.zone,
+        experienceType: ownershipResult.experienceType
       }),
       migrationState: Object.freeze({
         state: migrationResult.migrationState,
