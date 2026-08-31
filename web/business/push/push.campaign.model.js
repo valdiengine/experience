@@ -17,9 +17,15 @@ export const CAMPAIGN_TYPE = Object.freeze({
   OWNER_CAMPAIGN: 'owner_campaign'
 })
 
+export const PUSH_ENVIRONMENTS = Object.freeze({
+  STAGING: 'staging',
+  PRODUCTION: 'production'
+})
+
 export class PushCampaign {
   #id
   #applicationId
+  #environment
   #title
   #body
   #url
@@ -38,6 +44,10 @@ export class PushCampaign {
   constructor(data = {}) {
     this.#id = data.id || this.#generateId()
     this.#applicationId = data.applicationId || null
+    if (!data.environment || !Object.values(PUSH_ENVIRONMENTS).includes(data.environment)) {
+      throw new Error('environment is required and must be staging or production')
+    }
+    this.#environment = data.environment
     this.#title = data.title || ''
     this.#body = data.body || ''
     this.#url = data.url || ''
@@ -66,6 +76,10 @@ export class PushCampaign {
 
   get applicationId() {
     return this.#applicationId
+  }
+
+  get environment() {
+    return this.#environment
   }
 
   get title() {
@@ -181,6 +195,7 @@ export class PushCampaign {
     return {
       id: this.#id,
       applicationId: this.#applicationId,
+      environment: this.#environment,
       title: this.#title,
       body: this.#body,
       url: this.#url,
@@ -202,6 +217,7 @@ export class PushCampaign {
     return {
       id: this.#id,
       applicationId: this.#applicationId,
+      environment: this.#environment,
       title: this.#title,
       body: this.#body,
       url: this.#url,
@@ -220,11 +236,25 @@ export class PushCampaign {
   }
 
   static fromJSON(data) {
+    if (!data.environment) {
+      throw new Error('environment is required')
+    }
     return new PushCampaign(data)
   }
 
   static fromSafeJSON(data) {
     return new PushCampaign(data)
+  }
+
+  static fromLegacyJSON(data) {
+    const record = { ...data }
+    if (!record.environment) {
+      throw new Error('environment is required for legacy campaign records')
+    }
+    if (!Object.values(PUSH_ENVIRONMENTS).includes(record.environment)) {
+      throw new Error('invalid environment for legacy campaign record')
+    }
+    return new PushCampaign(record)
   }
 }
 
@@ -236,5 +266,6 @@ export default {
   PushCampaign,
   createPushCampaign,
   CAMPAIGN_STATUS,
-  CAMPAIGN_TYPE
+  CAMPAIGN_TYPE,
+  PUSH_ENVIRONMENTS
 }

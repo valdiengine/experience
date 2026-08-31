@@ -5,12 +5,13 @@
  * Uses Application-scoped persistence for campaign isolation.
  */
 
-import { PushCampaign, CAMPAIGN_STATUS, createPushCampaign } from './push.campaign.model.js'
+import { PushCampaign, CAMPAIGN_STATUS, createPushCampaign, PUSH_ENVIRONMENTS } from './push.campaign.model.js'
 import { createPushSubscriptionService } from './push.subscription.service.js'
 import { createPushSubscriptionPersistence } from './persistence/push.subscription.persistence.js'
 import { createPushCampaignPersistence } from './persistence/push.campaign.persistence.js'
 
 export const CAMPAIGN_VALIDATION_ERRORS = Object.freeze({
+  MISSING_ENVIRONMENT: 'environment is required and must be staging or production',
   MISSING_APPLICATION_ID: 'applicationId is required',
   MISSING_TITLE: 'title is required',
   TITLE_TOO_LONG: 'title exceeds maximum length (80 characters)',
@@ -119,7 +120,11 @@ export class PushCampaignService {
     }
   }
 
-  async create(applicationId, campaignData, createdBy, authorizedApplicationId = null) {
+  async create(environment, applicationId, campaignData, createdBy, authorizedApplicationId = null) {
+    if (!environment || !Object.values(PUSH_ENVIRONMENTS).includes(environment)) {
+      return { success: false, error: CAMPAIGN_VALIDATION_ERRORS.MISSING_ENVIRONMENT }
+    }
+
     if (!applicationId) {
       return { success: false, error: CAMPAIGN_VALIDATION_ERRORS.MISSING_APPLICATION_ID }
     }
@@ -137,13 +142,17 @@ export class PushCampaignService {
       return { success: false, error: validation.errors.join('; ') }
     }
 
-    const audienceCount = await this.#subscriptionService.getStatus(applicationId)
+    const audienceCount = await this.#subscriptionService.getStatus(environment, applicationId)
+    if (!audienceCount.success && audienceCount.error === CAMPAIGN_VALIDATION_ERRORS.MISSING_ENVIRONMENT) {
+      return { success: false, error: CAMPAIGN_VALIDATION_ERRORS.NO_ACTIVE_SUBSCRIBERS }
+    }
     if (audienceCount.active === 0) {
       return { success: false, error: CAMPAIGN_VALIDATION_ERRORS.NO_ACTIVE_SUBSCRIBERS }
     }
 
     const campaign = createPushCampaign({
       applicationId,
+      environment,
       title: this.#sanitizeText(campaignData.title),
       body: this.#sanitizeText(campaignData.body),
       url: campaignData.url || '/',
@@ -160,35 +169,68 @@ export class PushCampaignService {
     }
   }
 
-  async get(campaignId) {
-    const campaign = await this.#campaignPersistence.get(campaignId)
+  async get(environment, applicationId, campaignId) {
+    if (!environment || !Object.values(PUSH_ENVIRONMENTS).includes(environment)) {
+      return { success: false, error: CAMPAIGN_VALIDATION_ERRORS.MISSING_ENVIRONMENT }
+    }
+
+    if (!applicationId) {
+      return { success: false, error: CAMPAIGN_VALIDATION_ERRORS.MISSING_APPLICATION_ID }
+    }
+
+    const campaign = await this.#campaignPersistence.get(environment, applicationId, campaignId)
     if (!campaign) {
+      return { success: false, error: CAMPAIGN_VALIDATION_ERRORS.CAMPAIGN_NOT_FOUND }
+    }
+    if (campaign.environment !== environment) {
       return { success: false, error: CAMPAIGN_VALIDATION_ERRORS.CAMPAIGN_NOT_FOUND }
     }
     return { success: true, campaign: campaign.toSafeJSON() }
   }
 
-  async getByApplication(applicationId) {
-    const campaigns = await this.#campaignPersistence.listRecent(applicationId, 20)
+  async getByApplication(environment, applicationId) {
+    if (!environment || !Object.values(PUSH_ENVIRONMENTS).includes(environment)) {
+      return { success: false, error: CAMPAIGN_VALIDATION_ERRORS.MISSING_ENVIRONMENT }
+    }
+
+    const campaigns = await this.#campaignPersistence.listRecent(environment, applicationId, 20)
     return { success: true, campaigns }
   }
 
-  async send(campaignId, pushAdapter) {
-    const campaign = await this.#campaignPersistence.get(campaignId)
+  async send(environment, applicationId, campaignId, pushAdapter) {
+    if (!environment || !Object.values(PUSH_ENVIRONMENTS).includes(environment)) {
+      console.error(`[PUSH-CAMPAIGN] send rejected reason=invalid_environment environment=${environment || '(undefined)'}`)
+      return { success: false, error: CAMPAIGN_VALIDATION_ERRORS.MISSING_ENVIRONMENT }
+    }
+
+    if (!applicationId) {
+      console.error(`[PUSH-CAMPAIGN] send rejected reason=missing_application_id environment=${environment}`)
+      return { success: false, error: CAMPAIGN_VALIDATION_ERRORS.MISSING_APPLICATION_ID }
+    }
+
+    const campaign = await this.#campaignPersistence.get(environment, applicationId, campaignId)
     if (!campaign) {
+      console.error(`[PUSH-CAMPAIGN] send rejected reason=campaign_not_found environment=${environment} applicationId=${applicationId} campaignId=${campaignId}`)
+      return { success: false, error: CAMPAIGN_VALIDATION_ERRORS.CAMPAIGN_NOT_FOUND }
+    }
+    if (campaign.environment !== environment) {
+      console.error(`[PUSH-CAMPAIGN] send rejected reason=campaign_environment_mismatch environment=${environment} campaign_environment=${campaign.environment} campaignId=${campaignId}`)
       return { success: false, error: CAMPAIGN_VALIDATION_ERRORS.CAMPAIGN_NOT_FOUND }
     }
 
     if (campaign.status === CAMPAIGN_STATUS.SENT || campaign.status === CAMPAIGN_STATUS.PARTIAL) {
+      console.error(`[PUSH-CAMPAIGN] send rejected reason=campaign_already_sent environment=${environment} campaignId=${campaignId} status=${campaign.status}`)
       return { success: false, error: CAMPAIGN_VALIDATION_ERRORS.CAMPAIGN_ALREADY_SENT }
     }
 
     if (campaign.status === CAMPAIGN_STATUS.SENDING) {
+      console.error(`[PUSH-CAMPAIGN] send rejected reason=campaign_currently_sending environment=${environment} campaignId=${campaignId}`)
       return { success: false, error: CAMPAIGN_VALIDATION_ERRORS.CAMPAIGN_CURRENTLY_SENDING }
     }
 
     const adapter = pushAdapter || this.#pushAdapter
     if (!adapter) {
+      console.error(`[PUSH-CAMPAIGN] send rejected reason=adapter_not_configured environment=${environment} campaignId=${campaignId}`)
       return { success: false, error: 'Push adapter not configured' }
     }
 
@@ -239,8 +281,15 @@ export class PushCampaignService {
     }
   }
 
-  async getAudienceCount(applicationId) {
-    const status = await this.#subscriptionService.getStatus(applicationId)
+  async getAudienceCount(environment, applicationId) {
+    if (!environment || !Object.values(PUSH_ENVIRONMENTS).includes(environment)) {
+      return { success: false, error: CAMPAIGN_VALIDATION_ERRORS.MISSING_ENVIRONMENT }
+    }
+
+    const status = await this.#subscriptionService.getStatus(environment, applicationId)
+    if (!status.success) {
+      return { success: false, error: status.error }
+    }
     return {
       success: true,
       active: status.active,

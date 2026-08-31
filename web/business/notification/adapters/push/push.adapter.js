@@ -16,7 +16,8 @@ import {
 } from './push.provider.js'
 
 import {
-  createPushSubscriptionService
+  createPushSubscriptionService,
+  resolveDeploymentEnvironment
 } from '../../../push/push.subscription.service.js'
 
 import {
@@ -52,6 +53,10 @@ export class PushNotificationAdapter extends NotificationAdapter {
   #mockMode
   #deliveries
 
+  #getEnvironment() {
+    return resolveDeploymentEnvironment()
+  }
+
   async send(context, notification) {
     const applicationId = notification.applicationId
 
@@ -64,7 +69,8 @@ export class PushNotificationAdapter extends NotificationAdapter {
       }
     }
 
-    const activeSubscriptions = await this.#subscriptionService.getActiveSubscriptions(applicationId)
+    const environment = this.#getEnvironment()
+    const activeSubscriptions = await this.#subscriptionService.getActiveSubscriptions(environment, applicationId)
 
     if (activeSubscriptions.length === 0) {
       return {
@@ -92,10 +98,14 @@ export class PushNotificationAdapter extends NotificationAdapter {
         results.sent++
       } else if (result.expired || result.status === 'expired') {
         results.expired++
-        await this.#markSubscriptionExpired(subscription.id, applicationId)
+        await this.#markSubscriptionExpired(subscription, applicationId)
       } else {
         results.failed++
       }
+    }
+
+    if (results.failed > 0 || results.sent > 0) {
+      console.error(`[PUSH-DELIVERY] delivery aggregated attempted=${results.attempted} sent=${results.sent} failed=${results.failed} expired=${results.expired} notificationId=${notification.id} applicationId=${applicationId}`)
     }
 
     return {
@@ -109,13 +119,19 @@ export class PushNotificationAdapter extends NotificationAdapter {
 
   async #deliverToSubscription(subscription, payload, notificationId) {
     try {
+      if (!subscription.endpoint) {
+        return { success: false, status: 'error', error: 'Missing endpoint' }
+      }
+      const p256dh = subscription.keys?.p256dh || subscription.p256dh
+      const auth = subscription.keys?.auth || subscription.auth
+      if (!p256dh || !auth) {
+        return { success: false, status: 'error', error: 'Missing keys' }
+      }
+
       const subWithKeys = {
         id: subscription.id,
         endpoint: subscription.endpoint,
-        keys: {
-          p256dh: subscription.keys?.p256dh || subscription.p256dh,
-          auth: subscription.keys?.auth || subscription.auth
-        }
+        keys: { p256dh, auth }
       }
 
       const result = await this.#provider.send(subWithKeys, payload)
@@ -179,13 +195,10 @@ export class PushNotificationAdapter extends NotificationAdapter {
     return basePath
   }
 
-  async #markSubscriptionExpired(subscriptionId, applicationId) {
+  async #markSubscriptionExpired(subscription, applicationId) {
     try {
-      const subscription = await this.#persistence.get(subscriptionId)
-      if (subscription && subscription.applicationId === applicationId) {
-        subscription.revoke()
-        await this.#persistence.update(subscription)
-      }
+      const environment = subscription.environment || this.#getEnvironment()
+      await this.#subscriptionService.revoke(environment, applicationId, subscription.id)
     } catch (error) {
       console.warn('[PushNotificationAdapter] Failed to mark subscription expired:', error.message)
     }

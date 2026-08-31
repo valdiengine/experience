@@ -8,14 +8,14 @@
  * - GET /api/v1/push/public-key - Get VAPID public key
  */
 
-import { createPushSubscriptionService } from './push.subscription.service.js'
+import { createPushSubscriptionService, resolveDeploymentEnvironment } from './push.subscription.service.js'
 import { createPushSubscriptionPersistence } from './persistence/push.subscription.persistence.js'
 import { ApplicationResolver } from '../../application/application.resolver.js'
-import { FileApplicationPersistence } from '../../application/persistence/file.application.persistence.js'
+import { DomainResolver } from '../../middleware/domain.resolver.js'
 
 const persistence = createPushSubscriptionPersistence()
 const pushService = createPushSubscriptionService({ persistence })
-const appPersistence = new FileApplicationPersistence()
+const domainResolver = new DomainResolver()
 
 function getVapidPublicKey() {
   return process.env.WEB_PUSH_VAPID_PUBLIC_KEY || null
@@ -41,7 +41,8 @@ export const pushAPI = {
         return this.sendJson(res, 400, { error: 'Bad Request', message: 'Could not resolve application' })
       }
 
-      const result = await pushService.register(applicationId, data)
+      const environment = resolveDeploymentEnvironment()
+      const result = await pushService.register(environment, applicationId, data)
 
       if (!result.success) {
         return this.sendJson(res, 400, { error: 'Bad Request', message: result.error })
@@ -79,7 +80,8 @@ export const pushAPI = {
       }
 
       if (data.endpoint) {
-        const result = await pushService.revokeByEndpoint(applicationId, data.endpoint)
+        const environment = resolveDeploymentEnvironment()
+        const result = await pushService.revokeByEndpoint(environment, applicationId, data.endpoint)
         if (!result.success) {
           return this.sendJson(res, 404, { error: 'Not Found', message: result.error })
         }
@@ -100,7 +102,8 @@ export const pushAPI = {
         return this.sendJson(res, 400, { error: 'Bad Request', message: 'Could not resolve application' })
       }
 
-      const status = await pushService.getStatus(applicationId)
+      const environment = resolveDeploymentEnvironment()
+      const status = await pushService.getStatus(environment, applicationId)
 
       return this.sendJson(res, 200, {
         success: true,
@@ -164,6 +167,8 @@ export const pushAPI = {
       domain = req.headers['x-application-domain'] || 'valdi.app'
     }
 
+    const canonicalDomain = domainResolver.resolve(domain)?.domain || domain
+
     if (!route || route === '/') {
       const pathSegments = pathname.split('/').filter(Boolean)
       const apiIndex = pathSegments.indexOf('push')
@@ -172,16 +177,17 @@ export const pushAPI = {
       }
     }
 
-    const resolver = new ApplicationResolver({
-      configurationLoader: appPersistence
-    })
+    const resolver = new ApplicationResolver()
 
-    const result = resolver.resolve(domain, route)
+    const result = resolver.resolve({
+      domain: canonicalDomain,
+      path: route
+    })
     if (result.success && result.resolved) {
       return result.resolved.identity.applicationId
     }
 
-    return `${domain}${route}`.replace('localhost', 'valdi.app').replace('127.0.0.1', 'valdi.app')
+    return null
   },
 
   sendJson(res, statusCode, data) {

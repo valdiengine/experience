@@ -5,7 +5,7 @@
  * Handles actual push notification delivery to subscribers.
  */
 
-import * as webpush from 'web-push'
+import webpush from 'web-push'
 
 export const PUSH_PROVIDER_STATUS = Object.freeze({
   HEALTHY: 'healthy',
@@ -78,6 +78,16 @@ export function createPushProvider(options = {}) {
           }
         }
 
+        let sanitizedBody = null
+        if (error.body) {
+          const bodyStr = typeof error.body === 'string' ? error.body : JSON.stringify(error.body)
+          sanitizedBody = bodyStr
+            .replace(/https?:\/\/[^\s"']+/g, '[ENDPOINT_REDACTED]')
+            .replace(/p256dh[^,}\]]*/gi, 'p256dh=[REDACTED]')
+            .replace(/auth[^,}\]]*/gi, 'auth=[REDACTED]')
+            .substring(0, 500)
+        }
+        console.error(`[PUSH-PROVIDER] delivery failed statusCode=${error.statusCode || null} name=${error.name || null} message=${(error.message || '').replace(/https?:\/\/[^\s"']+/g, '[URL_REDACTED]').substring(0, 200)} body=${sanitizedBody || null}`)
         return {
           success: false,
           status: error.statusCode || 500,

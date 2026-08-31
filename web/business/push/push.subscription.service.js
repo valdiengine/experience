@@ -9,10 +9,19 @@ import {
   PushSubscription,
   createPushSubscription,
   generateSubscriptionHash,
-  PUSH_SUBSCRIPTION_STATUS
+  PUSH_SUBSCRIPTION_STATUS,
+  PUSH_ENVIRONMENTS
 } from './push.subscription.model.js'
 
+export function resolveDeploymentEnvironment() {
+  const env = process.env.TURISTIC_ENV
+  if (env === 'staging') return 'staging'
+  if (env === 'production') return 'production'
+  throw new Error('DEPLOYMENT_ENVIRONMENT_INVALID: TURISTIC_ENV must be "staging" or "production", got: ' + (env || '(undefined)'))
+}
+
 export const PUSH_VALIDATION_ERRORS = Object.freeze({
+  MISSING_ENVIRONMENT: 'environment is required and must be staging or production',
   MISSING_APPLICATION_ID: 'applicationId is required',
   INVALID_APPLICATION_ID: 'Invalid applicationId format',
   MISSING_ENDPOINT: 'endpoint is required',
@@ -43,7 +52,11 @@ export class PushSubscriptionService {
     this.#persistence = persistence
   }
 
-  async register(applicationId, subscriptionData) {
+  async register(environment, applicationId, subscriptionData) {
+    if (!environment || !Object.values(PUSH_ENVIRONMENTS).includes(environment)) {
+      return { success: false, error: PUSH_VALIDATION_ERRORS.MISSING_ENVIRONMENT }
+    }
+
     const validation = this.#validateSubscriptionData(subscriptionData)
     if (!validation.valid) {
       return { success: false, error: validation.error }
@@ -56,10 +69,10 @@ export class PushSubscriptionService {
     const endpoint = subscriptionData.endpoint
     const keys = subscriptionData.keys
 
-    const existing = await this.#persistence.findByEndpoint(applicationId, endpoint)
+    const existing = await this.#persistence.findByEndpoint(environment, applicationId, endpoint)
     if (existing) {
       if (existing.status === PUSH_SUBSCRIPTION_STATUS.REVOKED) {
-        existing.revoke()
+        existing.reactivate()
         await this.#persistence.update(existing)
         return { success: true, subscription: existing.toSafeJSON(), isReactivated: true }
       }
@@ -68,6 +81,7 @@ export class PushSubscriptionService {
 
     const subscription = createPushSubscription({
       applicationId,
+      environment,
       endpoint,
       keys: { p256dh: keys.p256dh, auth: keys.auth }
     })
@@ -77,13 +91,17 @@ export class PushSubscriptionService {
     return { success: true, subscription: subscription.toSafeJSON() }
   }
 
-  async revoke(applicationId, subscriptionId) {
-    const subscription = await this.#persistence.get(subscriptionId)
+  async revoke(environment, applicationId, subscriptionId) {
+    if (!environment || !Object.values(PUSH_ENVIRONMENTS).includes(environment)) {
+      return { success: false, error: PUSH_VALIDATION_ERRORS.MISSING_ENVIRONMENT }
+    }
+
+    const subscription = await this.#persistence.getById(environment, applicationId, subscriptionId)
     if (!subscription) {
       return { success: false, error: 'Subscription not found' }
     }
 
-    if (subscription.applicationId !== applicationId) {
+    if (subscription.applicationId !== applicationId || subscription.environment !== environment) {
       return { success: false, error: 'Subscription does not belong to this application' }
     }
 
@@ -97,8 +115,12 @@ export class PushSubscriptionService {
     return { success: true }
   }
 
-  async revokeByEndpoint(applicationId, endpoint) {
-    const subscription = await this.#persistence.findByEndpoint(applicationId, endpoint)
+  async revokeByEndpoint(environment, applicationId, endpoint) {
+    if (!environment || !Object.values(PUSH_ENVIRONMENTS).includes(environment)) {
+      return { success: false, error: PUSH_VALIDATION_ERRORS.MISSING_ENVIRONMENT }
+    }
+
+    const subscription = await this.#persistence.findByEndpoint(environment, applicationId, endpoint)
     if (!subscription) {
       return { success: false, error: 'Subscription not found' }
     }
@@ -117,20 +139,30 @@ export class PushSubscriptionService {
     return { success: true }
   }
 
-  async getStatus(applicationId) {
-    const active = await this.#persistence.countActive(applicationId)
-    const revoked = await this.#persistence.countRevoked(applicationId)
+  async getStatus(environment, applicationId) {
+    if (!environment || !Object.values(PUSH_ENVIRONMENTS).includes(environment)) {
+      return { success: false, error: PUSH_VALIDATION_ERRORS.MISSING_ENVIRONMENT }
+    }
+
+    const active = await this.#persistence.countActive(environment, applicationId)
+    const revoked = await this.#persistence.countRevoked(environment, applicationId)
 
     return {
+      success: true,
       applicationId,
+      environment,
       active,
       revoked,
       total: active + revoked
     }
   }
 
-  async getActiveSubscriptions(applicationId) {
-    return this.#persistence.listActive(applicationId)
+  async getActiveSubscriptions(environment, applicationId) {
+    if (!environment || !Object.values(PUSH_ENVIRONMENTS).includes(environment)) {
+      return []
+    }
+
+    return this.#persistence.listActive(environment, applicationId)
   }
 
   #validateSubscriptionData(data) {

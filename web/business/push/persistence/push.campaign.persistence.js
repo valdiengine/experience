@@ -2,20 +2,21 @@
  * PUSH-3 — Push Campaign Persistence
  *
  * File-based persistence for push notification campaigns.
- * Maintains Application-scoped isolation for all campaign data.
+ * Maintains Environment-scoped + Application-scoped isolation for all campaign data.
  *
  * Storage Structure:
  *   data/push-campaigns/
- *   └── {applicationId}/
- *       └── campaigns/
- *           ├── index.json (campaign index)
- *           └── {campaignId}.json (individual campaign)
+ *   └── {environment}/
+ *       └── {applicationId}/
+ *           └── campaigns/
+ *               ├── index.json (campaign index)
+ *               └── {campaignId}.json (individual campaign)
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { PushCampaign } from '../push.campaign.model.js'
+import { PushCampaign, PUSH_ENVIRONMENTS } from '../push.campaign.model.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -33,8 +34,8 @@ export class PushCampaignPersistence {
     return join(__dirname, '..', '..', '..', 'data', 'push-campaigns')
   }
 
-  #getCampaignDir(applicationId) {
-    return join(this.#basePath, applicationId.replace('/', '_'), 'campaigns')
+  #getCampaignDir(environment, applicationId) {
+    return join(this.#basePath, environment, applicationId.replace('/', '_'), 'campaigns')
   }
 
   #ensureDir(dir) {
@@ -43,12 +44,12 @@ export class PushCampaignPersistence {
     }
   }
 
-  #getIndexPath(applicationId) {
-    return join(this.#getCampaignDir(applicationId), 'index.json')
+  #getIndexPath(environment, applicationId) {
+    return join(this.#getCampaignDir(environment, applicationId), 'index.json')
   }
 
-  #getCampaignPath(applicationId, campaignId) {
-    return join(this.#getCampaignDir(applicationId), `${campaignId}.json`)
+  #getCampaignPath(environment, applicationId, campaignId) {
+    return join(this.#getCampaignDir(environment, applicationId), `${campaignId}.json`)
   }
 
   #validateApplicationId(applicationId) {
@@ -69,14 +70,15 @@ export class PushCampaignPersistence {
       throw new Error('Invalid applicationId')
     }
 
-    const dir = this.#getCampaignDir(campaign.applicationId)
+    const environment = campaign.environment
+    const dir = this.#getCampaignDir(environment, campaign.applicationId)
     this.#ensureDir(dir)
 
-    const campaignPath = this.#getCampaignPath(campaign.applicationId, campaign.id)
+    const campaignPath = this.#getCampaignPath(environment, campaign.applicationId, campaign.id)
     writeFileSync(campaignPath, JSON.stringify(campaign.toJSON(), null, 2))
 
-    const indexPath = this.#getIndexPath(campaign.applicationId)
-    let index = this.#loadIndex(campaign.applicationId)
+    const indexPath = this.#getIndexPath(environment, campaign.applicationId)
+    let index = this.#loadIndex(environment, campaign.applicationId)
     index[campaign.id] = {
       id: campaign.id,
       status: campaign.status,
@@ -96,11 +98,12 @@ export class PushCampaignPersistence {
       throw new Error('Invalid applicationId')
     }
 
-    const campaignPath = this.#getCampaignPath(campaign.applicationId, campaign.id)
+    const environment = campaign.environment
+    const campaignPath = this.#getCampaignPath(environment, campaign.applicationId, campaign.id)
     writeFileSync(campaignPath, JSON.stringify(campaign.toJSON(), null, 2))
 
-    const indexPath = this.#getIndexPath(campaign.applicationId)
-    let index = this.#loadIndex(campaign.applicationId)
+    const indexPath = this.#getIndexPath(environment, campaign.applicationId)
+    let index = this.#loadIndex(environment, campaign.applicationId)
     if (index[campaign.id]) {
       index[campaign.id].status = campaign.status
       index[campaign.id].title = campaign.title
@@ -114,38 +117,47 @@ export class PushCampaignPersistence {
     return campaign
   }
 
-  async get(campaignId) {
-    if (this.#campaigns.has(campaignId)) {
-      return this.#campaigns.get(campaignId)
+  async get(environment, applicationId, campaignId) {
+    if (!this.#validateApplicationId(applicationId)) {
+      return null
     }
 
-    const index = this.#loadAllIndexes()
-    for (const [appId, indexData] of Object.entries(index)) {
-      if (indexData[campaignId]) {
-        const campaignPath = this.#getCampaignPath(appId, campaignId)
-        if (existsSync(campaignPath)) {
-          const data = JSON.parse(readFileSync(campaignPath, 'utf-8'))
-          const campaign = PushCampaign.fromJSON(data)
-          this.#campaigns.set(campaignId, campaign)
-          return campaign
-        }
+    if (this.#campaigns.has(campaignId)) {
+      const cached = this.#campaigns.get(campaignId)
+      if (cached.environment === environment && cached.applicationId === applicationId) {
+        return cached
       }
     }
 
-    return null
+    const campaignPath = this.#getCampaignPath(environment, applicationId, campaignId)
+    if (!existsSync(campaignPath)) {
+      return null
+    }
+
+    try {
+      const data = JSON.parse(readFileSync(campaignPath, 'utf-8'))
+      const campaign = PushCampaign.fromLegacyJSON(data)
+      this.#campaigns.set(campaignId, campaign)
+      return campaign
+    } catch {
+      return null
+    }
   }
 
-  async getByApplication(applicationId) {
+  async getByApplication(environment, applicationId) {
     if (!this.#validateApplicationId(applicationId)) {
       throw new Error('Invalid applicationId')
     }
 
-    const index = this.#loadIndex(applicationId)
+    const index = this.#loadIndex(environment, applicationId)
     const campaigns = []
 
     for (const campaignId of Object.keys(index)) {
-      const campaign = await this.get(campaignId)
-      if (campaign) {
+      const campaignPath = this.#getCampaignPath(environment, applicationId, campaignId)
+      if (existsSync(campaignPath)) {
+        const data = JSON.parse(readFileSync(campaignPath, 'utf-8'))
+        const campaign = PushCampaign.fromLegacyJSON(data)
+        this.#campaigns.set(campaignId, campaign)
         campaigns.push(campaign.toSafeJSON())
       }
     }
@@ -153,20 +165,23 @@ export class PushCampaignPersistence {
     return campaigns
   }
 
-  async listRecent(applicationId, limit = 10) {
+  async listRecent(environment, applicationId, limit = 10) {
     if (!this.#validateApplicationId(applicationId)) {
       throw new Error('Invalid applicationId')
     }
 
-    const index = this.#loadIndex(applicationId)
+    const index = this.#loadIndex(environment, applicationId)
     const entries = Object.values(index)
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       .slice(0, limit)
 
     const campaigns = []
     for (const entry of entries) {
-      const campaign = await this.get(entry.id)
-      if (campaign) {
+      const campaignPath = this.#getCampaignPath(environment, applicationId, entry.id)
+      if (existsSync(campaignPath)) {
+        const data = JSON.parse(readFileSync(campaignPath, 'utf-8'))
+        const campaign = PushCampaign.fromLegacyJSON(data)
+        this.#campaigns.set(entry.id, campaign)
         campaigns.push(campaign.toSafeJSON())
       }
     }
@@ -174,8 +189,8 @@ export class PushCampaignPersistence {
     return campaigns
   }
 
-  #loadIndex(applicationId) {
-    const indexPath = this.#getIndexPath(applicationId)
+  #loadIndex(environment, applicationId) {
+    const indexPath = this.#getIndexPath(environment, applicationId)
     if (!existsSync(indexPath)) {
       return {}
     }
@@ -184,27 +199,6 @@ export class PushCampaignPersistence {
     } catch {
       return {}
     }
-  }
-
-  #loadAllIndexes() {
-    const indexes = {}
-    if (!existsSync(this.#basePath)) {
-      return indexes
-    }
-    const entries = readdirSync(this.#basePath, { withFileTypes: true })
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        const indexPath = join(this.#basePath, entry.name, 'campaigns', 'index.json')
-        if (existsSync(indexPath)) {
-          try {
-            indexes[entry.name] = JSON.parse(readFileSync(indexPath, 'utf-8'))
-          } catch {
-            indexes[entry.name] = {}
-          }
-        }
-      }
-    }
-    return indexes
   }
 }
 

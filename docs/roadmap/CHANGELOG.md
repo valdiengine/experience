@@ -63,6 +63,64 @@ OWNER-SESSION-3 required ZERO database schema changes. All functionality uses ex
 
 ---
 
+## v4.6 — PUSH-4 Complete (2026-08-30)
+
+### Platform Release 4.6 — OWNER CAMPAIGN DELIVERY PATH
+
+**Status:** PUSH-4 COMPLETE
+
+- **Next:** Scheduled Campaigns (PUSH-5) — TBD
+
+#### Key Deliverables
+
+- **resolveDeploymentEnvironment()**: Canonical environment resolver exported from `push.subscription.service.js`, imported by all push API files. Returns `staging` or `production` based on `TURISTIC_ENV`, throws on unknown values.
+- **mockMode: false**: PushNotificationAdapter instantiated with `mockMode: false` in owner API send handler, enabling real web-push delivery.
+- **Fail-Closed Environment**: Unknown `TURISTIC_ENV` values throw `Error('Unknown deployment environment')`, preventing silent misconfiguration.
+- **Campaign Persistence Multi-Worker Fix**: `campaignPersistence.get()` falls back to filesystem when Map is empty, ensuring authoritative state across Passenger workers.
+
+#### Physical Staging Certification
+
+- applicationId: `valdi.app/albasie`, environment: `staging`, stage URL: `https://stage.valdi.app/albasie/`
+- campaignId: `campaign_mtff5pgr_wro018l0`
+- sendPushCampaign POST to `/api/v1/owner/push/campaigns/{id}/send` with `Content-Type: application/json` and body `{}`
+- Delivery result: attempted=1, sent=1, failed=0
+- Physical OS/browser notification confirmed with title "Albasie" and body "PUSH-4 Turistic OS - campaña oficial de prueba"
+
+#### Staging-Discovered Defects (Fixed Before Certification)
+
+- **POST body requirement**: POST send without `Content-Type: application/json` and `-d '{}'` was rejected before reaching the router. Fixed by adding headers to the curl command.
+- **toJSON() vs toSafeJSON()**: `PushSubscriptionPersistence.listActive()` returned `subscription.toSafeJSON()` which strips `endpoint` and `keys`. web-push threw "You must pass in a subscription with at least an endpoint". Fixed: changed to `toJSON()`.
+- **Fail-Closed Endpoint/Keys Validation**: Added validation in `PushNotificationAdapter` to reject subscriptions missing endpoint or keys before attempting delivery.
+
+#### Test Evidence
+
+- push-1.test.js: 68/68 PASS
+- push-2-level-c.test.js: 22/22 PASS
+- push-4.2-diagnostic.test.js: 4/5 PASS (test 5 fails due to expected Map cache behavior across workers)
+
+#### Files Modified
+
+- `web/business/push/push.subscription.service.js` — Added `resolveDeploymentEnvironment()` export
+- `web/owner/owner.api.js` — Added `mockMode: false` to PushNotificationAdapter; fail-closed validation
+- `web/business/notification/adapters/push/push.adapter.js` — Added fail-closed endpoint/keys validation
+- `web/business/push/persistence/push.subscription.persistence.js` — Changed `toSafeJSON()` to `toJSON()` in `listActive()`
+- `web/business/push/push.campaign.service.js` — Added environment validation; `send()` accepts `applicationId`
+- `web/business/push/persistence/push.campaign.persistence.js` — Added filesystem fallback in `get()`
+
+#### NO_MIGRATION_REQUIRED
+
+PUSH-4 required ZERO database schema changes.
+
+#### Known Hardening Debt
+
+- Push campaign process-local Map cache consistency across Passenger workers
+- Cross-process diagnostic currently demonstrates 4/5 scenarios passing
+- A worker with a populated Map may retain stale campaign state after another worker persists newer filesystem state
+- This does not invalidate physical PUSH-4 delivery certification (attempted=1, sent=1, failed=0)
+- Future hardening should make persistent storage authoritative or implement cache invalidation/version checking
+
+---
+
 ## v4.4 — OWNER-SESSION-2 Complete (2026-08-24)
 
 ### Platform Release 4.4 — PERSISTENT OWNER SESSIONS

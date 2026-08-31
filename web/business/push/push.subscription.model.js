@@ -11,9 +11,15 @@ export const PUSH_SUBSCRIPTION_STATUS = Object.freeze({
   EXPIRED: 'expired'
 })
 
+export const PUSH_ENVIRONMENTS = Object.freeze({
+  STAGING: 'staging',
+  PRODUCTION: 'production'
+})
+
 export class PushSubscription {
   #id
   #applicationId
+  #environment
   #endpoint
   #keys
   #status
@@ -24,6 +30,10 @@ export class PushSubscription {
   constructor(data = {}) {
     this.#id = data.id || this.#generateId()
     this.#applicationId = data.applicationId || null
+    if (!data.environment || !Object.values(PUSH_ENVIRONMENTS).includes(data.environment)) {
+      throw new Error('environment is required and must be staging or production')
+    }
+    this.#environment = data.environment
     this.#endpoint = data.endpoint || null
     this.#keys = data.keys || null
     this.#status = data.status || PUSH_SUBSCRIPTION_STATUS.ACTIVE
@@ -44,6 +54,10 @@ export class PushSubscription {
 
   get applicationId() {
     return this.#applicationId
+  }
+
+  get environment() {
+    return this.#environment
   }
 
   get endpoint() {
@@ -88,10 +102,22 @@ export class PushSubscription {
     return true
   }
 
+  reactivate() {
+    if (this.#status !== PUSH_SUBSCRIPTION_STATUS.REVOKED) {
+      return false
+    }
+
+    this.#status = PUSH_SUBSCRIPTION_STATUS.ACTIVE
+    this.#revokedAt = null
+    this.#updatedAt = new Date().toISOString()
+    return true
+  }
+
   toJSON() {
     return {
       id: this.#id,
       applicationId: this.#applicationId,
+      environment: this.#environment,
       endpoint: this.#endpoint,
       keys: this.#keys ? { ...this.#keys } : null,
       status: this.#status,
@@ -105,6 +131,7 @@ export class PushSubscription {
     return {
       id: this.#id,
       applicationId: this.#applicationId,
+      environment: this.#environment,
       status: this.#status,
       createdAt: this.#createdAt,
       revokedAt: this.#revokedAt
@@ -126,15 +153,37 @@ export class PushSubscription {
   static isValidStatus(status) {
     return Object.values(PUSH_SUBSCRIPTION_STATUS).includes(status)
   }
+
+  static isValidEnvironment(environment) {
+    return Object.values(PUSH_ENVIRONMENTS).includes(environment)
+  }
+
+  static fromJSON(json) {
+    if (!json.environment) {
+      throw new Error('environment is required')
+    }
+    return new PushSubscription(json)
+  }
+
+  static fromLegacyJSON(json) {
+    const record = { ...json }
+    if (!record.environment) {
+      throw new Error('environment is required for legacy subscription records')
+    }
+    if (!Object.values(PUSH_ENVIRONMENTS).includes(record.environment)) {
+      throw new Error('invalid environment for legacy subscription record')
+    }
+    return new PushSubscription(record)
+  }
 }
 
 export function createPushSubscription(data = {}) {
   return new PushSubscription(data)
 }
 
-export function generateSubscriptionHash(endpoint, applicationId) {
+export function generateSubscriptionHash(endpoint, applicationId, environment) {
   let hash = 0
-  const str = `${applicationId}:${endpoint}`
+  const str = `${environment}:${applicationId}:${endpoint}`
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i)
     hash = ((hash << 5) - hash) + char
@@ -147,5 +196,6 @@ export default {
   PushSubscription,
   createPushSubscription,
   generateSubscriptionHash,
-  PUSH_SUBSCRIPTION_STATUS
+  PUSH_SUBSCRIPTION_STATUS,
+  PUSH_ENVIRONMENTS
 }

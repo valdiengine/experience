@@ -31,7 +31,8 @@ import {
 } from './owner.identity.js'
 
 import {
-  createPushSubscriptionService
+  createPushSubscriptionService,
+  resolveDeploymentEnvironment
 } from '../business/push/push.subscription.service.js'
 
 import {
@@ -460,8 +461,9 @@ export function createOwnerAPIHandler() {
         return
       }
 
+      const environment = resolveDeploymentEnvironment()
       const applicationId = req.owner.applicationId
-      const status = await pushService.getStatus(applicationId)
+      const status = await pushService.getStatus(environment, applicationId)
 
       sendJson(res, 200, {
         success: true,
@@ -480,10 +482,15 @@ export function createOwnerAPIHandler() {
         return
       }
 
-      const applicationId = req.owner.applicationId
-      const result = await campaignService.getByApplication(applicationId)
-
-      sendJson(res, 200, result)
+      try {
+        const environment = resolveDeploymentEnvironment()
+        const applicationId = req.owner.applicationId
+        const result = await campaignService.getByApplication(environment, applicationId)
+        sendJson(res, 200, result)
+      } catch (error) {
+        console.error('[OwnerAPI] Get campaigns error:', error.message)
+        sendJson(res, 500, { error: 'Internal Server Error' })
+      }
     },
 
     async handleGetPushCampaign(req, res, campaignId) {
@@ -492,20 +499,26 @@ export function createOwnerAPIHandler() {
         return
       }
 
-      const applicationId = req.owner.applicationId
-      const result = await campaignService.get(campaignId)
+      try {
+        const environment = resolveDeploymentEnvironment()
+        const applicationId = req.owner.applicationId
+        const result = await campaignService.get(environment, applicationId, campaignId)
 
-      if (!result.success) {
-        sendJson(res, 404, result)
-        return
+        if (!result.success) {
+          sendJson(res, 404, result)
+          return
+        }
+
+        if (result.campaign.applicationId !== applicationId) {
+          sendJson(res, 403, { success: false, error: 'Forbidden' })
+          return
+        }
+
+        sendJson(res, 200, result)
+      } catch (error) {
+        console.error('[OwnerAPI] Get campaign error:', error.message)
+        sendJson(res, 500, { error: 'Internal Server Error' })
       }
-
-      if (result.campaign.applicationId !== applicationId) {
-        sendJson(res, 403, { success: false, error: 'Forbidden' })
-        return
-      }
-
-      sendJson(res, 200, result)
     },
 
     async handleCreatePushCampaign(req, res) {
@@ -515,6 +528,8 @@ export function createOwnerAPIHandler() {
       }
 
       try {
+        const environment = resolveDeploymentEnvironment()
+
         let body = ''
         for await (const chunk of req) {
           body += chunk
@@ -531,7 +546,7 @@ export function createOwnerAPIHandler() {
         const applicationId = req.owner.applicationId
         const createdBy = req.owner.email
 
-        const result = await campaignService.create(applicationId, data, createdBy)
+        const result = await campaignService.create(environment, applicationId, data, createdBy)
 
         if (!result.success) {
           sendJson(res, 400, result)
@@ -540,7 +555,7 @@ export function createOwnerAPIHandler() {
 
         sendJson(res, 201, result)
       } catch (error) {
-        console.error('[OwnerAPI] Create campaign error:', error)
+        console.error('[OwnerAPI] Create campaign error:', error.message)
         sendJson(res, 500, { error: 'Internal Server Error' })
       }
     },
@@ -552,8 +567,9 @@ export function createOwnerAPIHandler() {
       }
 
       try {
+        const environment = resolveDeploymentEnvironment()
         const applicationId = req.owner.applicationId
-        const campaignResult = await campaignService.get(campaignId)
+        const campaignResult = await campaignService.get(environment, applicationId, campaignId)
 
         if (!campaignResult.success) {
           sendJson(res, 404, campaignResult)
@@ -567,19 +583,20 @@ export function createOwnerAPIHandler() {
 
         const pushAdapter = new PushNotificationAdapter({
           persistence: pushPersistence,
-          mockMode: true
+          mockMode: false
         })
 
-        const result = await campaignService.send(campaignId, pushAdapter)
+        const result = await campaignService.send(environment, applicationId, campaignId, pushAdapter)
 
         if (!result.success) {
+          console.error(`[OwnerAPI] Campaign send rejected error=${result.error} environment=${environment} applicationId=${applicationId} campaignId=${campaignId}`)
           sendJson(res, 400, result)
           return
         }
 
         sendJson(res, 200, result)
       } catch (error) {
-        console.error('[OwnerAPI] Send campaign error:', error)
+        console.error('[OwnerAPI] Send campaign error:', error.message)
         sendJson(res, 500, { error: 'Internal Server Error' })
       }
     },

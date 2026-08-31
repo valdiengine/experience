@@ -1128,3 +1128,71 @@ DELETE returns 200 for nonexistent/foreign/revoked/expired UUIDs. No way to enum
 - web/owner-stage-1-1-wiring.test.js: 12 PASS, 0 FAIL
 - web/owner-stage-2-e2e.test.js: 20 PASS, 0 FAIL
 - **Total: 319 PASS, 0 FAIL**
+
+---
+
+## PUSH-4 — Owner Campaign Delivery
+
+**Status:** PHYSICAL_STAGING_CERTIFIED  
+**Certified:** 2026-08-30
+
+### Canonical Identity
+
+- applicationId: `valdi.app/albasie`
+- environment: `staging`
+- staging runtime: `https://stage.valdi.app/albasie/`
+- production `https://valdi.app/albasie/` remains WordPress and was not modified
+
+### PUSH Milestone State
+
+- PUSH-1 — Staging VAPID foundation certified
+- PUSH-2 — Physical browser subscription certified
+- PUSH-3 — Targeted real delivery physically certified
+- PUSH-4 — Official authenticated Owner Campaign delivery physically certified
+
+### Physical Staging Certification
+
+- Campaign created through authenticated Owner API
+- Campaign environment verified as `staging`
+- Campaign applicationId verified as `valdi.app/albasie`
+- Delivery result: `attempted=1`, `sent=1`, `failed=0`
+- Physical browser/OS notification confirmed
+
+### Persistence Isolation
+
+Push subscription persistence:
+
+`web/data/push/{environment}/{application}/subscriptions/`
+
+Push campaign persistence:
+
+`web/data/push-campaigns/{environment}/{application}/campaigns/`
+
+Deployment environment and canonical application identity are separate dimensions. Staging and production may share the same logical applicationId but must not share Push subscription or campaign persistence.
+
+### Delivery Defect Corrected
+
+Internal delivery previously consumed `toSafeJSON()` subscription objects, which intentionally omitted `endpoint` and Push encryption keys required by `web-push`.
+
+Correction:
+
+- internal delivery path now receives full subscription serialization
+- external/API serialization remains safe
+- adapter validates endpoint and required keys fail-closed before delivery
+
+The physical certification request also requires a valid JSON POST body and `Content-Type: application/json`.
+
+### Test Evidence
+
+- `web/push-1.test.js`: 68 PASS, 0 FAIL
+- `web/push-2-level-c.test.js`: 22 PASS, 0 FAIL
+- `web/push-3.test.js`: not executed in final closure because PostgreSQL dependency was unavailable
+- `web/push-4.2-diagnostic.test.js`: 4/5 scenarios pass
+
+### Known Hardening Debt
+
+`PushCampaignPersistence` retains a process-local `Map` cache. A Passenger worker with previously cached campaign state may retain stale state after another worker persists newer filesystem state.
+
+The cross-process diagnostic reproduces this as a 4/5 result.
+
+This is a **KNOWN HARDENING DEBT** and does not invalidate PUSH-4 physical delivery certification. Future hardening should make persistent storage authoritative or implement cache invalidation/version checking.

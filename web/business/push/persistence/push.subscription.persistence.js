@@ -2,20 +2,21 @@
  * PUSH-1 — Push Subscription Persistence
  *
  * File-based persistence for push subscriptions.
- * Maintains Application-scoped isolation for all subscriber data.
+ * Maintains Application-scoped + Environment-scoped isolation for all subscriber data.
  *
  * Storage Structure:
  *   data/push/
- *   └── {applicationId}/
- *       └── subscriptions/
- *           ├── index.json (subscription index)
- *           └── {subscriptionId}.json (individual subscription)
+ *   └── {environment}/
+ *       └── {applicationId}/
+ *           └── subscriptions/
+ *               ├── index.json (subscription index)
+ *               └── {subscriptionId}.json (individual subscription)
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { PushSubscription } from '../push.subscription.model.js'
+import { PushSubscription, PUSH_ENVIRONMENTS } from '../push.subscription.model.js'
 import { generateSubscriptionHash } from '../push.subscription.model.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -36,8 +37,8 @@ export class PushSubscriptionPersistence {
     return join(__dirname, '..', '..', '..', 'data', 'push')
   }
 
-  #getSubscriptionDir(applicationId) {
-    return join(this.#basePath, applicationId.replace('/', '_'), 'subscriptions')
+  #getSubscriptionDir(environment, applicationId) {
+    return join(this.#basePath, environment, applicationId.replace('/', '_'), 'subscriptions')
   }
 
   #ensureDir(dir) {
@@ -46,23 +47,25 @@ export class PushSubscriptionPersistence {
     }
   }
 
-  #getIndexPath(applicationId) {
-    return join(this.#getSubscriptionDir(applicationId), 'index.json')
+  #getIndexPath(environment, applicationId) {
+    return join(this.#getSubscriptionDir(environment, applicationId), 'index.json')
   }
 
-  #getSubscriptionPath(applicationId, subscriptionId) {
-    return join(this.#getSubscriptionDir(applicationId), `${subscriptionId}.json`)
+  #getSubscriptionPath(environment, applicationId, subscriptionId) {
+    return join(this.#getSubscriptionDir(environment, applicationId), `${subscriptionId}.json`)
   }
 
   async create(subscription) {
-    const dir = this.#getSubscriptionDir(subscription.applicationId)
+    const environment = subscription.environment
+    const applicationId = subscription.applicationId
+    const dir = this.#getSubscriptionDir(environment, applicationId)
     this.#ensureDir(dir)
 
-    const subPath = this.#getSubscriptionPath(subscription.applicationId, subscription.id)
+    const subPath = this.#getSubscriptionPath(environment, applicationId, subscription.id)
     writeFileSync(subPath, JSON.stringify(subscription.toJSON(), null, 2))
 
-    const indexPath = this.#getIndexPath(subscription.applicationId)
-    let index = this.#loadIndex(subscription.applicationId)
+    const indexPath = this.#getIndexPath(environment, applicationId)
+    let index = this.#loadIndex(environment, applicationId)
     index[subscription.id] = {
       endpoint: subscription.endpoint,
       status: subscription.status,
@@ -70,7 +73,7 @@ export class PushSubscriptionPersistence {
     }
     writeFileSync(indexPath, JSON.stringify(index, null, 2))
 
-    const hash = generateSubscriptionHash(subscription.endpoint, subscription.applicationId)
+    const hash = generateSubscriptionHash(subscription.endpoint, applicationId, environment)
     this.#endpointIndex.set(hash, subscription.id)
 
     this.#subscriptions.set(subscription.id, subscription)
@@ -79,11 +82,12 @@ export class PushSubscriptionPersistence {
   }
 
   async update(subscription) {
-    const subPath = this.#getSubscriptionPath(subscription.applicationId, subscription.id)
+    const environment = subscription.environment
+    const subPath = this.#getSubscriptionPath(environment, subscription.applicationId, subscription.id)
     writeFileSync(subPath, JSON.stringify(subscription.toJSON(), null, 2))
 
-    const indexPath = this.#getIndexPath(subscription.applicationId)
-    let index = this.#loadIndex(subscription.applicationId)
+    const indexPath = this.#getIndexPath(environment, subscription.applicationId)
+    let index = this.#loadIndex(environment, subscription.applicationId)
     if (index[subscription.id]) {
       index[subscription.id].status = subscription.status
       index[subscription.id].updatedAt = subscription.updatedAt
@@ -102,25 +106,37 @@ export class PushSubscriptionPersistence {
     if (this.#subscriptions.has(subscriptionId)) {
       return this.#subscriptions.get(subscriptionId)
     }
+    return null
+  }
 
-    for (const [appId] of this.#subscriptions) {
-      const subPath = this.#getSubscriptionPath(appId, subscriptionId)
-      if (existsSync(subPath)) {
-        const data = JSON.parse(readFileSync(subPath, 'utf-8'))
-        const subscription = PushSubscription.fromJSON(data)
-        this.#subscriptions.set(subscriptionId, subscription)
-        return subscription
-      }
+  async getById(environment, applicationId, subscriptionId) {
+    const subPath = this.#getSubscriptionPath(environment, applicationId, subscriptionId)
+    if (existsSync(subPath)) {
+      const data = JSON.parse(readFileSync(subPath, 'utf-8'))
+      const subscription = PushSubscription.fromLegacyJSON(data)
+      this.#subscriptions.set(subscriptionId, subscription)
+      return subscription
+    }
+    return null
+  }
+
+  async findByEndpoint(environment, applicationId, endpoint) {
+    const hash = generateSubscriptionHash(endpoint, applicationId, environment)
+
+    if (this.#endpointIndex.has(hash)) {
+      const subscriptionId = this.#endpointIndex.get(hash)
+      return this.getById(environment, applicationId, subscriptionId)
     }
 
-    const index = this.#loadAllIndexes()
-    for (const [appId, indexData] of Object.entries(index)) {
-      if (indexData[subscriptionId]) {
-        const subPath = this.#getSubscriptionPath(appId, subscriptionId)
+    const index = this.#loadIndex(environment, applicationId)
+    for (const [subId, meta] of Object.entries(index)) {
+      if (meta.endpoint === endpoint) {
+        this.#endpointIndex.set(hash, subId)
+        const subPath = this.#getSubscriptionPath(environment, applicationId, subId)
         if (existsSync(subPath)) {
           const data = JSON.parse(readFileSync(subPath, 'utf-8'))
-          const subscription = PushSubscription.fromJSON(data)
-          this.#subscriptions.set(subscriptionId, subscription)
+          const subscription = PushSubscription.fromLegacyJSON(data)
+          this.#subscriptions.set(subId, subscription)
           return subscription
         }
       }
@@ -129,55 +145,18 @@ export class PushSubscriptionPersistence {
     return null
   }
 
-  #loadAllIndexes() {
-    const indexes = {}
-    if (!existsSync(this.#basePath)) {
-      return indexes
-    }
-    const entries = readdirSync(this.#basePath, { withFileTypes: true })
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        const indexPath = join(this.#basePath, entry.name, 'subscriptions', 'index.json')
-        if (existsSync(indexPath)) {
-          try {
-            indexes[entry.name] = JSON.parse(readFileSync(indexPath, 'utf-8'))
-          } catch {
-            indexes[entry.name] = {}
-          }
-        }
-      }
-    }
-    return indexes
-  }
-
-  async findByEndpoint(applicationId, endpoint) {
-    const hash = generateSubscriptionHash(endpoint, applicationId)
-
-    if (this.#endpointIndex.has(hash)) {
-      const subscriptionId = this.#endpointIndex.get(hash)
-      return this.get(subscriptionId)
-    }
-
-    const index = this.#loadIndex(applicationId)
-    for (const [subId, meta] of Object.entries(index)) {
-      if (meta.endpoint === endpoint) {
-        this.#endpointIndex.set(hash, subId)
-        return this.get(subId)
-      }
-    }
-
-    return null
-  }
-
-  async listActive(applicationId) {
-    const index = this.#loadIndex(applicationId)
+  async listActive(environment, applicationId) {
+    const index = this.#loadIndex(environment, applicationId)
     const active = []
 
     for (const [subId, meta] of Object.entries(index)) {
       if (meta.status === 'active') {
-        const subscription = await this.get(subId)
-        if (subscription) {
-          active.push(subscription.toSafeJSON())
+        const subPath = this.#getSubscriptionPath(environment, applicationId, subId)
+        if (existsSync(subPath)) {
+          const data = JSON.parse(readFileSync(subPath, 'utf-8'))
+          const subscription = PushSubscription.fromLegacyJSON(data)
+          this.#subscriptions.set(subId, subscription)
+          active.push(subscription.toJSON())
         }
       }
     }
@@ -185,8 +164,8 @@ export class PushSubscriptionPersistence {
     return active
   }
 
-  async countActive(applicationId) {
-    const index = this.#loadIndex(applicationId)
+  async countActive(environment, applicationId) {
+    const index = this.#loadIndex(environment, applicationId)
     let count = 0
 
     for (const [, meta] of Object.entries(index)) {
@@ -198,8 +177,8 @@ export class PushSubscriptionPersistence {
     return count
   }
 
-  async countRevoked(applicationId) {
-    const index = this.#loadIndex(applicationId)
+  async countRevoked(environment, applicationId) {
+    const index = this.#loadIndex(environment, applicationId)
     let count = 0
 
     for (const [, meta] of Object.entries(index)) {
@@ -211,13 +190,16 @@ export class PushSubscriptionPersistence {
     return count
   }
 
-  async listAll(applicationId) {
-    const index = this.#loadIndex(applicationId)
+  async listAll(environment, applicationId) {
+    const index = this.#loadIndex(environment, applicationId)
     const all = []
 
     for (const subId of Object.keys(index)) {
-      const subscription = await this.get(subId)
-      if (subscription) {
+      const subPath = this.#getSubscriptionPath(environment, applicationId, subId)
+      if (existsSync(subPath)) {
+        const data = JSON.parse(readFileSync(subPath, 'utf-8'))
+        const subscription = PushSubscription.fromLegacyJSON(data)
+        this.#subscriptions.set(subId, subscription)
         all.push(subscription.toSafeJSON())
       }
     }
@@ -225,8 +207,8 @@ export class PushSubscriptionPersistence {
     return all
   }
 
-  #loadIndex(applicationId) {
-    const indexPath = this.#getIndexPath(applicationId)
+  #loadIndex(environment, applicationId) {
+    const indexPath = this.#getIndexPath(environment, applicationId)
     if (!existsSync(indexPath)) {
       return {}
     }
