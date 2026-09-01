@@ -63,6 +63,40 @@ OWNER-SESSION-3 required ZERO database schema changes. All functionality uses ex
 
 ---
 
+## v4.7 — BOOKING-0 Complete (2026-08-31)
+
+### Platform Release 4.7 — RESERVATION DOMAIN DISCOVERY
+
+**Status:** BOOKING-0 COMPLETE
+
+**Next:** BOOKING-1 — Generic Reservation Contract & Migration Design
+
+#### What Was Discovered
+
+- **Existing infrastructure is substantial**: 18 capability files covering Reservation Manager (824 lines), 14-state lifecycle, ~30 event types, Reservation Service, schema, PostgreSQL persistence, Availability capability, generic Booking schema/manager, Payment integration, Notification integration, 11+9 API routes, generic scheduler `LockManager`.
+
+- **Current persistence is accommodation-centric**: `reservations.accommodationId` is NOT NULL; `availability.accommodationId` is NOT NULL; availability is date/day-based; reservation uses `checkIn`/`checkOut` with overnight nights calculation; overlap checking uses `accommodationId`.
+
+- **Existing generic intent exists**: `reservation.resourceId` field, generic `BOOKING_SCHEMA`/`BOOKING_ITEM_SCHEMA`, business-agnostic capability description.
+
+- **Concurrency risk exists (NOT remediated)**: overlap check followed by separate reservation creation (not atomic); `reservedCount` update not atomic; process-local caches under Passenger; `LockManager` available but not integrated.
+
+- **Quote/Reservation/Payment/Notification are distinct**: Quote/Interaction is separate from Reservation; Payment can reference `reservationId`; Notifications via events; Quote does not automatically create Reservation.
+
+#### Cross-Vertical Collisions
+
+The accommodation-centric model creates collisions for: tours (no time-slot), boat navigation (overnight semantics don't fit departure), diving (no equipment modeling), vehicle rental (overnight semantics), timed attractions (no slot model).
+
+#### BOOKING-1 — Next
+
+BOOKING-1 (Generic Reservation Contract & Migration Design) is the next milestone: architecture/design only, no implementation. Must define cross-vertical core concepts, migration path from accommodation-centric persistence, availability semantics (range vs slot), double-booking atomicity contract, lifecycle semantics, and integration boundaries.
+
+#### NO_MIGRATION_PERFORMED
+
+BOOKING-0 was a read-only discovery task. No code, schema, or migration changes.
+
+---
+
 ## v4.6 — PUSH-4 Complete (2026-08-30)
 
 ### Platform Release 4.6 — OWNER CAMPAIGN DELIVERY PATH

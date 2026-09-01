@@ -46,8 +46,8 @@
 
 | Milestone | Name | Status | Priority |
 |-----------|------|--------|----------|
-| P12.3.8 | Accommodation Management API | Pending | 8 |
-| P12.3.9 | Reservation API | Pending | 9 |
+| P12.3.8 | Accommodation Management API | Pending — see BOOKING-1 | 8 |
+| P12.3.9 | Reservation API | Pending — see BOOKING-1 | 9 |
 | P12.3.10 | Owner Portal API | Pending | 10 |
 | P12.3.11 | Visitor Experience API | Pending | 11 |
 
@@ -389,6 +389,72 @@
 | P13 | Flutter App |
 | P14 | PWA |
 | **Release** | **v2.0.0** |
+
+---
+
+## Reservation Domain
+
+> The reservation domain encompasses booking infrastructure across multiple tourism verticals.
+
+### BOOKING-0 — Reservation Domain Discovery
+
+**Status:** COMPLETE — READ-ONLY DISCOVERY
+
+BOOKING-0 was a read-only architectural investigation of the existing reservation capability in Turistic OS.
+
+**Key findings:**
+
+- Existing reservation infrastructure is substantial (18 capability files, full lifecycle, events, persistence)
+- Current persistence is accommodation-centric (`accommodationId` NOT NULL in both `reservations` and `availability` tables)
+- Existing generic architectural intent exists (`resourceId`, generic `BOOKING_SCHEMA`, business-agnostic capability description)
+- Concurrency/double-booking risk identified but NOT remediated
+- Quote, Reservation, Payment, Notification are currently distinct systems
+
+### BOOKING-1 — Generic Reservation Contract & Migration Design
+
+| Item | Value |
+|------|-------|
+| **Classification** | Architecture / Product Domain Design |
+| **Status** | NEXT — DESIGN ONLY |
+| **Implementation** | NOT YET |
+
+#### Purpose
+
+Define the minimum generic reservation contract and migration path before modifying the existing reservation runtime or PostgreSQL schema.
+
+BOOKING-1 must answer:
+
+1. **Cross-vertical core** — Evaluate: Offering, Resource, Availability, AvailabilityWindow/Slot, Capacity, Inventory, Reservation. Which are mandatory core, which are optional or vertical-specific?
+
+2. **Migration path** — How can the existing accommodation reservation system migrate toward the generic contract without breaking current accommodation behavior? Specifically: `accommodationId` NOT NULL, availability coupling, `checkIn`/`checkOut` semantics, nights calculation.
+
+3. **Availability semantics** — Support both: range-based (vehicle/accommodation from start datetime to end datetime) and slot-based (boat departure at 09:00 with capacity 20).
+
+4. **Double-booking / atomicity** — Define what must be atomic when inventory/capacity is reserved. Evaluate: PostgreSQL transactions, row-level locking, atomic inventory updates, existing `LockManager`.
+
+5. **Lifecycle semantics** — Do NOT discard the existing 14-state lifecycle. Determine which states are generic reservation states, which are accommodation-specific operational states, and which may be vertical-specific (e.g., `CHECKED_IN`/`CHECKED_OUT` vs tour `DEPARTED`/`RETURNED`).
+
+6. **Integration boundaries** — Define conceptual relationships: Quote/Interaction, Reservation, Payment, Notification. Reservation must NOT automatically require Quote. Direct booking remains a valid possibility.
+
+#### Constraints
+
+- Do NOT implement runtime changes
+- Do NOT modify database schemas
+- Do NOT create migrations
+- Do NOT prematurely freeze: `Offering → Resource → AvailabilityWindow → Inventory → Reservation`
+- A scheduled boat departure may require: Offering, Departure/Slot, Capacity — without necessarily exposing Resource to the customer contract
+- A vehicle rental may require: Offering, Resource, Availability Range, Inventory = 1
+- BOOKING-1 determines what belongs to the universal core and what belongs to vertical adapters/capabilities
+
+#### Treatment of P12.3.8 / P12.3.9
+
+P12.3.8 (Accommodation Management API) and P12.3.9 (Reservation API) are **NOT STARTED** and are pending BOOKING-1 architectural decision and reconciliation.
+
+The existing repository already contains substantial reservation and availability infrastructure. P12.3.8/P12.3.9 may represent either:
+- API exposure/ordering work over existing infrastructure, or
+- Accommodation-specific implementation that requires architectural reconciliation against the generic contract
+
+BOOKING-1 will clarify which before P12.3.8 or P12.3.9 implementation proceeds.
 
 ---
 

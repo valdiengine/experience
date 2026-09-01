@@ -1196,3 +1196,74 @@ The physical certification request also requires a valid JSON POST body and `Con
 The cross-process diagnostic reproduces this as a 4/5 result.
 
 This is a **KNOWN HARDENING DEBT** and does not invalidate PUSH-4 physical delivery certification. Future hardening should make persistent storage authoritative or implement cache invalidation/version checking.
+
+---
+
+## BOOKING-0 — Reservation Domain Discovery
+
+**Status:** COMPLETE — READ-ONLY DISCOVERY
+
+### What Was Discovered
+
+**Existing infrastructure is substantial:**
+- Reservation Manager (824 lines), 14-state lifecycle, ~30 event types
+- Reservation Service, schema, PostgreSQL persistence
+- Availability capability and persistence
+- Generic Booking schema/manager (works for tours, restaurants, professionals, retail, B2B)
+- Payment integration via `reservationId` FK
+- Notification integration through events/services
+- Reservation API routes (11 endpoints), Availability API routes (9 endpoints)
+- Generic scheduler `LockManager` (not yet integrated into reservation creation)
+
+**Current persistence is accommodation-centric:**
+- `reservations.accommodationId` is **NOT NULL**
+- `availability.accommodationId` is **NOT NULL**
+- Availability is primarily date/day-based
+- Reservation semantics use `checkIn`/`checkOut` with overnight nights calculation
+- Overlap checking uses `accommodationId` as primary filter
+
+**Existing generic intent exists:**
+- `reservation.resourceId` field in capability schema
+- Generic `BOOKING_SCHEMA` / `BOOKING_ITEM_SCHEMA`
+- `ReservationCapability` described as business-agnostic
+- Generic `LockManager`
+
+**Concurrency risk exists (NOT remediated):**
+- Overlap check followed by separate reservation creation — not atomic
+- `reservedCount` update not atomic with reservation creation
+- Process-local manager caches under Passenger multi-worker
+- `LockManager` available but not integrated into reservation creation path
+
+**Quote / Reservation / Payment / Notification are currently distinct:**
+- Quote/Interaction is separate from Reservation
+- Payment can reference `reservationId`
+- Notifications integrate through reservation events
+- Quote does not automatically create Reservation
+
+### Cross-Vertical Collision Summary
+
+The current accommodation-centric model creates collisions for:
+
+| Vertical | Collision |
+|----------|-----------|
+| Tours | No time-slot departure model |
+| Boat navigation | `checkIn`/`checkOut` overnight semantics don't fit departure slots |
+| Diving | No equipment/resource modeling |
+| Vehicle rental | Overnight semantics; single-unit inventory |
+| Timed attractions | No slot/turn model; single-date availability |
+
+### BOOKING-1 — Next
+
+**BOOKING-1 — Generic Reservation Contract & Migration Design**
+
+- Classification: Architecture / Product Domain Design
+- Status: **NEXT — DESIGN ONLY**
+- Purpose: Define minimum generic reservation contract and migration path before modifying existing reservation runtime or PostgreSQL schema
+
+BOOKING-1 must answer:
+1. Minimum cross-vertical reservation core — evaluate concepts such as Offering, Resource, Availability, AvailabilityWindow/Slot, Capacity, Inventory, and Reservation; determine which are mandatory, optional, or vertical-specific
+2. Migration path from accommodation-centric persistence without breaking current accommodation behavior
+3. Availability semantics: range-based vs slot-based
+4. Double-booking / atomicity contract
+5. Lifecycle semantics: generic vs accommodation-specific vs vertical-specific states
+6. Integration boundaries: Quote/Interaction, Reservation, Payment, Notification
