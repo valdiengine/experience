@@ -415,46 +415,59 @@ BOOKING-0 was a read-only architectural investigation of the existing reservatio
 | Item | Value |
 |------|-------|
 | **Classification** | Architecture / Product Domain Design |
-| **Status** | NEXT — DESIGN ONLY |
+| **Status** | COMPLETE |
 | **Implementation** | NOT YET |
 
 #### Purpose
 
 Define the minimum generic reservation contract and migration path before modifying the existing reservation runtime or PostgreSQL schema.
 
-BOOKING-1 must answer:
+BOOKING-1 produced three architectural options. Option B (Generic Core + Vertical Adapters) was recommended.
 
-1. **Cross-vertical core** — Evaluate: Offering, Resource, Availability, AvailabilityWindow/Slot, Capacity, Inventory, Reservation. Which are mandatory core, which are optional or vertical-specific?
+#### BOOKING-1A — Semantic Analysis
 
-2. **Migration path** — How can the existing accommodation reservation system migrate toward the generic contract without breaking current accommodation behavior? Specifically: `accommodationId` NOT NULL, availability coupling, `checkIn`/`checkOut` semantics, nights calculation.
+**Status:** COMPLETE
 
-3. **Availability semantics** — Support both: range-based (vehicle/accommodation from start datetime to end datetime) and slot-based (boat departure at 09:00 with capacity 20).
+BOOKING-1A established:
+- BookableTarget as the canonical conceptual contract
+- Resource is OPTIONAL globally
+- Offering is a valid optional commercial/catalog concept
+- Reservation target cardinality is 1..n ReservationLines
+- Temporal semantics: DATE_RANGE, DATETIME_RANGE, SLOT
+- Accommodation uses local civil dates
+- Availability distinguishes rules, occurrences where relevant, blocks, capacity, and inventory
+- Occurrence/materialization strategy is implementation-dependent
+- Operational Allocation is separated from commercial Reservation commitment
 
-4. **Double-booking / atomicity** — Define what must be atomic when inventory/capacity is reserved. Evaluate: PostgreSQL transactions, row-level locking, atomic inventory updates, existing `LockManager`.
+#### BOOKING-1B — Architecture Decision Record
 
-5. **Lifecycle semantics** — Do NOT discard the existing 14-state lifecycle. Determine which states are generic reservation states, which are accommodation-specific operational states, and which may be vertical-specific (e.g., `CHECKED_IN`/`CHECKED_OUT` vs tour `DEPARTED`/`RETURNED`).
+**Status:** COMPLETE
 
-6. **Integration boundaries** — Define conceptual relationships: Quote/Interaction, Reservation, Payment, Notification. Reservation must NOT automatically require Quote. Direct booking remains a valid possibility.
+Canonical ADR created at `docs/knowledge/BOOKING_1B_ADR.md` with 18 Owner-approved decisions and 12 architectural invariants.
 
-#### Constraints
+#### BOOKING-2 — Migration & Implementation Plan
 
-- Do NOT implement runtime changes
-- Do NOT modify database schemas
-- Do NOT create migrations
-- Do NOT prematurely freeze: `Offering → Resource → AvailabilityWindow → Inventory → Reservation`
-- A scheduled boat departure may require: Offering, Departure/Slot, Capacity — without necessarily exposing Resource to the customer contract
-- A vehicle rental may require: Offering, Resource, Availability Range, Inventory = 1
-- BOOKING-1 determines what belongs to the universal core and what belongs to vertical adapters/capabilities
+| Item | Value |
+|------|-------|
+| **Classification** | Migration Planning |
+| **Status** | NEXT |
+| **Implementation** | NOT YET |
 
-#### Treatment of P12.3.8 / P12.3.9
+**BOOKING-2 is defined as:** Documentation-only Migration & Implementation Plan. BOOKING-2 does NOT include implementation itself.
 
-P12.3.8 (Accommodation Management API) and P12.3.9 (Reservation API) are **NOT STARTED** and are pending BOOKING-1 architectural decision and reconciliation.
-
-The existing repository already contains substantial reservation and availability infrastructure. P12.3.8/P12.3.9 may represent either:
-- API exposure/ordering work over existing infrastructure, or
-- Accommodation-specific implementation that requires architectural reconciliation against the generic contract
-
-BOOKING-1 will clarify which before P12.3.8 or P12.3.9 implementation proceeds.
+BOOKING-2 will determine:
+1. Target persistence representation
+2. Whether ReservationLine becomes a table
+3. BookableTarget resolution strategy
+4. Compatibility adapter strategy
+5. Accommodation migration
+6. Availability persistence strategy
+7. Occurrence persistence/materialization strategy
+8. AvailabilityBlock persistence
+9. Temporal field migration
+10. API compatibility/versioning
+11. PostgreSQL concurrency strategy
+12. Data backfill, rollback strategy, migration ordering, testing/certification gates
 
 ---
 

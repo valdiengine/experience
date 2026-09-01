@@ -4,6 +4,64 @@
 
 ---
 
+## v4.8 — BOOKING-1A/B Complete (2026-09-01)
+
+### Platform Release 4.8 — RESERVATION DOMAIN ARCHITECTURE
+
+**Status:** BOOKING-1A/B COMPLETE
+
+**Next:** BOOKING-2 — Migration & Implementation Plan (documentation-only)
+
+#### BOOKING-1A — Semantic Analysis
+
+Read-only semantic analysis establishing:
+- BookableTarget as the canonical conceptual contract
+- Resource is OPTIONAL globally
+- Offering is a valid optional commercial/catalog concept
+- Reservation target cardinality is 1..n ReservationLines
+- Temporal semantics: DATE_RANGE, DATETIME_RANGE, SLOT
+- Accommodation uses local civil dates
+- Availability distinguishes rules, occurrences where relevant, blocks, capacity, and inventory
+- Occurrence/materialization strategy is implementation-dependent
+- Operational Allocation is separated from commercial Reservation commitment
+
+#### BOOKING-1B — Architecture Decision Record
+
+Canonical ADR created at `docs/knowledge/BOOKING_1B_ADR.md` with 18 Owner-approved decisions:
+
+1. Generic Core + Vertical Adapters
+2. BookableTarget is Conceptual
+3. Resource is Optional
+4. Offering is Optional at Reservation Core boundary
+5. Reservation contains 1..n ReservationLines
+6. Quantity belongs to ReservationLine
+7. Temporal modes: DATE_RANGE, DATETIME_RANGE, SLOT
+8. Accommodation uses local civil DATE_RANGE semantics
+9. Availability distinguishes rules, occurrences, commitments, blocks, capacity, and inventory; no universal materialization
+10. AvailabilityBlock is Not a Reservation
+11. Occurrence is optional; persistence/materialization not frozen
+12. Operational Allocation is separate from Reservation; Resource is optional
+13. Quote / Interaction is Optional; direct booking is valid
+14. Payment is separate; external calls are outside Reservation DB transaction
+15. Notifications integrate through domain/events
+16. tenantId remains isolation boundary; applicationId not added without separate justification
+17. Existing 14 Reservation lifecycle states preserved during migration
+18. PostgreSQL authoritative for reservation/capacity consistency; BOOKING-2 selects concurrency mechanism
+
+#### 12 Architectural Invariants Established
+
+INV-BOOKING-001 through INV-BOOKING-012
+
+#### BOOKING-2 Defined
+
+BOOKING-2 is defined as: Migration & Implementation Plan (documentation-only, not implementation)
+
+#### NO_MIGRATION_PERFORMED
+
+BOOKING-1A/B were read-only architecture tasks. No code, schema, or migration changes.
+
+---
+
 ## v4.5 — OWNER-SESSION-3 Complete (2026-08-24)
 
 ### Platform Release 4.5 — SESSION LIFECYCLE MANAGEMENT

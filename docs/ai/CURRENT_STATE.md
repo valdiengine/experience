@@ -1257,13 +1257,59 @@ The current accommodation-centric model creates collisions for:
 **BOOKING-1 — Generic Reservation Contract & Migration Design**
 
 - Classification: Architecture / Product Domain Design
-- Status: **NEXT — DESIGN ONLY**
+- Status: **COMPLETE**
 - Purpose: Define minimum generic reservation contract and migration path before modifying existing reservation runtime or PostgreSQL schema
 
-BOOKING-1 must answer:
-1. Minimum cross-vertical reservation core — evaluate concepts such as Offering, Resource, Availability, AvailabilityWindow/Slot, Capacity, Inventory, and Reservation; determine which are mandatory, optional, or vertical-specific
-2. Migration path from accommodation-centric persistence without breaking current accommodation behavior
-3. Availability semantics: range-based vs slot-based
-4. Double-booking / atomicity contract
-5. Lifecycle semantics: generic vs accommodation-specific vs vertical-specific states
-6. Integration boundaries: Quote/Interaction, Reservation, Payment, Notification
+BOOKING-1 produced three architectural options. Option B (Generic Core + Vertical Adapters) was recommended.
+
+---
+
+## BOOKING-1A — Semantic Analysis
+
+**Status:** COMPLETE — READ-ONLY ANALYSIS
+
+BOOKING-1A established:
+- BookableTarget as the canonical conceptual contract
+- Resource is OPTIONAL globally
+- Offering is a valid optional commercial/catalog concept
+- Reservation target cardinality is 1..n ReservationLines
+- Temporal semantics separated into DATE_RANGE, DATETIME_RANGE, SLOT
+- Accommodation uses local civil dates
+- Availability distinguishes rules, occurrences where relevant, reservation commitments, blocks, capacity, and inventory
+- Occurrence/materialization strategy is implementation-dependent
+- Operational Allocation is separated from commercial Reservation commitment
+
+---
+
+## BOOKING-1B — Architecture Decision Record
+
+**Status:** COMPLETE — ADR CREATED at `docs/knowledge/BOOKING_1B_ADR.md`
+
+### 18 Owner Decisions Approved
+
+1. Generic Core + Vertical Adapters
+2. BookableTarget is Conceptual
+3. Resource is Optional
+4. Offering is Optional at Reservation Core boundary
+5. Reservation contains 1..n ReservationLines
+6. Quantity belongs to ReservationLine
+7. Temporal modes: DATE_RANGE, DATETIME_RANGE, SLOT
+8. Accommodation uses local civil DATE_RANGE semantics
+9. Availability distinguishes rules, occurrences, commitments, blocks, capacity, and inventory; no universal materialization
+10. AvailabilityBlock is Not a Reservation
+11. Occurrence is optional; persistence/materialization not frozen
+12. Operational Allocation is separate from Reservation; Resource is optional
+13. Quote / Interaction is Optional; direct booking is valid
+14. Payment is separate; external calls are outside Reservation DB transaction
+15. Notifications integrate through domain/events
+16. tenantId remains isolation boundary; applicationId not added without separate justification
+17. Existing 14 Reservation lifecycle states preserved during migration
+18. PostgreSQL authoritative for reservation/capacity consistency; BOOKING-2 selects concurrency mechanism
+
+### 12 Architectural Invariants
+
+INV-BOOKING-001 through INV-BOOKING-012
+
+### BOOKING-2 Defined
+
+BOOKING-2 is the next milestone: Migration & Implementation Plan (documentation/planning only, not implementation)
