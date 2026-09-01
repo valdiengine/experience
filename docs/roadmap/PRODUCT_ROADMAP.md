@@ -392,6 +392,50 @@
 
 ---
 
+## Future Product Capabilities
+
+> Capabilities below are exploratory ideas. They are NOT approved implementations, NOT technical debt, and do not change the current milestone.
+
+### Traveler Pack / Mochila del Viajero
+
+| Item | Value |
+|------|-------|
+| **Classification** | Future Product Capability |
+| **Concept** | Persistent personal inventory/backpack for travelers |
+| **Cross-Application** | YES — intended to span multiple Turistic OS territories |
+
+#### Collectible Categories (conceptual)
+
+- Places, Companies, Routes
+- Flora, Fauna, Experiences, Discoveries
+- Badges, Medals, Territorial memories
+
+#### Usable Object Categories (conceptual)
+
+- Rewards, Benefits, Tickets, Passes
+- Coupons, Digital keys, Unlock objects
+- Company-issued rewards
+
+#### Conceptual Behaviors (NOT an implementation contract)
+
+- COLLECTIBLE — saved and reopened later
+- CONSUMABLE — single use
+- REUSABLE — multi-use
+- UNLOCK: permanently unlocks access, content, or an experience
+- REDEEMABLE — exchange for value
+
+#### Example
+
+A traveler receives a "Brewer Medal" at a brewery visit. The medal persists with the traveler. On return, Turistic OS may recognize the collectible and the business may unlock a reward, experience, or digital object.
+
+#### Architectural Intent
+
+- Do NOT model saved elements as mere URLs
+- Reference stable/canonical identities for underlying entities
+- Keep conceptually distinct: favorites, discoveries, achievements, usable objects, rewards
+
+---
+
 ## Progress Tracking
 
 | Category | Milestones | Completed | In Progress | Pending |
