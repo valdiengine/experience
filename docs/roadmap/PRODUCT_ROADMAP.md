@@ -11,7 +11,7 @@
 |------|-------|
 | **Platform Version** | 4.0 (CERTIFIED) |
 | **Product Development Mode** | ACTIVE |
-| **Current Product Milestone** | P12.3.1 |
+| **Current Product Milestone** | TO BE SELECTED — post-PUSH-4 roadmap discovery |
 | **Architecture Version** | P13.8 Design Freeze |
 | **API Layer** | P14.FINAL (CLOSED) |
 
@@ -33,7 +33,8 @@
 
 | Milestone | Name | Status | Priority |
 |-----------|------|--------|----------|
-| **P12.3.1** | Database Connection & Migration | NEXT | 1 |
+| P12.3.1 | Database Connection & Migration | COMPLETE | — |
+| P12.3.2 | Storage Provider | COMPLETE | — |
 | P12.3.2 | Authentication Provider Configuration | Pending | 2 |
 | P12.3.3 | CMS Provider Configuration | Pending | 3 |
 | P12.3.4 | Repository Adapter Registration | Pending | 4 |
@@ -64,8 +65,8 @@
 
 | Item | Value |
 |------|-------|
-| **Status** | NEXT |
-| **Priority** | 1 |
+| **Status** | COMPLETE |
+| **Priority** | — |
 | **Category** | Infrastructure |
 | **Description** | Connect platform to PostgreSQL database |
 | **Dependencies** | None |
@@ -87,7 +88,9 @@
 
 ---
 
-### P12.3.2 — Authentication Provider Configuration
+> ⚠️ **NUMBERING CONFLICT NOTE:** The completed Storage Provider (P12.3.2) and the planned Authentication Provider Configuration (also labeled P12.3.2) are different items. The Storage Provider was completed as part of the infrastructure phase. This roadmap item refers to Authentication Provider Configuration, which remains pending. Future roadmap normalization should clarify this numbering overlap.
+
+### P12.3.2 — Authentication Provider Configuration (Pending — different from completed Storage Provider)
 
 | Item | Value |
 |------|-------|

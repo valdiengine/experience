@@ -893,7 +893,7 @@ See `docs/ai/NEXT_PHASE.md` for pending work.
 
 ### Next
 
-OWNER-SESSION-3 — TBD (from existing roadmap documentation)
+OWNER-SESSION-3 — COMPLETE (see §OWNER-SESSION-3 above)
 
 ---
 
@@ -1184,9 +1184,9 @@ The physical certification request also requires a valid JSON POST body and `Con
 
 ### Test Evidence
 
-- `web/push-1.test.js`: 68 PASS, 0 FAIL
+- `web/push-1.test.js`: 69 PASS, 0 FAIL (test 16b: revoked same-endpoint subscription reactivation)
 - `web/push-2-level-c.test.js`: 22 PASS, 0 FAIL
-- `web/push-3.test.js`: not executed in final closure because PostgreSQL dependency was unavailable
+- `web/push-3.test.js`: versioned in f44988e; not re-executed during PUSH-4 closure (PostgreSQL unavailable in test context); physical delivery separately certified
 - `web/push-4.2-diagnostic.test.js`: 4/5 scenarios pass
 
 ### Known Hardening Debt

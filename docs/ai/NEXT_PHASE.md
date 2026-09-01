@@ -4,6 +4,17 @@
 
 ---
 
+> ⚠️ **STALE / HISTORICAL PLANNING DOCUMENT**
+>
+> This document predates the current post-PUSH-4 state and is no longer authoritative.
+>
+> - It must NOT be used as canonical current-state authority.
+> - `docs/ai/CURRENT_STATE.md` is the authoritative state document.
+> - Roadmap decisions must be reconciled against current state before acting on this document.
+> - No next milestone is specified here; do not treat this document as a roadmap commitment.
+
+---
+
 ## Current Status
 
 **PLATFORM v4.2 — INFRASTRUCTURE COMPLETE**
