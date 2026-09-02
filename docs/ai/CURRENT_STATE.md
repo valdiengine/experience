@@ -1312,4 +1312,4 @@ INV-BOOKING-001 through INV-BOOKING-012
 
 ### BOOKING-2 Defined
 
-BOOKING-2 is the next milestone: Migration & Implementation Plan (documentation/planning only, not implementation)
+BOOKING-2 is COMPLETE: Migration & Implementation Plan created at `docs/knowledge/BOOKING_2_MIGRATION_PLAN.md` (documentation/planning only, not implementation)

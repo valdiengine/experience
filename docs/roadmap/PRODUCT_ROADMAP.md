@@ -450,24 +450,28 @@ Canonical ADR created at `docs/knowledge/BOOKING_1B_ADR.md` with 18 Owner-approv
 | Item | Value |
 |------|-------|
 | **Classification** | Migration Planning |
-| **Status** | NEXT |
+| **Status** | COMPLETE |
 | **Implementation** | NOT YET |
 
 **BOOKING-2 is defined as:** Documentation-only Migration & Implementation Plan. BOOKING-2 does NOT include implementation itself.
 
-BOOKING-2 will determine:
-1. Target persistence representation
-2. Whether ReservationLine becomes a table
-3. BookableTarget resolution strategy
-4. Compatibility adapter strategy
-5. Accommodation migration
-6. Availability persistence strategy
-7. Occurrence persistence/materialization strategy
-8. AvailabilityBlock persistence
-9. Temporal field migration
-10. API compatibility/versioning
-11. PostgreSQL concurrency strategy
-12. Data backfill, rollback strategy, migration ordering, testing/certification gates
+**Plan created at:** `docs/knowledge/BOOKING_2_MIGRATION_PLAN.md`
+
+BOOKING-2 determines:
+1. Target persistence: `reservation_lines` table with `targetType + targetId`
+2. ReservationLine becomes a dedicated table
+3. BookableTarget resolution: vertical adapter registry
+4. Compatibility adapter strategy: accommodation adapter preserves existing behavior
+5. Accommodation migration: 4-phase compatibility layer
+6. Availability persistence: per-vertical strategy (materialized, interval overlap, occurrence)
+7. Occurrence persistence: hybrid bounded pre-generation
+8. AvailabilityBlock: separate table, not Reservation
+9. Temporal field: JSONB `temporal` with mode-specific structure
+10. API compatibility: internal adapter pattern
+11. PostgreSQL concurrency: atomic conditional UPDATE (not optimistic locking)
+12. Data backfill, rollback strategy, migration ordering, testing gates documented
+
+**Next:** BOOKING-3 (Implementation) — TBD
 
 ---
 

@@ -4,6 +4,35 @@
 
 ---
 
+## v4.9 — BOOKING-2 Complete (2026-09-01)
+
+### Platform Release 4.9 — RESERVATION DOMAIN MIGRATION PLAN
+
+**Status:** BOOKING-2 COMPLETE
+
+**Next:** BOOKING-3 — Implementation (TBD)
+
+#### BOOKING-2 — Migration & Implementation Plan
+
+Canonical plan created at `docs/knowledge/BOOKING_2_MIGRATION_PLAN.md`:
+
+- Target persistence: `reservation_lines` table with `targetType + targetId` BookableTarget reference
+- Temporal: JSONB `temporal` column with mode-specific structure (DATE_RANGE, DATETIME_RANGE, SLOT)
+- BookableTarget resolution: Vertical adapter registry pattern
+- Accommodation migration: Compatibility adapter preserving existing behavior
+- Availability strategy: Per-vertical (materialized day, interval overlap, occurrence capacity)
+- Concurrency: Atomic conditional UPDATE (not optimistic locking)
+- Payment boundary: External provider calls outside DB transaction
+- 8-phase migration sequence with rollback points
+- Testing/certification gates defined
+- Vertical validation matrix for all 6 verticals
+
+#### NO_MIGRATION_PERFORMED
+
+BOOKING-2 was a planning task. No code, schema, or migration changes.
+
+---
+
 ## v4.8 — BOOKING-1A/B Complete (2026-09-01)
 
 ### Platform Release 4.8 — RESERVATION DOMAIN ARCHITECTURE
