@@ -4,6 +4,81 @@
 
 ---
 
+## v4.10 — BOOKING-3 Complete (2026-09-02)
+
+### Platform Release 4.10 — RESERVATION LINE FOUNDATION
+
+**Status:** BOOKING-3 COMPLETE (LOCAL CODE CERTIFIED)
+
+**Next:** Physical PostgreSQL certification pending (blocked by infrastructure)
+
+#### BOOKING-3 — ReservationLine Additive Foundation
+
+BOOKING-3 implemented the additive ReservationLine foundation for the generic Reservation architecture:
+
+**Schema Created:**
+- `database/schema/business/reservation_lines.js` — Drizzle table definition
+- `database/migrations/0006_reservation_lines/index.js` — Migration (not executed)
+
+**ReservationLine Schema:**
+- `id` (UUID PK)
+- `reservationId` (FK -> reservations.id ON DELETE CASCADE)
+- `lineOrder` (INT DEFAULT 1)
+- `targetType` (VARCHAR NOT NULL) — 'accommodation'
+- `targetId` (UUID NOT NULL)
+- `temporal` (JSONB NOT NULL) — `{ mode, startDate, endDate, ... }`
+- `quantity` (INT DEFAULT 1)
+- `unitPrice` (DECIMAL nullable)
+- `lineTotal` (DECIMAL nullable)
+- `metadata` (JSONB)
+- `createdAt`, `updatedAt` (TIMESTAMPTZ)
+
+**Forbidden Fields NOT Present:**
+- No `applicationId`
+- No `allocatedResourceId` / `allocatedAt`
+- No mandatory `resourceId`
+- No mandatory `offeringId`
+- No universal `bookable_targets` table
+
+**Atomic Design:**
+- When PostgreSQL adapter exists: `createReservationWithLine()` uses single DB transaction
+- Transaction boundary: `BEGIN -> INSERT reservation -> INSERT reservation_line -> COMMIT`
+- All errors propagate (fail-closed)
+- Structural fallback: when PostgreSQL adapter absent (mock/in-memory), uses legacy `#persist`
+
+**Compatibility Line Semantics:**
+- `targetType = 'accommodation'`
+- `targetId = accommodationId`
+- `quantity = 1` (one accommodation unit, not guest count)
+- `temporal.mode = 'DATE_RANGE'`
+- Civil date strings preserved (no Date/UTC conversion)
+- `unitPrice = null`, `lineTotal = null` (legacy pricing is at reservation level)
+
+**Tests Executed (110/110 PASS):**
+- BOOKING-3 focused: 23/23 PASS
+- Reservation regression: 21/21 PASS
+- Availability regression: 30/30 PASS
+- business.lifecycle: 36/36 PASS
+
+**Physical PostgreSQL Certification:**
+- BLOCKED: No PostgreSQL service running on localhost:5432
+- Migration 0006 NOT executed
+- Transaction design statically verified and unit-tested
+- Real PostgreSQL rollback test pending infrastructure
+
+**Files Created:**
+- `database/schema/business/reservation_lines.js`
+- `database/migrations/0006_reservation_lines/index.js`
+- `tests/capability/booking3.test.js`
+
+**Files Modified:**
+- `database/schema/business/index.js`
+- `database/index.js`
+- `capabilities/reservation/reservation.manager.js`
+- `capabilities/persistence/repositories/reservation/reservation.repository.js`
+
+---
+
 ## v4.9 — BOOKING-2 Complete (2026-09-01)
 
 ### Platform Release 4.9 — RESERVATION DOMAIN MIGRATION PLAN

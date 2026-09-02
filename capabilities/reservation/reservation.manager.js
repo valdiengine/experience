@@ -135,7 +135,32 @@ export class ReservationManager {
     }
 
     this.#reservations.set(reservation.id, reservation)
-    await this.#persist(reservation, true)
+
+    const hasPostgresAdapter = this.#repo?.adapter?.client?.db != null
+    const hasAtomicMethod = typeof this.#repo?.createReservationWithLine === 'function'
+
+    if (reservation.accommodationId && hasAtomicMethod && hasPostgresAdapter) {
+      const lineData = {
+        id: `rl_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+        lineOrder: 1,
+        targetType: 'accommodation',
+        targetId: reservation.accommodationId,
+        temporal: {
+          mode: 'DATE_RANGE',
+          startDate: reservation.dates?.checkIn || null,
+          endDate: reservation.dates?.checkOut || null,
+        },
+        quantity: 1,
+        unitPrice: null,
+        lineTotal: null,
+        metadata: {},
+      }
+
+      await this.#repo.createReservationWithLine(reservation, lineData)
+    } else {
+      await this.#persist(reservation, true)
+    }
+
     this.#emit(RESERVATION_EVENTS.CREATED, { reservation })
 
     return {

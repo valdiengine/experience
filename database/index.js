@@ -65,6 +65,13 @@ export const MIGRATION_REGISTRY = [
       'notification_preferences',
     ],
   },
+  {
+    name: '0006_reservation_lines',
+    layer: 'business',
+    order: 6,
+    description: 'Reservation lines for generic multi-line booking support',
+    tables: ['reservation_lines'],
+  },
 ]
 
 /**

@@ -471,7 +471,48 @@ BOOKING-2 determines:
 11. PostgreSQL concurrency: atomic conditional UPDATE (not optimistic locking)
 12. Data backfill, rollback strategy, migration ordering, testing gates documented
 
-**Next:** BOOKING-3 (Implementation) — TBD
+**Next:** BOOKING-3 (Implementation) — COMPLETE
+
+#### BOOKING-3 — ReservationLine Foundation
+
+| Item | Value |
+|------|-------|
+| **Classification** | Implementation |
+| **Status** | LOCAL CODE CERTIFIED |
+| **Physical PG Certification** | PENDING (infrastructure blocked) |
+
+**What BOOKING-3 Implemented:**
+
+1. `reservation_lines` table schema (Drizzle + migration)
+2. Atomic `createReservationWithLine()` in `ReservationRepository`
+3. Accommodation compatibility line creation in `ReservationManager.createRequest()`
+4. Explicit adapter capability detection (not error-based fallback)
+5. Mandatory ReservationLine when accommodation reservation created
+
+**Atomic Transaction Design:**
+- `BEGIN -> INSERT reservation -> INSERT reservation_lines -> COMMIT`
+- All errors propagate (fail-closed)
+- Structural fallback only when PostgreSQL adapter absent
+
+**Accommodation Line Semantics:**
+- `targetType = 'accommodation'`
+- `quantity = 1` (one accommodation unit, not guest count)
+- `temporal.mode = 'DATE_RANGE'` with civil date strings
+- `unitPrice = null`, `lineTotal = null` (legacy pricing)
+
+**Forbidden (NOT implemented):**
+- No `applicationId`
+- No `allocatedResourceId` / `allocatedAt`
+- No mandatory `resourceId` or `offeringId`
+- No universal `bookable_targets` table
+
+**Tests:** 110/110 PASS (BOOKING-3: 23, Reservation: 21, Availability: 30, business.lifecycle: 36)
+
+**Migration 0006:** Created, registered, NOT executed
+
+**Next Milestone Decision:**
+A. Establish PostgreSQL test environment and complete physical certification
+B. Continue architecture-safe local development with PG gate explicitly pending
 
 ---
 

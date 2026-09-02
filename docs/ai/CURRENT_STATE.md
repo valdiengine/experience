@@ -1313,3 +1313,117 @@ INV-BOOKING-001 through INV-BOOKING-012
 ### BOOKING-2 Defined
 
 BOOKING-2 is COMPLETE: Migration & Implementation Plan created at `docs/knowledge/BOOKING_2_MIGRATION_PLAN.md` (documentation/planning only, not implementation)
+
+---
+
+## BOOKING-3 — ReservationLine Foundation
+
+**Status:** LOCAL CODE CERTIFIED — Physical PostgreSQL Gate PENDING
+
+### What Changed
+
+**Schema Created:**
+- `database/schema/business/reservation_lines.js` — Drizzle table definition
+- `database/migrations/0006_reservation_lines/index.js` — Migration (registered, NOT executed)
+
+**Repository Method Added:**
+- `ReservationRepository.createReservationWithLine()` — Atomic transaction for reservation + mandatory line
+- `BEGIN -> INSERT reservation -> INSERT reservation_lines -> COMMIT` within same pg PoolClient
+- All errors propagate (fail-closed design)
+
+**Manager Integration:**
+- `ReservationManager.createRequest()` — Creates accommodation compatibility line when `accommodationId` present
+- Explicit adapter capability detection: `hasPostgresAdapter && hasAtomicMethod`
+- Structural fallback to `#persist()` only when PostgreSQL adapter absent (mock/in-memory environments)
+
+**Tests Created:**
+- `tests/capability/booking3.test.js` — 23 focused tests
+
+### ReservationLine Schema
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | UUID PK | |
+| `reservationId` | UUID FK | -> reservations(id) CASCADE |
+| `lineOrder` | INT | DEFAULT 1 |
+| `targetType` | VARCHAR | NOT NULL ('accommodation') |
+| `targetId` | UUID | NOT NULL |
+| `temporal` | JSONB | { mode, startDate, endDate } |
+| `quantity` | INT | DEFAULT 1 |
+| `unitPrice` | DECIMAL | nullable |
+| `lineTotal` | DECIMAL | nullable |
+| `metadata` | JSONB | |
+
+### Forbidden Fields (NOT Present)
+
+- No `applicationId`
+- No `allocatedResourceId` / `allocatedAt`
+- No mandatory `resourceId`
+- No mandatory `offeringId`
+- No universal `bookable_targets` table
+
+### Accommodation Line Semantics
+
+| Field | Value |
+|-------|-------|
+| `targetType` | 'accommodation' |
+| `targetId` | accommodationId |
+| `quantity` | 1 (one accommodation unit, not guest count) |
+| `temporal.mode` | 'DATE_RANGE' |
+| `startDate` | Civil date string (e.g., "2026-09-10") |
+| `endDate` | Civil date string (e.g., "2026-09-12") |
+| `unitPrice` | null |
+| `lineTotal` | null |
+
+### Atomic Transaction Design
+
+```
+if (hasPostgresAdapter && hasAtomicMethod) {
+    await createReservationWithLine(reservation, lineData)
+    // ALL errors propagate (ECONNREFUSED, constraint violations, COMMIT failure)
+} else {
+    await #persist(reservation, true)
+    // Legacy path for mock/in-memory environments only
+}
+```
+
+### Test Results (110/110 PASS)
+
+| Suite | Result |
+|-------|--------|
+| BOOKING-3 focused | 23/23 PASS |
+| Reservation regression | 21/21 PASS |
+| Availability regression | 30/30 PASS |
+| business.lifecycle | 36/36 PASS |
+
+### Physical PostgreSQL Certification
+
+**Status:** BLOCKED — No PostgreSQL service running on localhost:5432
+
+**What Blocked:**
+- Migration 0006 not executed
+- Real transaction rollback not verified
+- Real database row counts not verified
+
+**Code Verified:**
+- Transaction boundary correct (BEGIN/COMMIT/ROLLBACK)
+- All errors propagate (fail-closed)
+- No stale Map entries after failure
+
+### Files Created
+
+- `database/schema/business/reservation_lines.js`
+- `database/migrations/0006_reservation_lines/index.js`
+- `tests/capability/booking3.test.js`
+
+### Files Modified
+
+- `database/schema/business/index.js`
+- `database/index.js`
+- `capabilities/reservation/reservation.manager.js`
+- `capabilities/persistence/repositories/reservation/reservation.repository.js`
+
+### Next Milestone Decision
+
+A. Establish PostgreSQL test environment and complete BOOKING-3 physical certification
+B. Continue architecture-safe local development with PG gate explicitly pending

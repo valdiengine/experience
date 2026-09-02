@@ -3,6 +3,7 @@ import { tenants } from '../platform/index.js'
 import { companies } from '../company/index.js'
 import { categories } from '../ecosystem/index.js'
 import { users } from '../identity/index.js'
+import { reservationLines } from './reservation_lines.js'
 
 export const accommodations = pgTable(
   'accommodations',
@@ -417,6 +418,7 @@ export const businessSchemas = {
   availabilityRules,
   reservations,
   reservationActivities,
+  reservationLines,
   payments,
   invoices,
   reviews,
