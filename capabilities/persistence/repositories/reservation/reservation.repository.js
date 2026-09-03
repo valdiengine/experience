@@ -114,4 +114,56 @@ export class ReservationRepository extends BaseRepository {
       return { reservation, line: lineResult.rows[0] }
     })
   }
+
+  async findLinesByReservationId(tenantId, reservationId) {
+    this._enforceNotDisposed()
+    this._enforceInitialized()
+
+    const hasPostgres = this.adapter?.client?.db != null
+
+    if (hasPostgres) {
+      const result = await query(
+        `SELECT rl.*
+         FROM reservation_lines rl
+         JOIN reservations r ON r.id = rl.reservation_id
+         WHERE rl.reservation_id = $1 AND r.tenant_id = $2
+         ORDER BY rl.line_order ASC, rl.created_at ASC, rl.id ASC`,
+        [reservationId, tenantId]
+      )
+      return result.rows
+    }
+
+    const reservation = await this.adapter.findOne({ id: reservationId })
+    if (!reservation || reservation.tenantId !== tenantId) {
+      return []
+    }
+
+    const mockStore = this.adapter?.constructor?.store
+    const linesStore = mockStore?.get?.('reservation_lines')
+    if (linesStore) {
+      const lines = Array.from(linesStore.values()).filter((l) => l.reservationId === reservationId)
+      return lines
+        .sort((a, b) => {
+          if (a.lineOrder !== b.lineOrder) return (a.lineOrder || 0) - (b.lineOrder || 0)
+          if (a.createdAt !== b.createdAt) return (a.createdAt || '').localeCompare(b.createdAt || '')
+          return (a.id || '').localeCompare(b.id || '')
+        })
+        .map((line) => ({
+          id: line.id,
+          reservationId: line.reservationId,
+          lineOrder: line.lineOrder,
+          targetType: line.targetType,
+          targetId: line.targetId,
+          temporal: line.temporal,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          lineTotal: line.lineTotal,
+          metadata: line.metadata,
+          createdAt: line.createdAt,
+          updatedAt: line.updatedAt,
+        }))
+    }
+
+    return []
+  }
 }

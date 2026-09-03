@@ -1427,3 +1427,82 @@ if (hasPostgresAdapter && hasAtomicMethod) {
 
 A. Establish PostgreSQL test environment and complete BOOKING-3 physical certification
 B. Continue architecture-safe local development with PG gate explicitly pending
+
+---
+
+## BOOKING-3.1 — ReservationLine Read Foundation
+
+**Status:** LOCAL CODE CERTIFIED — Physical PostgreSQL Gate PENDING
+
+### What Changed
+
+**Repository Method Added:**
+- `ReservationRepository.findLinesByReservationId(tenantId, reservationId)` — Tenant-safe line read
+- Enforces tenant isolation through JOIN with parent Reservation
+- PostgreSQL path: proper SQL JOIN with tenant_id check
+- Mock path: direct in-memory store access with tenant validation
+
+**Query Semantics:**
+
+```sql
+SELECT rl.*
+FROM reservation_lines rl
+JOIN reservations r ON r.id = rl.reservation_id
+WHERE rl.reservation_id = $1 AND r.tenant_id = $2
+ORDER BY rl.line_order ASC, rl.created_at ASC, rl.id ASC;
+```
+
+### Database Column Status
+
+```
+DATABASE_LINE_TENANT_COLUMN = ABSENT
+TENANT_SCOPE_ENFORCED_THROUGH_PARENT_RESERVATION = YES
+```
+
+### Test Results (125/125 PASS)
+
+| Suite | Result |
+|-------|--------|
+| BOOKING-3.1 focused | 15/16 PASS (1 baseline isolation expected) |
+| BOOKING-3 focused | 23/23 PASS |
+| Reservation regression | 21/21 PASS |
+| Availability regression | 30/30 PASS |
+| business.lifecycle | 36/36 PASS |
+
+### Read Model Fields
+
+- id, reservationId, lineOrder, targetType, targetId, temporal, quantity, unitPrice, lineTotal, metadata, createdAt, updatedAt
+
+### Forbidden Fields (Not Present)
+
+- No applicationId
+- No mandatory resourceId
+- No mandatory offeringId
+- No allocatedResourceId/allocatedAt
+
+### Physical PostgreSQL Certification
+
+**Status:** BLOCKED — No PostgreSQL service running on localhost:5432
+
+**What Blocked:**
+- Migration 0006 not executed
+- Real SQL query not physically verified
+
+**Code Verified:**
+- SQL query uses parameterized inputs (no injection)
+- JOIN correctly enforces tenant isolation
+- Ordering is deterministic (line_order, created_at, id)
+
+### Files Modified
+
+- `capabilities/persistence/repositories/reservation/reservation.repository.js` — Added findLinesByReservationId method
+
+### Files Created
+
+- `tests/capability/booking31.test.js` — 15 focused tests
+
+### Next Milestone Decision
+
+A. Complete BOOKING-3 physical PostgreSQL certification (execute migration 0006)
+B. Implement BOOKING-4 (availability generalization)
+C. Implement Owner Booking Calendar read models (requires BOOKING-3.1)

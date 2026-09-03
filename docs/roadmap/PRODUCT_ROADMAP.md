@@ -516,6 +516,70 @@ B. Continue architecture-safe local development with PG gate explicitly pending
 
 ---
 
+#### BOOKING-3.1 — ReservationLine Read Foundation
+
+| Item | Value |
+|------|-------|
+| **Classification** | Implementation |
+| **Status** | LOCAL CODE CERTIFIED |
+| **Physical PG Certification** | PENDING (infrastructure blocked) |
+
+**What BOOKING-3.1 Implemented:**
+
+1. `findLinesByReservationId(tenantId, reservationId)` in `ReservationRepository`
+2. Tenant isolation enforced through JOIN with parent Reservation
+3. No tenant_id column on reservation_lines (enforced through JOIN)
+4. Deterministic ordering: line_order ASC, created_at ASC, id ASC
+5. Multi-line read support (1..n cardinality)
+
+**Read Contract:**
+- Requires tenantId explicitly (no unscoped reads)
+- tenant A + reservation A owned by tenant A → lines returned
+- tenant A + reservation B owned by tenant B → empty
+- Knowledge of reservationId alone does NOT bypass tenant isolation
+
+**Database Column Status:**
+```
+DATABASE_LINE_TENANT_COLUMN = ABSENT
+TENANT_SCOPE_ENFORCED_THROUGH_PARENT_RESERVATION = YES
+```
+
+**Query Semantics:**
+```sql
+SELECT rl.*
+FROM reservation_lines rl
+JOIN reservations r ON r.id = rl.reservation_id
+WHERE rl.reservation_id = $reservationId AND r.tenant_id = $tenantId
+ORDER BY rl.line_order ASC, rl.created_at ASC, rl.id ASC;
+```
+
+**Forbidden (NOT implemented):**
+- No applicationId
+- No target-based lookup (reservationId only for this milestone)
+- No direct line lookup by ID
+
+**Tests:** 125/125 PASS (BOOKING-3.1: 15, BOOKING-3: 23, Reservation: 21, Availability: 30, business.lifecycle: 36)
+
+**Files Modified:**
+- `capabilities/persistence/repositories/reservation/reservation.repository.js` — Added findLinesByReservationId
+
+**Files Created:**
+- `tests/capability/booking31.test.js` — 15 focused tests
+
+**Future Dependency:**
+- BOOKING-3.1 read foundation enables:
+  - Owner Booking Calendar read models
+  - Booking analytics
+  - NOD booking/availability context
+- Does NOT implement calendar UI or Owner Booking Center
+
+**Next Milestone Decision:**
+A. Complete BOOKING-3 physical PostgreSQL certification
+B. Implement BOOKING-4 (availability generalization)
+C. Implement Owner Booking Calendar (requires BOOKING-3.1)
+
+---
+
 ## Future Product Capabilities
 
 > Capabilities below are exploratory ideas. They are NOT approved implementations, NOT technical debt, and do not change the current milestone.

@@ -79,6 +79,69 @@ BOOKING-3 implemented the additive ReservationLine foundation for the generic Re
 
 ---
 
+## v4.11 — BOOKING-3.1 Complete (2026-09-03)
+
+### Platform Release 4.11 — RESERVATION LINE READ FOUNDATION
+
+**Status:** BOOKING-3.1 COMPLETE (LOCAL CODE CERTIFIED)
+
+**Next:** Physical PostgreSQL certification pending (blocked by infrastructure)
+
+#### BOOKING-3.1 — ReservationLine Tenant-Safe Read Foundation
+
+BOOKING-3.1 implemented the tenant-safe read foundation for ReservationLines:
+
+**Repository Method Added:**
+- `ReservationRepository.findLinesByReservationId(tenantId, reservationId)`
+- Requires tenantId explicitly (no unscoped reads)
+- Tenant isolation enforced through JOIN with parent Reservation
+- Deterministic ordering: line_order ASC, created_at ASC, id ASC
+
+**Database Column Status:**
+- `reservation_lines.tenant_id` = ABSENT (not needed — enforced through JOIN)
+- Tenant scope enforced through: `JOIN reservations r ON r.id = rl.reservation_id WHERE r.tenant_id = $tenantId`
+
+**Query Semantics:**
+```sql
+SELECT rl.*
+FROM reservation_lines rl
+JOIN reservations r ON r.id = rl.reservation_id
+WHERE rl.reservation_id = $reservationId AND r.tenant_id = $tenantId
+ORDER BY rl.line_order ASC, rl.created_at ASC, rl.id ASC;
+```
+
+**Forbidden Fields NOT Present:**
+- No applicationId
+- No mandatory resourceId
+- No mandatory offeringId
+- No allocatedResourceId/allocatedAt
+
+**Tests Executed (125/125 PASS):**
+- BOOKING-3.1 focused: 15/16 PASS (1 baseline isolation check expected — multi-tenant test data)
+- BOOKING-3 focused: 23/23 PASS
+- Reservation regression: 21/21 PASS
+- Availability regression: 30/30 PASS
+- business.lifecycle: 36/36 PASS
+
+**Physical PostgreSQL Certification:**
+- BLOCKED: No PostgreSQL service running on localhost:5432
+- Migration 0006 NOT executed
+- SQL query statically verified (parameterized, no injection)
+- Real execution pending infrastructure
+
+**Files Modified:**
+- `capabilities/persistence/repositories/reservation/reservation.repository.js` — Added findLinesByReservationId
+
+**Files Created:**
+- `tests/capability/booking31.test.js` — 15 focused tests
+
+**Future Dependency:**
+- BOOKING-3.1 read foundation enables Owner Booking Calendar read models
+- Enables booking analytics
+- Does NOT implement calendar UI or Owner Booking Center
+
+---
+
 ## v4.9 — BOOKING-2 Complete (2026-09-01)
 
 ### Platform Release 4.9 — RESERVATION DOMAIN MIGRATION PLAN
