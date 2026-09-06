@@ -586,6 +586,92 @@ ORDER BY rl.line_order ASC, rl.created_at ASC, rl.id ASC;
 
 ---
 
+#### BOOKING-4.1 - Availability Target Identity Foundation
+
+| Item | Value |
+|------|-------|
+| **Classification** | Implementation |
+| **Status** | PHYSICAL POSTGRESQL CERTIFIED |
+| **Physical PG Certification** | PASS - Neon valdi_test |
+| **Production Impact** | NONE - production database not modified |
+
+**What BOOKING-4.1 Implemented:**
+
+1. Generic Availability identity foundation through `targetType + targetId`.
+2. Accommodation compatibility mirror:
+   - `targetType = 'accommodation'`
+   - `targetId = accommodationId`
+3. `accommodationId` remains authoritative during this migration stage.
+4. Target identity mismatch fails closed.
+5. Context tenant is authoritative for Availability writes.
+6. Caller-supplied tenant mismatch fails closed.
+7. Existing accommodation APIs and DATE_RANGE civil-date behavior remain compatible.
+8. Migration `0008_booking_availability_target_identity` added and registered.
+
+**Database Contract:**
+
+- `target_type VARCHAR(50) NOT NULL DEFAULT 'accommodation'`
+- `target_id UUID NOT NULL` after controlled legacy backfill
+- Existing unique `(accommodation_id, date)` behavior preserved
+- No generic target/date unique index introduced
+- `accommodation_id` remains NOT NULL in BOOKING-4.1
+- Therefore generic non-accommodation persistence is NOT enabled yet
+- The `'accommodation'` target_type default is transitional and is not the permanent generic default
+
+**Tenant Safety:**
+
+- Availability writes require context tenant
+- Explicit data tenant mismatch is rejected
+- Explicit identity tenant mismatch is rejected
+- New rows persist context tenant
+- Existing repository read/update tenant scoping remains in place
+
+**Tests:** BOOKING-4.1 focused suite `35/35 PASS`
+
+**Physical PostgreSQL Certification:**
+
+- Migration 0008 executed successfully on Neon `valdi_test`
+- `target_type` physically verified as VARCHAR / NOT NULL / default `'accommodation'`
+- `target_id` physically verified as UUID / NOT NULL
+- Existing accommodation/date unique index preserved
+- No generic target/date unique index added
+- Real legacy-row backfill physically verified
+- Backfill test executed inside rollback-only transaction
+- Certification marker: `BOOKING41_PHYSICAL_MIGRATION_PASS`
+- Backfill marker: `BOOKING41_PHYSICAL_BACKFILL_PASS`
+- Rollback marker: `BOOKING41_PHYSICAL_BACKFILL_ROLLBACK_OK`
+
+**Published Commits:**
+
+- `4723851` - database schema registry/bootstrap dependency repair
+- `2128d98` - BOOKING-4.1 availability target identity implementation
+
+**Explicitly NOT Implemented:**
+
+- No generic non-accommodation Availability persistence yet
+- No SLOT
+- No DATETIME_RANGE
+- No Occurrences
+- No AvailabilityBlock persistence redesign
+- No mandatory BookableTarget table
+- No Owner Calendar
+- No Payment integration
+- No booking analytics
+- No NOD integration
+- No visual booking UI
+
+**Next Milestone:** BOOKING-4.2 - Generic Availability Read Contract
+
+BOOKING-4.2 must expose availability through `targetType + targetId` so consumers do not need to understand the accommodation-specific persistence model, while preserving the current accommodation path.
+
+**MVP Sequence After BOOKING-4.2:**
+
+1. BOOKING-4.3 - PostgreSQL-authoritative capacity/atomicity and double-booking protection.
+2. Deliberately stop broad backend expansion.
+3. Audit/harden the remaining Owner-session persistence/runtime gap.
+4. Move into the mobile-first visual MVP and end-to-end traveler/owner experience.
+
+---
 ## Future Product Capabilities
 
 > Capabilities below are exploratory ideas. They are NOT approved implementations, NOT technical debt, and do not change the current milestone.

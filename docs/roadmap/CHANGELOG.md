@@ -3,6 +3,127 @@
 > Chronological history of all completed phases.
 
 ---
+## v4.13 - BOOKING-4.1 Availability Target Identity Foundation (2026-09-06)
+
+### Platform Release 4.13 - AVAILABILITY TARGET IDENTITY FOUNDATION
+
+**Status:** BOOKING-4.1 PHYSICAL POSTGRESQL CERTIFIED
+
+**Environment:**
+- Managed PostgreSQL: Neon
+- Branch: `valdi-test`
+- Database: `valdi_test`
+- Production database was NOT modified.
+
+#### Availability Target Identity
+
+BOOKING-4.1 introduces the generic target identity foundation into Availability while preserving accommodation compatibility.
+
+Implemented contract:
+
+- Availability exposes `targetType + targetId`.
+- `accommodationId` remains authoritative during BOOKING-4.1.
+- Accommodation mirror invariant:
+  - `targetType = 'accommodation'`
+  - `targetId = accommodationId`
+- Target identity mismatch fails closed.
+- Context tenant is authoritative for Availability writes.
+- Explicit data/identity tenant mismatch fails closed.
+- Non-accommodation Availability rows are NOT enabled yet because `accommodation_id` remains `NOT NULL`.
+
+#### Migration 0008
+
+Added and registered:
+
+`database/migrations/0008_booking_availability_target_identity/index.js`
+
+Migration behavior:
+
+1. Preflight legacy integrity checks.
+2. Add `target_type VARCHAR(50) NOT NULL DEFAULT 'accommodation'`.
+3. Add nullable `target_id UUID`.
+4. Backfill `target_id = accommodation_id`.
+5. Verify no NULL target IDs or accommodation mirror mismatches.
+6. Set `target_id NOT NULL`.
+
+The accommodation default is transitional for BOOKING-4.1 and is not frozen as the permanent generic target default.
+
+Existing unique `(accommodation_id, date)` behavior was preserved. No generic target/date unique index was introduced.
+
+#### Local Certification
+
+Focused BOOKING-4.1 suite:
+
+- `tests/capability/booking41.test.js`
+- Result: `35/35 PASS`
+
+Coverage includes target mirroring, mismatch rejection, target drift protection, tenant write authority, schema contract, migration registration, and accommodation compatibility.
+
+#### Physical PostgreSQL Migration Gate
+
+Migration `0008_booking_availability_target_identity` was executed against Neon `valdi_test`.
+
+Verified physically:
+
+- `target_type` present, VARCHAR, NOT NULL.
+- `target_type` default is `'accommodation'`.
+- `target_id` present, UUID, NOT NULL.
+- Existing accommodation/date unique index preserved.
+- No generic target/date unique index introduced.
+- Migration registered in `_drizzle_migrations`.
+
+**Certification marker:** `BOOKING41_PHYSICAL_MIGRATION_PASS`
+
+#### Physical Legacy Backfill Gate
+
+A legacy Availability row was tested inside a rollback-only PostgreSQL transaction.
+
+After executing the real BOOKING-4.1 migration:
+
+- `target_type = 'accommodation'`
+- `target_id = accommodation_id`
+- legacy identity remained intact.
+
+The test transaction was then rolled back.
+
+**Certification markers:**
+- `BOOKING41_PHYSICAL_BACKFILL_PASS`
+- `BOOKING41_PHYSICAL_BACKFILL_ROLLBACK_OK`
+
+#### Published Commits
+
+- `4723851` - `fix(database): repair schema registry and bootstrap dependencies`
+- `2128d98` - `feat(booking): generalize availability target identity`
+
+Published on `origin/p15.3-development`.
+
+#### Scope Preserved
+
+BOOKING-4.1 does NOT implement:
+
+- generic non-accommodation persistence;
+- SLOT;
+- DATETIME_RANGE;
+- Occurrences;
+- AvailabilityBlock persistence redesign;
+- Owner Calendar;
+- Payment;
+- booking analytics;
+- NOD integration;
+- mandatory BookableTarget table;
+- visual booking UI.
+
+#### Next
+
+**BOOKING-4.2 - Generic Availability Read Contract**
+
+Expose an accommodation-compatible generic availability read contract through `targetType + targetId` without requiring consumers to understand the legacy accommodation-specific persistence model.
+
+BOOKING-4.2 remains deliberately MVP-bounded.
+
+BOOKING-4.3 will subsequently address PostgreSQL-authoritative capacity/atomicity and double-booking protection. Backend expansion should then pause in favor of Owner-session hardening and the mobile-first visual MVP.
+
+---
 
 ## v4.12 - BOOKING-3 / BOOKING-3.1 Physical PostgreSQL Certification (2026-09-05)
 
