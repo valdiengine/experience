@@ -1318,7 +1318,7 @@ BOOKING-2 is COMPLETE: Migration & Implementation Plan created at `docs/knowledg
 
 ## BOOKING-3 — ReservationLine Foundation
 
-**Status:** LOCAL CODE CERTIFIED — Physical PostgreSQL Gate PENDING
+**Status:** PHYSICAL POSTGRESQL CERTIFIED (Neon / valdi_test)
 
 ### What Changed
 
@@ -1398,18 +1398,27 @@ if (hasPostgresAdapter && hasAtomicMethod) {
 
 ### Physical PostgreSQL Certification
 
-**Status:** BLOCKED — No PostgreSQL service running on localhost:5432
+**Status:** PASS - PHYSICAL POSTGRESQL CERTIFIED
 
-**What Blocked:**
-- Migration 0006 not executed
-- Real transaction rollback not verified
-- Real database row counts not verified
+**Environment:**
+- Managed PostgreSQL: Neon
+- Certification branch/database: `valdi-test / valdi_test`
+- PostgreSQL version physically observed: 18.6
+- Core migration chain `0001 -> 0006_reservation_lines`: PASS
 
-**Code Verified:**
-- Transaction boundary correct (BEGIN/COMMIT/ROLLBACK)
-- All errors propagate (fail-closed)
-- No stale Map entries after failure
-
+**Physical Evidence:**
+- `reservation_lines` schema verified in the real database
+- Real `ReservationRepository.createReservationWithLine()` executed successfully
+- Reservation and mandatory ReservationLine committed in the same PostgreSQL transaction
+- Accommodation compatibility target persisted as `targetType = accommodation`
+- `targetId = accommodationId`
+- `quantity = 1`
+- `unitPrice = null`
+- `lineTotal = null`
+- DATE_RANGE temporal payload persisted in JSONB
+- Forced ReservationLine NOT NULL failure triggered PostgreSQL error
+- Transaction rollback verified physically: `reservationRows = 0`, `lineRows = 0`
+- Final certification marker: `BOOKING3_PHYSICAL_TRANSACTION_GATE_PASS`
 ### Files Created
 
 - `database/schema/business/reservation_lines.js`
@@ -1425,14 +1434,15 @@ if (hasPostgresAdapter && hasAtomicMethod) {
 
 ### Next Milestone Decision
 
-A. Establish PostgreSQL test environment and complete BOOKING-3 physical certification
-B. Continue architecture-safe local development with PG gate explicitly pending
+BOOKING-3 is physically certified. The PostgreSQL gate is CLOSED.
+
+Next booking milestone: BOOKING-4 - Availability Generalization.
 
 ---
 
 ## BOOKING-3.1 — ReservationLine Read Foundation
 
-**Status:** LOCAL CODE CERTIFIED — Physical PostgreSQL Gate PENDING
+**Status:** PHYSICAL POSTGRESQL CERTIFIED (Neon / valdi_test)
 
 ### What Changed
 
@@ -1482,17 +1492,25 @@ TENANT_SCOPE_ENFORCED_THROUGH_PARENT_RESERVATION = YES
 
 ### Physical PostgreSQL Certification
 
-**Status:** BLOCKED — No PostgreSQL service running on localhost:5432
+**Status:** PASS - PHYSICAL POSTGRESQL CERTIFIED
 
-**What Blocked:**
-- Migration 0006 not executed
-- Real SQL query not physically verified
+**Environment:**
+- Managed PostgreSQL: Neon
+- Certification branch/database: `valdi-test / valdi_test`
 
-**Code Verified:**
-- SQL query uses parameterized inputs (no injection)
-- JOIN correctly enforces tenant isolation
-- Ordering is deterministic (line_order, created_at, id)
+**Physical Evidence:**
+- Real `findLinesByReservationId(tenantId, reservationId)` executed against PostgreSQL
+- Correct tenant returned exactly 1 ReservationLine
+- Returned line ID matched the expected persisted ReservationLine
+- Different tenant returned exactly 0 ReservationLines for the same reservation ID
+- Tenant isolation is therefore enforced through the parent Reservation JOIN
+- No duplicate `tenant_id` column is required on `reservation_lines`
+- Final certification marker: `BOOKING31_PHYSICAL_TENANT_ISOLATION_GATE_PASS`
 
+**Non-blocking Observation:**
+- The standalone certification process retained an internal PostgreSQL pool after the logical test completed and required manual process termination.
+- This did not affect transaction correctness or tenant isolation.
+- Connection lifecycle/shutdown behavior should be hardened separately if standalone repository consumers require deterministic process exit.
 ### Files Modified
 
 - `capabilities/persistence/repositories/reservation/reservation.repository.js` — Added findLinesByReservationId method
@@ -1503,6 +1521,6 @@ TENANT_SCOPE_ENFORCED_THROUGH_PARENT_RESERVATION = YES
 
 ### Next Milestone Decision
 
-A. Complete BOOKING-3 physical PostgreSQL certification (execute migration 0006)
-B. Implement BOOKING-4 (availability generalization)
-C. Implement Owner Booking Calendar read models (requires BOOKING-3.1)
+BOOKING-3.1 is physically certified. The PostgreSQL tenant-isolation gate is CLOSED.
+
+Next booking milestone: BOOKING-4 - Availability Generalization.

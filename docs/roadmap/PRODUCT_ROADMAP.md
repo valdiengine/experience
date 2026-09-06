@@ -478,8 +478,8 @@ BOOKING-2 determines:
 | Item | Value |
 |------|-------|
 | **Classification** | Implementation |
-| **Status** | LOCAL CODE CERTIFIED |
-| **Physical PG Certification** | PENDING (infrastructure blocked) |
+| **Status** | PHYSICAL POSTGRESQL CERTIFIED |
+| **Physical PG Certification** | PASS - Neon valdi_test |
 
 **What BOOKING-3 Implemented:**
 
@@ -508,11 +508,15 @@ BOOKING-2 determines:
 
 **Tests:** 110/110 PASS (BOOKING-3: 23, Reservation: 21, Availability: 30, business.lifecycle: 36)
 
-**Migration 0006:** Created, registered, NOT executed
+**Migration 0006:** Created, registered, and physically executed successfully on Neon `valdi_test`
 
-**Next Milestone Decision:**
-A. Establish PostgreSQL test environment and complete physical certification
-B. Continue architecture-safe local development with PG gate explicitly pending
+**Physical Certification:**
+- Core migration chain `0001 -> 0006`: PASS on Neon `valdi_test`
+- Real Reservation + ReservationLine transaction: PASS
+- Forced line failure rollback: PASS (`reservationRows = 0`, `lineRows = 0`)
+- Certification marker: `BOOKING3_PHYSICAL_TRANSACTION_GATE_PASS`
+
+**Next Milestone:** BOOKING-4 - Availability Generalization
 
 ---
 
@@ -521,8 +525,8 @@ B. Continue architecture-safe local development with PG gate explicitly pending
 | Item | Value |
 |------|-------|
 | **Classification** | Implementation |
-| **Status** | LOCAL CODE CERTIFIED |
-| **Physical PG Certification** | PENDING (infrastructure blocked) |
+| **Status** | PHYSICAL POSTGRESQL CERTIFIED |
+| **Physical PG Certification** | PASS - Neon valdi_test |
 
 **What BOOKING-3.1 Implemented:**
 
@@ -573,10 +577,12 @@ ORDER BY rl.line_order ASC, rl.created_at ASC, rl.id ASC;
   - NOD booking/availability context
 - Does NOT implement calendar UI or Owner Booking Center
 
-**Next Milestone Decision:**
-A. Complete BOOKING-3 physical PostgreSQL certification
-B. Implement BOOKING-4 (availability generalization)
-C. Implement Owner Booking Calendar (requires BOOKING-3.1)
+**Physical Certification:**
+- Correct tenant ReservationLine read: PASS
+- Cross-tenant read isolation: PASS
+- Certification marker: `BOOKING31_PHYSICAL_TENANT_ISOLATION_GATE_PASS`
+
+**Next Milestone:** BOOKING-4 - Availability Generalization
 
 ---
 

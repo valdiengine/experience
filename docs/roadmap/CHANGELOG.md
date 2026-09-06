@@ -4,6 +4,78 @@
 
 ---
 
+## v4.12 - BOOKING-3 / BOOKING-3.1 Physical PostgreSQL Certification (2026-09-05)
+
+### Platform Release 4.12 - PHYSICAL RESERVATION FOUNDATION CERTIFICATION
+
+**Status:** BOOKING-3 AND BOOKING-3.1 PHYSICAL POSTGRESQL CERTIFIED
+
+**Environment:**
+- Managed PostgreSQL: Neon
+- Branch: `valdi-test`
+- Database: `valdi_test`
+- PostgreSQL version physically observed: 18.6
+
+#### Core Migration Certification
+
+The canonical core migration chain was physically executed successfully:
+
+- `0001_platform_foundation` - PASS
+- `0002_ecosystem_layer` - PASS
+- `0003_company_layer` - PASS
+- `0004_identity_layer` - PASS
+- `0005_business_layer` - PASS
+- `0006_reservation_lines` - PASS
+
+The certification database contains the expected core schema and `reservation_lines`.
+
+#### BOOKING-3 Physical Transaction Gate
+
+Real `ReservationRepository.createReservationWithLine()` execution verified:
+
+- Reservation INSERT - PASS
+- ReservationLine INSERT - PASS
+- Same PostgreSQL transaction boundary - PASS
+- Accommodation target compatibility - PASS
+- DATE_RANGE temporal JSONB persistence - PASS
+- `quantity = 1` - PASS
+- nullable line pricing preserved - PASS
+
+A forced `reservation_lines.target_type NOT NULL` violation occurred after the Reservation INSERT.
+
+Post-failure physical verification:
+
+- Reservation rows remaining: `0`
+- ReservationLine rows remaining: `0`
+
+This physically confirms rollback of the complete transaction.
+
+**Certification marker:** `BOOKING3_PHYSICAL_TRANSACTION_GATE_PASS`
+
+#### BOOKING-3.1 Physical Tenant Isolation Gate
+
+Real tenant-scoped ReservationLine read verified:
+
+- Correct tenant + reservation ID -> exactly `1` line
+- Returned line ID -> expected persisted line ID
+- Different tenant + same reservation ID -> exactly `0` lines
+
+This physically confirms tenant isolation through the parent Reservation JOIN.
+
+**Certification marker:** `BOOKING31_PHYSICAL_TENANT_ISOLATION_GATE_PASS`
+
+#### Non-blocking Infrastructure Observation
+
+The standalone BOOKING-3.1 certification process retained an internal PostgreSQL connection pool after the logical test completed and required manual termination.
+
+This does not invalidate transaction or tenant-isolation certification. Deterministic connection shutdown for standalone consumers remains a separate infrastructure hardening concern.
+
+#### Next
+
+BOOKING-4 - Availability Generalization.
+
+---
+
 ## v4.10 — BOOKING-3 Complete (2026-09-02)
 
 ### Platform Release 4.10 — RESERVATION LINE FOUNDATION
