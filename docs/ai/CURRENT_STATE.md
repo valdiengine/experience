@@ -1133,7 +1133,7 @@ DELETE returns 200 for nonexistent/foreign/revoked/expired UUIDs. No way to enum
 
 ## PUSH-4 — Owner Campaign Delivery
 
-**Status:** PHYSICAL_STAGING_CERTIFIED  
+**Status:** PHYSICAL_STAGING_CERTIFIED
 **Certified:** 2026-08-30
 
 ### Canonical Identity
@@ -1681,8 +1681,8 @@ After the minimum generic availability contract, BOOKING-4.3 will address Postgr
 
 ## BOOKING-4.2 - Generic Availability Read Contract - CLOSED / PHYSICAL POSTGRESQL CERTIFIED
 
-**Status:** CLOSED  
-**Certification:** LOCAL + PHYSICAL POSTGRESQL PASS  
+**Status:** CLOSED
+**Certification:** LOCAL + PHYSICAL POSTGRESQL PASS
 **Implementation Commit:** `b4439f3` - `feat(booking): add generic availability read contract`
 
 ### Delivered Contract
@@ -1812,3 +1812,173 @@ After BOOKING-4.3, broad backend expansion should deliberately pause. The next p
 4. demonstrate the owner flow: login -> reservations/calendar -> manage reservation.
 
 The priority after BOOKING-4.3 is a fundable, demonstrable Turistic OS MVP rather than continued backend expansion.
+---
+
+## BOOKING-4.3 - PostgreSQL-Authoritative Capacity / Atomicity and Double-Booking Protection - CLOSED / PHYSICAL POSTGRESQL CERTIFIED
+
+**Status:** CLOSED
+**Certification:** LOCAL + PHYSICAL POSTGRESQL PASS
+
+### Delivered Contract
+
+BOOKING-4.3 establishes PostgreSQL as the authoritative capacity arbiter for reservation commitment.
+
+Delivered behavior:
+
+- reservation capacity is committed with an atomic conditional PostgreSQL `UPDATE`;
+- Reservation persistence and capacity commitment occur inside the same PostgreSQL transaction;
+- concurrent attempts against `inventory = 1` cannot overbook;
+- the losing transaction fails closed with `AvailabilityConflictError`;
+- failed competing transactions do not persist partial Reservation or ReservationLine records;
+- ReservationLine persistence includes `released_at` for idempotent capacity release;
+- release restores committed capacity exactly once;
+- repeated release attempts are safe no-ops;
+- DATE_RANGE semantics remain check-in inclusive / check-out exclusive;
+- tenant-scoped persistence boundaries remain preserved.
+
+### Persistence Changes
+
+Migration:
+
+`0009_reservation_lines_release_tracking`
+
+Dependency:
+
+`0008_booking_availability_target_identity`
+
+Schema change:
+
+- `reservation_lines.released_at TIMESTAMPTZ NULL`
+
+Migration registry:
+
+- layer: `business`
+- order: `8`
+- table: `reservation_lines`
+
+### Local Certification
+
+Focused suite:
+
+`tests/capability/booking43.test.js`
+
+Result:
+
+`24/24 PASS - 0 FAIL`
+
+The local suite validates BOOKING-4.3 availability behavior and regression contracts.
+
+True concurrent capacity contention requires physical PostgreSQL and is therefore certified separately below.
+
+### Physical PostgreSQL Certification
+
+**Environment:**
+
+- Managed PostgreSQL: Neon
+- Branch: `valdi-test`
+- Database: `valdi_test`
+- Production database was NOT modified.
+
+Physical evidence:
+
+- database guard verified `valdi_test`;
+- migration `0009_reservation_lines_release_tracking` physically applied;
+- `_drizzle_migrations` record physically verified;
+- `reservation_lines.released_at` physically verified as nullable `timestamp with time zone`;
+- one Availability fixture created with `inventory = 1` and `reserved_count = 0`;
+- two Reservation transactions executed concurrently against the same capacity;
+- exactly one transaction succeeded;
+- exactly one transaction failed with `AvailabilityConflictError`;
+- resulting Availability state was:
+  - `inventory = 1`
+  - `reserved_count = 1`
+  - `status = 'reserved'`
+- exactly one Reservation persisted;
+- exactly one ReservationLine persisted;
+- losing transaction rolled back without partial persistence;
+- first release restored capacity to:
+  - `reserved_count = 0`
+  - `status = 'available'`
+- `released_at` was physically set;
+- second release returned idempotent no-op behavior;
+- final capacity remained `reserved_count = 0`;
+- certification fixtures were removed;
+- PostgreSQL pool closed cleanly.
+
+Certification marker:
+
+`BOOKING43_PHYSICAL_POSTGRESQL_GATE_PASS`
+
+Cleanup marker:
+
+`BOOKING43_FIXTURE_CLEANUP_DONE`
+
+### Physical Certification Defect Found and Fixed
+
+Physical certification exposed a PostgreSQL row-shape defect in `releaseReservationLines()`.
+
+The direct `pg` query:
+
+`SELECT rl.* FROM reservation_lines ...`
+
+returns physical snake_case column names. The release path incorrectly referenced:
+
+`line.targetId`
+
+instead of:
+
+`line.target_id`
+
+This caused the availability release update to miss the target row and fail with an apparent insufficient-capacity conflict.
+
+The physical PostgreSQL path was corrected to use `line.target_id`.
+
+The complete physical gate passed after this correction.
+
+### Infrastructure Boundary Observed
+
+BOOKING-4.3 certification also confirmed persistence wiring debt outside the booking contract:
+
+- `getDatabaseConfig()` exposes `DATABASE_URL`, but the global PostgreSQL connection path currently consumes split `POSTGRES_*` fields;
+- the provider-side PostgreSQL pool does not currently use its configured connection string directly;
+- parts of the provider/Drizzle wiring use CommonJS `require()` inside an ESM project and may fall back unexpectedly;
+- bootstrap exposes a `runMigrations` option but does not currently execute registered migrations;
+- migration execution contracts should be unified before production runtime certification.
+
+For BOOKING-4.3 certification, a temporary certification-only harness translated the already-loaded Neon `DATABASE_URL` into the existing product PostgreSQL connection contract before dynamically loading the repository.
+
+No production database was touched.
+
+These infrastructure issues are recorded as persistence/runtime hardening debt and do not invalidate the PostgreSQL behavioral certification of BOOKING-4.3.
+
+### Explicitly NOT Added
+
+BOOKING-4.3 does NOT introduce:
+
+- SLOT;
+- DATETIME_RANGE;
+- Occurrences;
+- Owner Calendar;
+- Payment integration;
+- booking analytics;
+- universal BookableTarget persistence;
+- generic non-accommodation booking persistence;
+- visual booking UI.
+
+### Next Product Sequence
+
+Broad booking backend expansion now deliberately pauses.
+
+Next sequence:
+
+1. audit and harden the remaining Owner-session persistence/runtime gap;
+2. resolve the critical PostgreSQL/runtime wiring debt required for production safety;
+3. move into the mobile-first visual MVP;
+4. demonstrate traveler flow: discover -> availability -> reserve -> confirmation;
+5. demonstrate owner flow: login -> reservations/calendar -> manage reservation.
+
+The priority is now a fundable, demonstrable Turistic OS MVP rather than additional booking backend expansion.
+
+### Implementation Commit
+
+`7e0f793` - `feat(booking): enforce atomic capacity and release tracking`
