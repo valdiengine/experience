@@ -84,6 +84,13 @@ export const MIGRATION_REGISTRY = [
     description: 'Adds target_type and target_id to availability table for accommodation identity mirror (BOOKING-4.1)',
     tables: ['availability'],
   },
+  {
+    name: '0009_reservation_lines_release_tracking',
+    layer: 'business',
+    order: 8,
+    description: 'Adds released_at column to reservation_lines for idempotent capacity release (BOOKING-4.3)',
+    tables: ['reservation_lines'],
+  },
 ]
 
 /**

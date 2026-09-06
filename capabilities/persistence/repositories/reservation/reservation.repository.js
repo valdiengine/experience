@@ -1,5 +1,7 @@
 import { BaseRepository } from '../../contracts/base.repository.js'
 import { query, transaction } from '../../../../database/connection/postgres.connection.js'
+import { AvailabilityCalendar } from '../../../availability/availability.calendar.js'
+import { AvailabilityConflictError } from '../../../availability/availability.errors.js'
 
 export class ReservationRepository extends BaseRepository {
   static entityName = 'reservation'
@@ -11,9 +13,43 @@ export class ReservationRepository extends BaseRepository {
   static searchable = true
   static softDeletable = true
 
+  /**
+   * Expand date range from temporal.startDate (check-in, inclusive) to
+   * temporal.endDate (check-out, exclusive).
+   * @param {object} temporal - { mode, startDate, endDate }
+   * @returns {string[]} Array of date strings 'YYYY-MM-DD'
+   */
+  #expandDateRange(temporal) {
+    if (!temporal?.startDate || !temporal?.endDate) return []
+    const endDate = new Date(temporal.endDate)
+    endDate.setDate(endDate.getDate() - 1)
+    return AvailabilityCalendar.expandRange(
+      temporal.startDate,
+      endDate.toISOString().split('T')[0]
+    )
+  }
+
+  /**
+   * Compute new status projection based on is_blocked and reserved_count vs inventory.
+   * @param {boolean} isBlocked
+   * @param {number} reservedCount
+   * @param {number} inventory
+   * @returns {string} 'available' | 'reserved' | 'blocked'
+   */
+  #computeStatus(isBlocked, reservedCount, inventory) {
+    if (isBlocked) return 'blocked'
+    if (reservedCount >= inventory) return 'reserved'
+    return 'available'
+  }
+
   async createReservationWithLine(reservationData, lineData) {
     this._enforceNotDisposed()
     this._enforceWritable()
+
+    const hasPostgresAdapter = this.adapter?.client?.db != null
+    if (!hasPostgresAdapter) {
+      return this.#createReservationFallback(reservationData, lineData)
+    }
 
     const r = {
       ...reservationData,
@@ -25,7 +61,34 @@ export class ReservationRepository extends BaseRepository {
       channel: reservationData.channel || reservationData.source || null,
     }
 
+    const quantity = lineData.quantity || 1
+    const dates = this.#expandDateRange(lineData.temporal)
+
     return transaction(async (client) => {
+      for (const date of dates) {
+        const result = await client.query(`
+          UPDATE availability
+          SET reserved_count = reserved_count + $1,
+              status = CASE
+                WHEN is_blocked = true THEN 'blocked'
+                WHEN reserved_count + $1 >= inventory THEN 'reserved'
+                ELSE 'available'
+              END,
+              updated_at = NOW()
+          WHERE tenant_id = $2
+            AND accommodation_id = $3
+            AND date = $4
+            AND is_blocked = false
+            AND status = 'available'
+            AND reserved_count + $1 <= inventory
+          RETURNING id
+        `, [quantity, r.tenantId, r.accommodationId, date])
+
+        if (result.rows.length === 0) {
+          throw new AvailabilityConflictError(`No capacity for ${date}`)
+        }
+      }
+
       const reservationResult = await client.query(
         `INSERT INTO reservations (
           id, tenant_id, accommodation_id, user_id, visitor_id, status, confirmation_code,
@@ -88,11 +151,11 @@ export class ReservationRepository extends BaseRepository {
       const lineResult = await client.query(
         `INSERT INTO reservation_lines (
           id, reservation_id, line_order, target_type, target_id, temporal,
-          quantity, unit_price, line_total, metadata,
+          quantity, unit_price, line_total, metadata, released_at,
           created_at, updated_at
         ) VALUES (
           $1, $2, $3, $4, $5, $6,
-          $7, $8, $9, $10,
+          $7, $8, $9, $10, NULL,
           $11, $12
         ) RETURNING *`,
         [
@@ -102,7 +165,7 @@ export class ReservationRepository extends BaseRepository {
           lineData.targetType,
           lineData.targetId,
           JSON.stringify(lineData.temporal),
-          lineData.quantity || 1,
+          quantity,
           lineData.unitPrice || null,
           lineData.lineTotal || null,
           JSON.stringify(lineData.metadata || {}),
@@ -113,6 +176,107 @@ export class ReservationRepository extends BaseRepository {
 
       return { reservation, line: lineResult.rows[0] }
     })
+  }
+
+  async #createReservationFallback(reservationData, lineData) {
+    const r = {
+      ...reservationData,
+      checkInDate: reservationData.checkInDate || reservationData.dates?.checkIn || null,
+      checkOutDate: reservationData.checkOutDate || reservationData.dates?.checkOut || null,
+      guestCount: reservationData.guestCount || reservationData.guests || 1,
+      confirmationCode: reservationData.confirmationCode || `CONF-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+      specialRequests: reservationData.specialRequests || reservationData.notes || null,
+      channel: reservationData.channel || reservationData.source || null,
+    }
+
+    const hasPostgresAdapter = this.adapter?.client?.db != null
+    const hasAtomicMethod = typeof this.createReservationWithLine === 'function'
+
+    if (r.accommodationId && hasAtomicMethod && hasPostgresAdapter) {
+      return this.createReservationWithLine(r, lineData)
+    }
+
+    await this.create(r)
+
+    const reservation = r
+
+    const line = {
+      id: lineData.id,
+      reservationId: reservation.id,
+      lineOrder: lineData.lineOrder || 1,
+      targetType: lineData.targetType,
+      targetId: lineData.targetId,
+      temporal: lineData.temporal,
+      quantity: lineData.quantity || 1,
+      unitPrice: lineData.unitPrice || null,
+      lineTotal: lineData.lineTotal || null,
+      metadata: lineData.metadata || {},
+      releasedAt: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    return { reservation, line }
+  }
+
+  async releaseReservationLines(client, reservationId, tenantId) {
+    const linesResult = await client.query(`
+      SELECT rl.*
+      FROM reservation_lines rl
+      JOIN reservations r ON r.id = rl.reservation_id
+      WHERE rl.reservation_id = $1
+        AND r.tenant_id = $2
+        AND rl.released_at IS NULL
+    `, [reservationId, tenantId])
+
+    if (linesResult.rows.length === 0) {
+      return { released: [], noOp: true }
+    }
+
+    for (const line of linesResult.rows) {
+      const releasedResult = await client.query(`
+        UPDATE reservation_lines
+        SET released_at = NOW()
+        WHERE id = $1 AND released_at IS NULL
+        RETURNING quantity
+      `, [line.id])
+
+      if (releasedResult.rows.length === 0) {
+        continue
+      }
+
+      const quantity = releasedResult.rows[0].quantity
+
+      if (line.temporal?.mode === 'DATE_RANGE') {
+        const dates = this.#expandDateRange(line.temporal)
+
+        for (const date of dates) {
+          const releaseResult = await client.query(`
+            UPDATE availability
+            SET reserved_count = reserved_count - $1,
+                status = CASE
+                  WHEN is_blocked = true THEN 'blocked'
+                  WHEN reserved_count - $1 >= inventory THEN 'reserved'
+                  ELSE 'available'
+                END,
+                updated_at = NOW()
+            WHERE tenant_id = $2
+              AND accommodation_id = $3
+              AND date = $4
+              AND reserved_count >= $1
+            RETURNING id
+          `, [quantity, tenantId, line.target_id, date])
+
+          if (releaseResult.rows.length === 0) {
+            throw new AvailabilityConflictError(
+              `Cannot release: date ${date} has insufficient reserved_count`
+            )
+          }
+        }
+      }
+    }
+
+    return { released: linesResult.rows, noOp: false }
   }
 
   async findLinesByReservationId(tenantId, reservationId) {
@@ -159,6 +323,7 @@ export class ReservationRepository extends BaseRepository {
           unitPrice: line.unitPrice,
           lineTotal: line.lineTotal,
           metadata: line.metadata,
+          releasedAt: line.releasedAt || null,
           createdAt: line.createdAt,
           updatedAt: line.updatedAt,
         }))

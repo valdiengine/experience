@@ -14,6 +14,7 @@ export const reservationLines = pgTable(
     unitPrice: decimal('unit_price', { precision: 12, scale: 2 }),
     lineTotal: decimal('line_total', { precision: 12, scale: 2 }),
     metadata: jsonb('metadata').default({}),
+    releasedAt: timestamp('released_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
