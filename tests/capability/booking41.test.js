@@ -13,6 +13,7 @@ import { AvailabilityConflictError } from '../../capabilities/availability/avail
 import { AvailabilityManager } from '../../capabilities/availability/availability.manager.js'
 import { storeRows } from '../capability/capability.assertions.js'
 import { MIGRATION_REGISTRY } from '../../database/index.js'
+import { InMemoryRepositoryAdapter } from './capability.mock.repositories.js'
 
 const ACC_ID = 'acc-booking41-1'
 const ACC_ID_2 = 'acc-booking41-2'
@@ -26,6 +27,10 @@ class Booking41Test extends BaseCapabilityTest {
   }
 
   async runScenario(bundle) {
+    InMemoryRepositoryAdapter.seed('accommodation', [
+      { id: ACC_ID, tenantId: TEST_TENANT_ID, name: 'Test Accommodation', deletedAt: null },
+    ])
+
     const availability = bundle.capability('availability')
     const manager = availability.manager
     const identity = bundle.identity

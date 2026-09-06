@@ -10,6 +10,7 @@ import { assertEvent, assertSearchIndexed, assertSearchDeleted, assertSyncPushed
 import { createAvailabilityDayData, createAvailabilityWindowData } from '../fixtures/availability.fixture.js'
 import { AVAILABILITY_EVENTS } from '../../capabilities/availability/availability.events.js'
 import { AVAILABILITY_PERMISSIONS } from '../../capabilities/availability/availability.permissions.js'
+import { InMemoryRepositoryAdapter } from '../capability/capability.mock.repositories.js'
 
 const ACC_ID = 'acc-avail-1'
 const DAY = '2031-06-10'
@@ -25,6 +26,10 @@ class AvailabilityLifecycleTest extends BaseCapabilityTest {
     const { identity } = bundle
     const availability = bundle.capability('availability')
     const manager = availability.manager
+
+    InMemoryRepositoryAdapter.seed('accommodation', [
+      { id: ACC_ID, tenantId: 'commercial', name: 'Test Accommodation', deletedAt: null },
+    ])
 
     // 1. Create a date window
     const windowData = createAvailabilityWindowData(ACC_ID)

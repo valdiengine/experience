@@ -60,6 +60,24 @@ export class AvailabilityManager {
     return tenantId
   }
 
+  async #requireAccommodationTargetOwnership(accommodationId) {
+    const contextTenant = this.#requireContextTenant()
+    const accommodationRepo = this.#context?.repositories?.accommodation
+    if (!accommodationRepo) {
+      throw new AvailabilityConflictError('Cannot verify accommodation tenant ownership: accommodation repository unavailable')
+    }
+    const accommodation = await accommodationRepo.findById(accommodationId, { throwIfNotFound: false })
+    if (!accommodation) {
+      throw new AvailabilityNotFoundError(accommodationId)
+    }
+    if (accommodation.tenantId !== contextTenant) {
+      throw new AvailabilityConflictError(
+        `Accommodation ${accommodationId} does not belong to tenant ${contextTenant}`
+      )
+    }
+    return accommodation
+  }
+
   #normalizeTargetIdentity(dayData, existingRecord = null) {
     const accommodationId = dayData.accommodationId
     if (!accommodationId) return dayData
@@ -117,6 +135,8 @@ export class AvailabilityManager {
         `identity.tenantId mismatch: cannot create availability for tenant '${identity.tenantId}' in context tenant '${contextTenant}'`
       )
     }
+
+    await this.#requireAccommodationTargetOwnership(data.accommodationId)
 
     const normalized = this.#normalizeTargetIdentity({ ...data, tenantId: contextTenant })
 
@@ -198,6 +218,8 @@ export class AvailabilityManager {
       )
     }
 
+    await this.#requireAccommodationTargetOwnership(accommodationId)
+
     const dates = AvailabilityCalendar.expandRange(startDate, endDate)
     const blocked = []
 
@@ -273,6 +295,8 @@ export class AvailabilityManager {
         `identity.tenantId mismatch: cannot reserve for tenant '${identity.tenantId}' in context tenant '${contextTenant}'`
       )
     }
+
+    await this.#requireAccommodationTargetOwnership(accommodationId)
 
     const dates = AvailabilityCalendar.expandRange(checkIn, checkOut)
     const reserved = []
@@ -410,6 +434,68 @@ export class AvailabilityManager {
     await this.#checkPermission(identity, AVAILABILITY_PERMISSIONS.READ)
     const calendar = await this.getCalendar(accommodationId, startDate, endDate, identity)
     return AvailabilitySearch.toCalendarPayload(accommodationId, calendar)
+  }
+
+  // ── Generic Target Read (BOOKING-4.2) ──
+
+  async getByTarget(filter, identity) {
+    await this.#checkPermission(identity, AVAILABILITY_PERMISSIONS.READ)
+
+    const { targetType, targetId, startDate, endDate } = filter || {}
+
+    if (targetType === undefined || targetType === null) {
+      throw new AvailabilityConflictError('targetType is required for generic availability query')
+    }
+
+    if (targetType !== 'accommodation') {
+      throw new AvailabilityConflictError(
+        `Invalid targetType '${targetType}': BOOKING-4.2 supports only 'accommodation' target type`
+      )
+    }
+
+    if (!targetId) {
+      throw new AvailabilityConflictError('targetId is required for generic availability query')
+    }
+
+    await this.#requireAccommodationTargetOwnership(targetId)
+
+    const hasStartDate = startDate !== undefined && startDate !== null
+    const hasEndDate = endDate !== undefined && endDate !== null
+
+    if (hasStartDate !== hasEndDate) {
+      throw new AvailabilityConflictError(
+        'startDate and endDate must be provided together'
+      )
+    }
+
+    let records = []
+    if (hasStartDate && hasEndDate) {
+      validateDateRange(startDate, endDate)
+      records = await this.#repo?.findMany({
+        targetType,
+        targetId,
+        date: { gte: startDate, lte: endDate },
+      }) || []
+    } else {
+      records = await this.#repo?.findMany({ targetType, targetId }) || []
+    }
+
+    if (!hasStartDate || !hasEndDate) {
+      return records
+    }
+
+    const allDates = AvailabilityCalendar.expandRange(startDate, endDate)
+    const recordMap = {}
+    for (const r of records) recordMap[r.date] = r
+
+    return allDates.map((d) => ({
+      date: d,
+      status: recordMap[d]?.status || 'available',
+      capacity: recordMap[d]?.capacity || null,
+      available: recordMap[d]?.available || null,
+      price: recordMap[d]?.price || null,
+      notes: recordMap[d]?.notes || null,
+    }))
   }
 
   // ── Windows ──
