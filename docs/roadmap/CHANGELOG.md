@@ -1214,3 +1214,72 @@ v4.2.x-media-processing (PENDING) — Media Processing Provider
 - 5 destinations (Valdivia, Natales, Punta Arenas, Chiloé, Coyhaique)
 - 17 categories, 18 modules, 4 experiences
 - 6 sample companies (architecture examples only)
+
+---
+
+## BOOKING-4.2 - Generic Availability Read Contract
+
+**Status:** CLOSED - PHYSICAL POSTGRESQL CERTIFIED  
+**Implementation Commit:** `b4439f3` - `feat(booking): add generic availability read contract`
+
+### Added
+
+- Added generic Availability read contract:
+  - `AvailabilityManager.getByTarget({ targetType, targetId, startDate?, endDate? }, identity)`
+- Added tenant-scoped accommodation ownership validation before:
+  - `createDay()`
+  - `block()`
+  - `reserve()`
+  - `getByTarget()`
+- Added fail-closed behavior for:
+  - foreign-tenant accommodation targets;
+  - unsupported target types;
+  - missing target identity;
+  - partial date ranges;
+  - invalid date ranges.
+- Preserved existing accommodation Availability APIs.
+- Added `tests/capability/booking42.test.js`.
+- Updated existing Availability test fixtures for ownership validation.
+
+### Certification
+
+Local focused suite:
+
+- BOOKING-4.2: **30/30 PASS**
+
+Physical PostgreSQL certification:
+
+- Neon branch: `valdi-test`
+- Database: `valdi_test`
+- Production database untouched.
+- Owned-target persistence physically verified.
+- `target_type = 'accommodation'` physically verified.
+- `target_id = accommodation_id` physically verified.
+- Cross-tenant target creation failed closed before Availability persistence.
+- Generic flat read physically verified.
+- Generic bounded civil-date read physically verified.
+- Partial-date contract physically verified fail-closed.
+- Certification fixtures cleaned successfully.
+
+Markers:
+
+- `BOOKING42_PHYSICAL_POSTGRESQL_GATE_PASS`
+- `BOOKING42_FIXTURE_CLEANUP_DONE`
+
+### Infrastructure Observation
+
+Physical certification exposed an existing infrastructure gap: the repository does not yet provide a complete concrete PostgreSQL ORM adapter for the generic `BaseRepository -> ORM adapter -> PostgreSQL` runtime path.
+
+The certification harness used a temporary SQL adapter outside committed product code while exercising the real Availability manager contract and real PostgreSQL persistence.
+
+This remains infrastructure/runtime wiring debt for production certification and is not part of BOOKING-4.2 scope.
+
+### Scope Boundary
+
+BOOKING-4.2 does not enable generic non-accommodation persistence and does not introduce SLOT, DATETIME_RANGE, Occurrences, Owner Calendar, Payment, analytics, NOD, or visual booking UI.
+
+### Next
+
+BOOKING-4.3 will address PostgreSQL-authoritative capacity/atomicity and double-booking protection.
+
+After BOOKING-4.3, broad backend expansion pauses in favor of Owner-session hardening and the mobile-first fundable MVP.

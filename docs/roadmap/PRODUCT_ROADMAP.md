@@ -730,3 +730,111 @@ A traveler receives a "Brewer Medal" at a brewery visit. The medal persists with
 **Document Created:** 2026-08-02
 **Platform Version:** 4.0
 **Product Mode:** ACTIVE
+
+---
+
+## BOOKING-4.2 - Generic Availability Read Contract
+
+**Status:** CLOSED - PHYSICAL POSTGRESQL CERTIFIED
+
+**Implementation:** `b4439f3` - `feat(booking): add generic availability read contract`
+
+### Product Capability Delivered
+
+Turistic OS now has a minimum generic Availability read boundary based on:
+
+`targetType + targetId`
+
+Current supported target type:
+
+- `accommodation`
+
+Consumers can query Availability without depending directly on `accommodationId` as the public generic read contract.
+
+Supported read modes:
+
+- no date range -> persisted Availability rows;
+- complete `startDate + endDate` -> calendar-expanded Availability;
+- partial date ranges -> rejected;
+- unsupported target types -> rejected.
+
+Existing accommodation Availability APIs remain compatible.
+
+### Tenant Isolation
+
+Availability operations now validate accommodation ownership through the active tenant before persistence or generic target reads.
+
+Protected operations:
+
+- create day;
+- block;
+- reserve;
+- generic target read.
+
+Cross-tenant targets fail closed.
+
+### Certification
+
+- BOOKING-4.2 focused suite: **30/30 PASS**
+- Physical PostgreSQL certification: **PASS**
+- Neon branch: `valdi-test`
+- Database: `valdi_test`
+- Production database untouched.
+- Physical marker: `BOOKING42_PHYSICAL_POSTGRESQL_GATE_PASS`
+- Fixture cleanup marker: `BOOKING42_FIXTURE_CLEANUP_DONE`
+
+### Current Boundary
+
+BOOKING-4.2 is intentionally not a complete generic Availability engine.
+
+Not enabled:
+
+- non-accommodation Availability persistence;
+- SLOT;
+- DATETIME_RANGE;
+- Occurrences;
+- generic AvailabilityBlock persistence;
+- mandatory BookableTarget table;
+- Owner Calendar;
+- Payment;
+- analytics;
+- NOD;
+- booking UI.
+
+A concrete generic PostgreSQL ORM adapter/runtime wiring gap also remains infrastructure debt for production certification.
+
+### MVP-Critical Sequence
+
+The backend sequence is now intentionally constrained:
+
+1. **BOOKING-4.3 - Capacity / Atomicity / Double-booking Protection**
+   - PostgreSQL-authoritative inventory/capacity mutation.
+   - Prevent concurrent overbooking.
+   - Preserve the existing Reservation lifecycle.
+   - Keep scope limited to what the MVP requires.
+
+2. **Owner Session Runtime Audit / Hardening**
+   - Do not reimplement completed OWNER-SESSION milestones.
+   - Identify only the remaining persistence/runtime gap required for the MVP.
+   - Certify the owner login/session path needed by the visual product.
+
+3. **Mobile-first Visual MVP**
+   - Shift primary development effort from architecture expansion to product experience.
+   - Build a polished app-like traveler experience.
+   - Build the minimum owner operational experience.
+
+### Fundraising Demo Target
+
+The MVP should demonstrate a coherent end-to-end product rather than isolated backend capabilities.
+
+Traveler path:
+
+`Destination -> Discover Experience -> View Availability -> Reserve -> Confirmation`
+
+Owner path:
+
+`Login -> Reservations / Calendar -> Manage Reservation`
+
+The product priority after BOOKING-4.3 is to make Turistic OS demonstrable, understandable, visually credible, and usable enough to support startup fundraising.
+
+Further backend architecture expansion should require direct justification from this MVP path.

@@ -1677,3 +1677,138 @@ Goal: allow Turistic OS consumers to query availability through `targetType + ta
 BOOKING-4.2 must remain MVP-bounded. It does NOT open SLOT, DATETIME_RANGE, Occurrences, Owner Calendar, Payment, UI, or a mandatory BookableTarget table.
 
 After the minimum generic availability contract, BOOKING-4.3 will address PostgreSQL-authoritative capacity/atomicity and double-booking protection. Backend expansion should then deliberately pause so development can move toward Owner-session hardening and the mobile-first visual MVP.
+---
+
+## BOOKING-4.2 - Generic Availability Read Contract - CLOSED / PHYSICAL POSTGRESQL CERTIFIED
+
+**Status:** CLOSED  
+**Certification:** LOCAL + PHYSICAL POSTGRESQL PASS  
+**Implementation Commit:** `b4439f3` - `feat(booking): add generic availability read contract`
+
+### Delivered Contract
+
+BOOKING-4.2 introduces the minimum generic Availability read boundary required by the MVP without opening broader booking scope.
+
+New public manager contract:
+
+`AvailabilityManager.getByTarget({ targetType, targetId, startDate?, endDate? }, identity)`
+
+Current supported target:
+
+- `targetType = 'accommodation'`
+
+Current behavior:
+
+- `targetType + targetId` are the generic query authority.
+- No date range returns persisted Availability rows as a flat array.
+- A complete `startDate + endDate` pair returns calendar-expanded availability.
+- Supplying only one date boundary fails closed.
+- Invalid date ranges fail closed.
+- Unsupported target types fail closed.
+- Existing accommodation APIs remain compatible.
+
+### Tenant Ownership Hardening
+
+Accommodation ownership is now verified before Availability persistence or generic target reads.
+
+Protected paths:
+
+- `createDay()`
+- `block()`
+- `reserve()`
+- `getByTarget()`
+
+The ownership lookup is tenant-scoped. A foreign-tenant accommodation therefore fails closed before Availability persistence and does not expose cross-tenant target existence through the generic path.
+
+### Local Certification
+
+Focused BOOKING-4.2 suite:
+
+- `tests/capability/booking42.test.js`
+- Result: **30/30 PASS**
+
+Regression fixtures were updated for the new ownership requirement in:
+
+- `tests/capability/booking41.test.js`
+- `tests/aggregate/availability.lifecycle.test.js`
+
+The focused suite includes owned-target success, foreign-target rejection, generic reads, partial-date rejection, invalid range rejection, target mirror behavior, and legacy API regression coverage.
+
+### Physical PostgreSQL Certification
+
+**Environment:**
+
+- Managed PostgreSQL: Neon
+- Branch: `valdi-test`
+- Database: `valdi_test`
+- Production database was NOT modified.
+
+Physical evidence:
+
+- Database guard verified `valdi_test`.
+- Real owned accommodation Availability creation succeeded.
+- Persisted row physically verified:
+  - correct `tenant_id`
+  - correct `accommodation_id`
+  - `target_type = 'accommodation'`
+  - `target_id = accommodation_id`
+- Foreign-tenant accommodation creation attempt failed closed with `AvailabilityNotFoundError`.
+- Generic flat `getByTarget()` read succeeded.
+- Generic bounded civil-date `getByTarget()` read succeeded.
+- Partial date range failed closed with `AvailabilityConflictError`.
+- Certification fixtures were removed after execution.
+- PostgreSQL pool closed cleanly.
+
+Certification marker:
+
+`BOOKING42_PHYSICAL_POSTGRESQL_GATE_PASS`
+
+Cleanup marker:
+
+`BOOKING42_FIXTURE_CLEANUP_DONE`
+
+### Infrastructure Boundary Observed During Certification
+
+The repository currently does not expose a complete concrete PostgreSQL ORM adapter for the generic `BaseRepository -> ORM adapter -> PostgreSQL` path.
+
+The physical BOOKING-4.2 certification therefore used:
+
+- the real `AvailabilityManager`;
+- real PostgreSQL `valdi_test`;
+- real persisted Availability schema and target identity;
+- tenant-scoped repository semantics;
+- a temporary certification-only SQL adapter outside committed product code.
+
+This is an infrastructure wiring debt to resolve before production runtime certification. It does not change the BOOKING-4.2 application contract or its PostgreSQL behavioral certification.
+
+### Explicitly NOT Added
+
+BOOKING-4.2 does NOT introduce:
+
+- generic non-accommodation persistence;
+- SLOT;
+- DATETIME_RANGE;
+- Occurrences;
+- universal AvailabilityWindow materialization;
+- AvailabilityBlock persistence redesign;
+- mandatory BookableTarget table;
+- Owner Calendar;
+- Payment integration;
+- booking analytics;
+- NOD integration;
+- visual booking UI.
+
+### Next Milestone
+
+**BOOKING-4.3 - PostgreSQL-authoritative capacity / atomicity and double-booking protection**
+
+BOOKING-4.3 remains MVP-bounded.
+
+After BOOKING-4.3, broad backend expansion should deliberately pause. The next product sequence is:
+
+1. audit/harden the remaining Owner-session persistence/runtime gap;
+2. move into the mobile-first visual MVP;
+3. demonstrate the traveler flow: discover -> availability -> reserve -> confirmation;
+4. demonstrate the owner flow: login -> reservations/calendar -> manage reservation.
+
+The priority after BOOKING-4.3 is a fundable, demonstrable Turistic OS MVP rather than continued backend expansion.
