@@ -19,6 +19,8 @@ export const AVAILABILITY_SCHEMA = createSchema({
     metadata: { type: 'object', required: false },
     createdAt: { type: 'string', required: false },
     updatedAt: { type: 'string', required: false },
+    targetType: { type: 'string', required: false },
+    targetId: { type: 'string', required: false },
   },
 })
 

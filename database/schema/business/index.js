@@ -104,6 +104,8 @@ export const availability = pgTable(
     metadata: jsonb('metadata').default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    targetType: varchar('target_type', { length: 50 }).notNull().default('accommodation'),
+    targetId: uuid('target_id').notNull(),
   },
   (table) => [
     uniqueIndex('idx_availability_accommodation_date').on(table.accommodationId, table.date),

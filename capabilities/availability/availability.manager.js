@@ -44,14 +44,86 @@ export class AvailabilityManager {
     this.#eventBus?.emit(event, data)
   }
 
+  #getContextTenantId() {
+    const tenant = this.#context?.tenant
+    if (!tenant) return null
+    if (typeof tenant === 'string') return tenant
+    if (typeof tenant === 'object' && tenant?.id) return tenant.id
+    return null
+  }
+
+  #requireContextTenant() {
+    const tenantId = this.#getContextTenantId()
+    if (!tenantId) {
+      throw new AvailabilityConflictError('Context tenant is required for availability operations')
+    }
+    return tenantId
+  }
+
+  #normalizeTargetIdentity(dayData, existingRecord = null) {
+    const accommodationId = dayData.accommodationId
+    if (!accommodationId) return dayData
+
+    const suppliedTargetType = dayData.targetType
+    const suppliedTargetId = dayData.targetId
+
+    if (suppliedTargetType !== undefined && suppliedTargetType !== 'accommodation') {
+      throw new AvailabilityConflictError(
+        `Invalid targetType '${suppliedTargetType}': availability target must be 'accommodation'`
+      )
+    }
+
+    if (suppliedTargetId !== undefined && suppliedTargetId !== accommodationId) {
+      throw new AvailabilityConflictError(
+        `targetId mismatch: supplied '${suppliedTargetId}' does not match accommodationId '${accommodationId}'`
+      )
+    }
+
+    const normalized = { ...dayData }
+    normalized.targetType = 'accommodation'
+    normalized.targetId = accommodationId
+
+    if (existingRecord) {
+      if (existingRecord.targetType !== 'accommodation') {
+        throw new AvailabilityConflictError(
+          `Cannot change targetType from '${existingRecord.targetType}' to 'accommodation'`
+        )
+      }
+      if (existingRecord.targetId !== accommodationId) {
+        throw new AvailabilityConflictError(
+          `Cannot drift targetId: existing '${existingRecord.targetId}' does not match accommodationId '${accommodationId}'`
+        )
+      }
+    }
+
+    return normalized
+  }
+
   // ── Day-level CRUD ──
 
   async createDay(data, identity) {
     await this.#checkPermission(identity, AVAILABILITY_PERMISSIONS.WRITE, data)
-    validateCreateData(data)
+
+    const contextTenant = this.#requireContextTenant()
+
+    if (data.tenantId !== undefined && data.tenantId !== contextTenant) {
+      throw new AvailabilityConflictError(
+        `data.tenantId mismatch: cannot create availability for tenant '${data.tenantId}' in context tenant '${contextTenant}'`
+      )
+    }
+
+    if (identity?.tenantId !== undefined && identity.tenantId !== contextTenant) {
+      throw new AvailabilityConflictError(
+        `identity.tenantId mismatch: cannot create availability for tenant '${identity.tenantId}' in context tenant '${contextTenant}'`
+      )
+    }
+
+    const normalized = this.#normalizeTargetIdentity({ ...data, tenantId: contextTenant })
+
+    validateCreateData(normalized)
 
     const day = {
-      ...data,
+      ...normalized,
       id: crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       status: data.status || AVAILABILITY_STATUS.AVAILABLE,
       createdAt: new Date().toISOString(),
@@ -82,6 +154,13 @@ export class AvailabilityManager {
     if (!existing) throw new AvailabilityNotFoundError(id)
     await this.#checkPermission(identity, AVAILABILITY_PERMISSIONS.WRITE, existing)
 
+    if (data.targetType !== undefined || data.targetId !== undefined || data.accommodationId !== undefined) {
+      this.#normalizeTargetIdentity({
+        ...data,
+        accommodationId: data.accommodationId || existing.accommodationId,
+      }, existing)
+    }
+
     const updates = validateUpdateData(data, existing.status)
     updates.updatedAt = new Date().toISOString()
 
@@ -111,6 +190,14 @@ export class AvailabilityManager {
     await this.#checkPermission(identity, AVAILABILITY_PERMISSIONS.WRITE)
     validateDateRange(startDate, endDate)
 
+    const contextTenant = this.#requireContextTenant()
+
+    if (identity?.tenantId !== undefined && identity.tenantId !== contextTenant) {
+      throw new AvailabilityConflictError(
+        `identity.tenantId mismatch: cannot block for tenant '${identity.tenantId}' in context tenant '${contextTenant}'`
+      )
+    }
+
     const dates = AvailabilityCalendar.expandRange(startDate, endDate)
     const blocked = []
 
@@ -124,13 +211,17 @@ export class AvailabilityManager {
         })
         blocked.push({ ...existing, status: AVAILABILITY_STATUS.BLOCKED })
       } else {
-        const day = {
-          id: crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-          tenantId: identity?.tenantId || null,
+        const dayData = {
+          tenantId: contextTenant,
           accommodationId,
           date,
           status: AVAILABILITY_STATUS.BLOCKED,
           notes: reason || '',
+        }
+        const normalized = this.#normalizeTargetIdentity(dayData)
+        const day = {
+          ...normalized,
+          id: crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         }
@@ -175,6 +266,14 @@ export class AvailabilityManager {
     await this.#checkPermission(identity, AVAILABILITY_PERMISSIONS.WRITE)
     validateDateRange(checkIn, checkOut)
 
+    const contextTenant = this.#requireContextTenant()
+
+    if (identity?.tenantId !== undefined && identity.tenantId !== contextTenant) {
+      throw new AvailabilityConflictError(
+        `identity.tenantId mismatch: cannot reserve for tenant '${identity.tenantId}' in context tenant '${contextTenant}'`
+      )
+    }
+
     const dates = AvailabilityCalendar.expandRange(checkIn, checkOut)
     const reserved = []
     const conflicts = []
@@ -193,13 +292,17 @@ export class AvailabilityManager {
         })
         reserved.push({ ...existing, status: AVAILABILITY_STATUS.RESERVED })
       } else {
-        const day = {
-          id: crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-          tenantId: identity?.tenantId || null,
+        const dayData = {
+          tenantId: contextTenant,
           accommodationId,
           date,
           status: AVAILABILITY_STATUS.RESERVED,
           notes: reservationId || '',
+        }
+        const normalized = this.#normalizeTargetIdentity(dayData)
+        const day = {
+          ...normalized,
+          id: crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         }

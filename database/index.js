@@ -77,6 +77,13 @@ export const MIGRATION_REGISTRY = [
     description: 'Reservation lines for generic multi-line booking support',
     tables: ['reservation_lines'],
   },
+  {
+    name: '0008_booking_availability_target_identity',
+    layer: 'business',
+    order: 7,
+    description: 'Adds target_type and target_id to availability table for accommodation identity mirror (BOOKING-4.1)',
+    tables: ['availability'],
+  },
 ]
 
 /**
