@@ -9,7 +9,7 @@
 
 import { loadEnv } from '../config/environment.loader.js'
 import { validateConfig, getEnvironment } from '../config/database.config.js'
-import { initializePool, shutdownPool, getPoolStats, getState as getPoolState } from '../connection/connection.pool.js'
+import { initializePool, shutdownPool, getStats, getState as getPoolState } from '../connection/connection.pool.js'
 import { checkConnection, getExtendedHealth, checkTables } from '../connection/connection.health.js'
 import { initializeClient, closeClient, getSchemaRegistry } from '../client.js'
 import { MIGRATION_REGISTRY, getMigrationsInOrder } from '../index.js'
@@ -87,7 +87,7 @@ export async function bootstrap(options = {}) {
       success: true,
       environment: getEnvironment(),
       connection: connectionHealth,
-      pool: getPoolStats(),
+      pool: await getStats(),
     }
   } catch (error) {
     bootstrapError = error
@@ -144,7 +144,7 @@ export async function getStatus() {
     environment: getEnvironment(),
     poolState,
     connection: connectionHealth,
-    pool: getPoolStats(),
+    pool: await getStats(),
     schema: getSchemaRegistry() ? 'loaded' : 'not_loaded',
   }
 }

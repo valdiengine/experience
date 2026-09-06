@@ -17,7 +17,7 @@ export { platformSchemas, tenants, countries, regions, destinations, domains, th
 export { ecosystemSchemas, ecosystems, categories, modules, experiences } from './ecosystem/index.js'
 export { companySchemas, companies, companyProfiles, companyModules, companySettings } from './company/index.js'
 export { identitySchemas, users, roles, permissions, userRoles, userSessions } from './identity/index.js'
-export { businessSchemas, accommodations, accommodationUnits, availability, availabilityRules, reservations, reservationActivities, payments, invoices, reviews, reviewHelpfulness, notifications, notificationPreferences } from './business/index.js'
+export { businessSchemas, accommodations, accommodationUnits, availability, availabilityRules, reservations, reservationActivities, payments, invoices, reviews, reviewHelpfulness, businessNotifications, notificationPreferences } from './business/index.js'
 export { storageSchemas, storageProviders, storageLocations, assets, assetMetadata, assetVersions, assetPermissions } from './storage/index.js'
 
 /**

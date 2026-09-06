@@ -10,6 +10,7 @@
     "dev": "node web/start.web.js"
   },
   "dependencies": {
+    "drizzle-orm": "^0.45.2",
     "pg": "^8.13.1",
     "web-push": "^3.6.7"
   }

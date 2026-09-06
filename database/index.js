@@ -7,10 +7,15 @@
  * @version 4.1
  */
 
-export { SCHEMA_REGISTRY, SCHEMAS, getSchemasInOrder, getSchema, hasSchema } from './schema/index.js'
-export { ENVIRONMENT_CONFIG, getEnvironment, getConfig, validateConfig } from './env.config.js'
-export { SeedRunner } from './seeds/seed.runner.js'
-export { SEED_ORDER, PLATFORM_SEEDS, ECOSYSTEM_SEEDS, COMPANY_SEEDS, getSeedsByPhase, getAllSeeds } from './seeds/seed.registry.js'
+import { SCHEMA_REGISTRY, getSchemaGroupsInOrder, getAllTableNames, getSchemaGroupByTable } from './schema/index.js'
+import { ENVIRONMENT_CONFIG, getEnvironment, getConfig, validateConfig } from './env.config.js'
+import { SeedRunner } from './seeds/seed.runner.js'
+import { SEED_ORDER, PLATFORM_SEEDS, ECOSYSTEM_SEEDS, COMPANY_SEEDS, getSeedsByPhase, getAllSeeds } from './seeds/seed.registry.js'
+
+export { SCHEMA_REGISTRY, getSchemaGroupsInOrder, getAllTableNames, getSchemaGroupByTable }
+export { ENVIRONMENT_CONFIG, getEnvironment, getConfig, validateConfig }
+export { SeedRunner }
+export { SEED_ORDER, PLATFORM_SEEDS, ECOSYSTEM_SEEDS, COMPANY_SEEDS, getSeedsByPhase, getAllSeeds }
 
 /**
  * Migration Registry
@@ -98,10 +103,9 @@ export function getMigrationsByLayer(layer) {
 export default {
   schema: {
     registry: SCHEMA_REGISTRY,
-    schemas: SCHEMAS,
-    getSchemasInOrder,
-    getSchema,
-    hasSchema,
+    getSchemaGroupsInOrder,
+    getAllTableNames,
+    getSchemaGroupByTable,
   },
   config: {
     environment: getEnvironment(),

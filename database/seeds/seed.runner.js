@@ -7,7 +7,7 @@
  */
 
 import { SEED_REGISTRY, validateSeedOrder } from './registry/seed.registry.js'
-import { bootstrapDatabase } from './bootstrap/database.bootstrap.js'
+import { bootstrap as bootstrapDatabase } from '../bootstrap/database.bootstrap.js'
 import { eq, and, or } from 'drizzle-orm'
 
 export class SeedRunner {

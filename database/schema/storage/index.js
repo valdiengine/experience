@@ -1,7 +1,7 @@
 /**
  * Storage Schema
  *
- * P12.3.2.0 — Storage Architecture Definition
+ * P12.3.2.0 - Storage Architecture Definition
  *
  * Database schema for storage layer:
  * - assets: Central registry of every stored object
@@ -13,9 +13,9 @@
  */
 
 import { pgTable, uuid, varchar, text, jsonb, boolean, timestamp, integer, index, uniqueIndex } from 'drizzle-orm/pg-core'
-import { tenants } from './platform/index.js'
-import { destinations } from './platform/index.js'
-import { companies } from './company/index.js'
+import { tenants } from '../platform/index.js'
+import { destinations } from '../platform/index.js'
+import { companies } from '../company/index.js'
 
 export const storageProviders = pgTable(
   'storage_providers',
