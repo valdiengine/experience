@@ -20,7 +20,11 @@
 import { createEventBus } from '../../shared/events/eventbus.js'
 import { BootstrapPipeline } from '../bootstrap/bootstrap.pipeline.js'
 import { bootstrapRuntime } from './runtime.bootstrap.js'
+import { JwtProvider } from '../auth/providers/jwt/jwt.provider.js'
 import { registerRepositories } from './repository.bootstrap.js'
+import { PostgresReservationAdapter } from '../../capabilities/persistence/adapters/postgres/postgres.reservation.adapter.js'
+import { PostgresBusinessAdapter } from '../../capabilities/persistence/adapters/postgres/postgres.business.adapter.js'
+import { PostgresAccommodationAdapter } from '../../capabilities/persistence/adapters/postgres/postgres.accommodation.adapter.js'
 import { registerCapabilities } from './capability.bootstrap.js'
 import { validateRuntime } from './runtime.validation.js'
 import { StartupError, RuntimeBootstrapError, ValidationBootstrapError } from './startup.errors.js'
@@ -62,6 +66,7 @@ const DEFAULT_TENANT = { id: 'commercial', name: 'Commercial', slug: 'commercial
 export async function start(options = {}) {
   const eventBus = options.eventBus || createEventBus()
   const sources = options.sources || {}
+  const persistenceProvider = options.persistenceProvider || 'mock'
 
   eventBus.emit(STARTUP_EVENTS.STARTED, createStartupEvent(STARTUP_EVENTS.STARTED, { timestamp: Date.now() }))
 
@@ -91,8 +96,36 @@ export async function start(options = {}) {
       },
     })
 
+    // Explicit commercial auth wiring. The BootstrapPipeline provider phase stays
+    // disabled; JwtProvider is registered directly on the built-in auth runtime.
+    const authConfig = config.getAuthConfig()
+    const runtimeEnvironment = options.env || process.env.TURISTIC_ENV || process.env.NODE_ENV || 'development'
+    const requiresPersistentJwtKey = runtimeEnvironment === 'staging' || runtimeEnvironment === 'production'
+
+    if (requiresPersistentJwtKey && authConfig.algorithm === 'HS256' && !authConfig.secret) {
+      throw new RuntimeBootstrapError(
+        'JWT_SECRET is required for HS256 in staging/production commercial runtime'
+      )
+    }
+
+    runtime.authenticationRuntime.registerProvider('default', JwtProvider, authConfig)
+
     // 3. Repositories — register the commercial aggregate + support repos (registration only)
-    const repositoryListing = registerRepositories(runtime.repositoryRuntime)
+    if (persistenceProvider === 'postgres') {
+      runtime.repositoryRuntime.registerAdapter('postgres', PostgresReservationAdapter, 'reservation')
+      runtime.repositoryRuntime.registerAdapter('postgres', PostgresBusinessAdapter, 'business')
+      runtime.repositoryRuntime.registerAdapter('postgres', PostgresAccommodationAdapter, 'accommodation')
+    }
+
+    const repositoryListing = registerRepositories(runtime.repositoryRuntime, {
+      providerByEntity: persistenceProvider === 'postgres'
+        ? {
+            reservation: 'postgres',
+            business: 'postgres',
+            accommodation: 'postgres',
+          }
+        : {},
+    })
     eventBus.emit(STARTUP_EVENTS.REPOSITORIES_READY, createStartupEvent(STARTUP_EVENTS.REPOSITORIES_READY, {
       repositories: repositoryListing.length,
     }))
@@ -100,7 +133,7 @@ export async function start(options = {}) {
     // 4. Capabilities — register, initialize, activate the nine commercial capabilities
     const capabilities = await registerCapabilities(runtime, {
       tenant: options.tenant || DEFAULT_TENANT,
-      configuration: options.configuration || {},
+      configuration: { ...(options.configuration || {}), persistenceProvider },
     })
     capabilityRegistry = capabilities.registry
     capabilityContext = capabilities.context
@@ -223,9 +256,6 @@ export async function cleanup(bundle = {}) {
 export async function startWithApi(options = {}) {
   const bundle = await start(options);
 
-  if (bundle.runtimeContext) {
-    global.runtimeContext = bundle.runtimeContext;
-  }
 
   const { bootstrapApi } = await import('../../api/bootstrap/api.bootstrap.js');
   const apiPort = options.apiPort || process.env.API_PORT || 3000;
@@ -233,11 +263,14 @@ export async function startWithApi(options = {}) {
 
   const apiContext = {
     ...bundle.runtimeContext,
+    config: bundle.capabilityContext?.config,
     capabilities: bundle.capabilityContext?.capabilities,
     repositories: bundle.repositoryRuntime,
-    auth: bundle.authenticationRuntime,
+    auth: bundle.authenticationRuntime.context,
     cms: bundle.cmsRuntime,
   };
+
+  global.runtimeContext = apiContext;
 
   const apiServer = await bootstrapApi({
     port: apiPort,
@@ -252,3 +285,4 @@ export async function startWithApi(options = {}) {
 
   return bundle;
 }
+

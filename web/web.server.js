@@ -28,6 +28,9 @@ import { createNotificationService, createFileNotificationPersistence } from './
 import { EmailNotificationAdapter, SMTPEmailProvider, MockEmailProvider } from './business/notification/adapters/email/index.js'
 import { WhatsAppNotificationAdapter, MockWhatsAppProvider, MetaGraphWhatsAppProvider, TwilioWhatsAppProvider } from './business/notification/adapters/whatsapp/index.js'
 import { createOwnerAPIHandler, createOwnerRouter } from './owner/owner.api.js'
+import { start as startCommercialRuntime } from '../runtime/startup/application.start.js'
+import { ApiRouter } from '../api/routes/api.router.js'
+import { PostgresReservationAdapter } from '../capabilities/persistence/adapters/postgres/postgres.reservation.adapter.js'
 
 function generateUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -58,6 +61,8 @@ export class PublicWebServer {
   #pushRouter
   #ownerRouter
   #notificationService
+  #commercialRuntime
+  #commercialApiRouter
   #middleware = []
   #initialized = false
 
@@ -72,6 +77,8 @@ export class PublicWebServer {
     this.#quoteAPIHandler = this.#createQuoteAPIHandlerWithNotification()
     this.#pushRouter = createPushRouter(pushAPI)
     this.#ownerRouter = this.#createOwnerRouter()
+    this.#commercialRuntime = null
+    this.#commercialApiRouter = null
   }
 
   #createNotificationService() {
@@ -217,6 +224,22 @@ export class PublicWebServer {
     this.#runtime = new PresentationRuntime()
     await this.#runtime.initialize()
 
+    this.#commercialRuntime = await startCommercialRuntime({
+      persistenceProvider: this.#config.persistenceProvider || 'mock'
+    })
+
+    const apiContext = {
+      ...this.#commercialRuntime.runtimeContext,
+      config: this.#commercialRuntime.capabilityContext?.config,
+      capabilities: this.#commercialRuntime.capabilityContext?.capabilities,
+      repositories: this.#commercialRuntime.repositoryRuntime,
+      auth: this.#commercialRuntime.authenticationRuntime.context,
+      cms: this.#commercialRuntime.cmsRuntime
+    }
+
+    global.runtimeContext = apiContext
+    this.#commercialApiRouter = new ApiRouter().getRouter()
+
     this.#configurationLoader = new ConfigurationLoader()
     await this.#configurationLoader.initialize()
 
@@ -275,6 +298,12 @@ export class PublicWebServer {
   }
 
   async shutdown() {
+    if (this.#commercialRuntime?.cleanup) {
+      await this.#commercialRuntime.cleanup()
+      this.#commercialRuntime = null
+      this.#commercialApiRouter = null
+    }
+
     if (this.#runtime) {
       await this.#runtime.shutdown()
     }
@@ -292,9 +321,15 @@ export class PublicWebServer {
     const requestId = req.headers['x-request-id'] || generateUUID()
     const startTime = Date.now()
 
+    const url = new URL(req.url, `http://${req.headers.host}`)
+    const pathname = url.pathname
+
+
+    // HEALTH_DOMAIN_BYPASS
+    if ((req.method === 'GET' || req.method === 'HEAD') && pathname.startsWith('/health')) {
+      return this.#handleHealthEndpoint(req, res)
+    }
     if (req.method !== 'GET' && req.method !== 'HEAD') {
-      const url = new URL(req.url, `http://${req.headers.host}`)
-      const pathname = url.pathname
       if (pathname.startsWith('/api/v1/owner')) {
         return this.#ownerRouter(req, res)
       }
@@ -304,15 +339,35 @@ export class PublicWebServer {
       if (pathname.startsWith('/api/v1/push')) {
         return this.#handlePushAPI(req, res, pathname)
       }
-      res.statusCode = 405
-      res.setHeader('Content-Type', 'text/plain')
-      res.setHeader('Allow', 'GET, HEAD')
-      res.end('Method Not Allowed')
-      return
     }
 
     try {
-      const parsed = this.#parseRequest(req)
+      const parsed = await this.#parseRequest(req)
+      parsed.requestId = requestId
+
+      if (
+        pathname.startsWith('/api/v1/') &&
+        !pathname.startsWith('/api/v1/owner') &&
+        !pathname.startsWith('/api/v1/quotes') &&
+        !pathname.startsWith('/api/v1/push')
+      ) {
+        try {
+          await this.#commercialApiRouter.handle(parsed, res)
+        } catch (error) {
+          this.#handleCommercialApiError(error, res)
+        }
+
+        this.#logRequest(parsed, res.statusCode || 200, Date.now() - startTime)
+        return
+      }
+
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        res.statusCode = 405
+        res.setHeader('Content-Type', 'text/plain')
+        res.setHeader('Allow', 'GET, HEAD')
+        res.end('Method Not Allowed')
+        return
+      }
       parsed.requestId = requestId
       const isHeadMethod = req.method === 'HEAD'
       res.isHeadMethod = isHeadMethod
@@ -335,15 +390,63 @@ export class PublicWebServer {
     }
   }
 
-  #parseRequest(req) {
+  #handleCommercialApiError(error, res) {
+    console.error('Unhandled commercial API error:', error)
+
+    res.statusCode = error.statusCode || 500
+    res.setHeader('Content-Type', 'application/json')
+    res.end(
+      JSON.stringify({
+        error: {
+          code: error.code || 'INTERNAL_ERROR',
+          message: error.message || 'An unexpected error occurred'
+        }
+      })
+    )
+  }
+
+  async #parseJsonBody(req) {
+    return new Promise((resolve, reject) => {
+      let data = ''
+
+      req.on('data', (chunk) => {
+        data += chunk
+      })
+
+      req.on('end', () => {
+        if (!data) {
+          resolve(null)
+          return
+        }
+
+        try {
+          resolve(JSON.parse(data))
+        } catch (error) {
+          reject(error)
+        }
+      })
+
+      req.on('error', reject)
+    })
+  }
+
+  async #parseRequest(req) {
     const url = new URL(req.url, `http://${req.headers.host}`)
+
+    let body = null
+    if (req.headers['content-type']?.includes('application/json')) {
+      body = await this.#parseJsonBody(req)
+    }
+
     return {
       method: req.method,
       url: req.url,
       pathname: url.pathname,
       rawPath: req.url,
-      query: Object.fromEntries(url.searchParams),
       headers: req.headers,
+      params: {},
+      query: Object.fromEntries(url.searchParams),
+      body,
       raw: req
     }
   }
@@ -787,13 +890,31 @@ export class PublicWebServer {
     }
   }
 
-  #handleHealthEndpoint(req, res) {
-    const health = {
-      status: 'ok',
-      environment: this.#config.env
+  async #handleHealthEndpoint(req, res) {
+    const provider = this.#config.persistenceProvider || 'mock'
+
+    let persistence
+
+    if (provider === 'postgres') {
+      const adapter = new PostgresReservationAdapter()
+      persistence = await adapter.health()
+    } else {
+      persistence = {
+        status: 'up',
+        provider,
+        physical: false
+      }
     }
 
-    res.statusCode = 200
+    const healthy = persistence.status === 'up'
+
+    const health = {
+      status: healthy ? 'ok' : 'unhealthy',
+      environment: this.#config.env,
+      persistence
+    }
+
+    res.statusCode = healthy ? 200 : 503
     res.setHeader('Content-Type', 'application/json')
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
     res.end(JSON.stringify(health))
@@ -818,3 +939,6 @@ export async function createPublicWebServer(config = {}) {
 }
 
 export default PublicWebServer
+
+
+
