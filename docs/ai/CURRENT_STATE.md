@@ -1,7 +1,7 @@
 # CURRENT_STATE.md
 
 > Exact snapshot of project state. Update after each completed phase.
-> Last updated: **PLATFORM v4.5 — P15.11 MVP LIVE INTEGRATION COMPLETE** (2026-08-25)
+> Last updated: **PLATFORM v4.5 — BOOKING-4.3 PHYSICAL POSTGRESQL CERTIFIED** (2026-09-12)
 
 ## Platform Status
 
@@ -19,7 +19,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Phases completed | 100+ (P0 through P12.3.2.3) |
+| Phases completed | 100+ (P0 through P15.11, BOOKING-4.3, RUNTIME-PERSISTENCE-1) |
 | Capabilities registered | 35 (Business sub-managers: 12) |
 | Architecture specs | 35 + 12 audit reports |
 | SDK specifications | 9 |
@@ -144,6 +144,8 @@
 | 105 | OWNER-SESSION-2 | Persistent Sessions / Multi-Process Session Persistence | Owner |
 | 106 | OWNER-SESSION-3 | Session Lifecycle Management + Operational Cleanup | Owner |
 | 107 | P15.11 | MVP Live Integration — Quote, Notification & File Persistence | Product |
+| 108 | BOOKING-4.3 | PostgreSQL Atomic Capacity & Double-Booking Protection (Physical Certification) | Product |
+| 109 | RUNTIME-PERSISTENCE-1 | Runtime Persistence Context Wiring (JWT Config + Tenant Scoping + Passenger Path) | Infrastructure |
 
 ## Registered Capabilities (32)
 
@@ -287,15 +289,15 @@ These files exist in `capabilities/` but are NOT in register.js:
 | AI_DECISION_FRAMEWORK.md | 8 standardized decision trees for architecture/code decisions |
 | AI_CONTEXT_COMPACTION.md | Standard format for AI session handoff documents |
 
-## Last Actions
+## Last Actions (2026-09-12 — BOOKING-4.3 Physical PostgreSQL Certification)
 
-1. Created `capabilities/business/` — 14 files: BusinessCapability (v1.0.0) as aggregate root
-2. Created `docs/architecture/BUSINESS-CAPABILITY.md` — 12-section reference for business capability architecture
-3. Business is aggregate root — owns Accommodation, Reservation, Availability, CMS, Payments
-4. Business MUST NOT know child entities
-5. Zero infrastructure imports — only context.repositories.business and context.runtime.auth
-6. Followed exact same pattern as AccommodationCapability (P13.0)
-7. Registered in register.js as capability #29
+1. BOOKING-4.3 happy-path physical certification: real authenticated HTTP POST created reservation `59c93cf8-35b8-46b6-8bc6-203df0dbe0dc` in Neon `valdi_test` PostgreSQL
+2. BOOKING-4.3 double-booking physical gate: second concurrent POST correctly rejected by PostgreSQL atomic capacity protection
+3. BOOKING-4.3 cancellation/release physical gate: after context fixes, cancellation correctly set `released_at` and restored `reserved_count` to 0
+4. `runtime/startup/application.start.js`: fixed `startWithApi()` context propagation — added `config: bundle.capabilityContext?.config` to API context
+5. `web/web.server.js`: fixed `PublicWebServer.initialize()` context propagation — added `config: this.#commercialRuntime.capabilityContext?.config` to API context (decisive fix for `web/staging.passenger.js` physical path)
+6. Regression suites passed after final `web/web.server.js` fix: 24/24 (BOOKING-4.3) + 38/38 (route-scoping) + 79/79 (smoke) — 100/100
+7. Non-blocking SSL technical debt identified: `sslmode=verify-full` should be explicitly configured in `pg` connection string
 
 ## P13.2 — Business ↔ Accommodation Integration
 
@@ -1814,10 +1816,12 @@ After BOOKING-4.3, broad backend expansion should deliberately pause. The next p
 The priority after BOOKING-4.3 is a fundable, demonstrable Turistic OS MVP rather than continued backend expansion.
 ---
 
-## BOOKING-4.3 - PostgreSQL-Authoritative Capacity / Atomicity and Double-Booking Protection - CLOSED / PHYSICAL POSTGRESQL CERTIFIED
+## BOOKING-4.3 - PostgreSQL-Authoritative Capacity / Atomicity and Double-Booking Protection — PHYSICAL POSTGRESQL CERTIFIED
 
-**Status:** CLOSED
-**Certification:** LOCAL + PHYSICAL POSTGRESQL PASS
+**Status:** PHYSICAL POSTGRESQL CERTIFIED
+**Certification Date:** 2026-09-12
+**Double-Booking Physical Gate:** CLOSED
+**Cancellation/Release Physical Gate:** CLOSED
 
 ### Delivered Contract
 
@@ -1913,7 +1917,83 @@ Cleanup marker:
 
 `BOOKING43_FIXTURE_CLEANUP_DONE`
 
-### Physical Certification Defect Found and Fixed
+### Physical Happy-Path Certification (2026-09-12)
+
+A real authenticated HTTP POST through the staging runtime (`node -e "import('./web/staging.passenger.js')"`) against Neon `valdi_test` PostgreSQL confirmed:
+
+- Reservation created: `59c93cf8-35b8-46b6-8bc6-203df0dbe0dc`
+- Tenant: `5eb5765c-678a-4663-b5ba-8fc238f5ecc7`
+- Accommodation: `0d4abdb0-c40f-49bb-b4cd-c40b31cd3033`
+- Status: `requested`
+- Confirmation code: `CONF-1789221754535-47Y0KM`
+- Check-in: `2026-10-15`, Check-out: `2026-10-17`
+- Reservation line: `62736b1d-8cef-40ff-be1a-6f97bf082c19`, `released_at: NULL` initially
+- Availability after reservation: 2026-10-15 and 2026-10-16 both `inventory=1, reserved_count=1, status=reserved`
+
+This physically certifies the BOOKING-4.3 happy path through the real staging runtime against PostgreSQL.
+
+### Double-Booking Physical Gate — CLOSED (2026-09-12)
+
+A second authenticated POST for the exact same accommodation/date range was rejected with "No capacity for 2026-10-15".
+
+Physical PostgreSQL verification confirmed:
+- reservation count remained 1; reservation_lines count remained 1; reserved_count remained 1
+- no second reservation persisted; no second reservation line persisted
+- availability was not over-consumed
+
+BOOKING-4.3 physical double-booking / atomic capacity gate is CLOSED.
+
+### Cancellation/Release Bug Discovered and Fixed (2026-09-12)
+
+During initial physical cancellation testing, the API returned `success=true` but:
+- `reservation_lines.released_at` remained NULL
+- `availability.reserved_count` remained 1
+- `availability.status` remained `reserved`
+
+The repository already contained `releaseReservationLines(client, reservationId, tenantId)` with tenant-scoped idempotent release. A transactional repository operation was added: `cancelReservationWithRelease(reservationData, tenantId)` which performs reservation cancellation update, reservation line release, availability reserved_count decrement, availability status projection, COMMIT on success, ROLLBACK on failure.
+
+### Runtime Context Root Cause
+
+The cancellation/release path initially did not execute because `ReservationManager` detects PostgreSQL with:
+```javascript
+const isPostgres = this.#context?.config?.persistenceProvider === 'postgres'
+```
+but the API-scoped runtime context did not contain the capability configuration.
+
+**First fix — `runtime/startup/application.start.js` `startWithApi()`:** Previously constructed an API context without `config` and assigned `global.runtimeContext` to the incomplete `bundle.runtimeContext`. Corrected to include `config: bundle.capabilityContext?.config` in the API context.
+
+**Second fix — `web/web.server.js` (decisive for physical Passenger path):** The physical staging entry point `web/staging.passenger.js` → `startWeb()` → `PublicWebServer`. `PublicWebServer.initialize()` reconstructed another `apiContext` without `config` and assigned it to `global.runtimeContext`. Therefore tenant-scoped `ReservationManager` instances received no `config.persistenceProvider` and incorrectly followed the non-PostgreSQL cancellation branch. The fix adds `config: this.#commercialRuntime.capabilityContext?.config` to the API context before `global.runtimeContext = apiContext`.
+
+### Final Physical Cancellation/Release Certification (2026-09-12)
+
+After both context propagation fixes, the staging runtime was restarted via `node -e "import('./web/staging.passenger.js')"`. The certification reservation was reset to `requested` with `released_at=NULL`, `reserved_count=1`, `status=reserved` to force the runtime to perform the release.
+
+An authenticated API cancellation was executed:
+```
+POST /api/v1/reservations/59c93cf8-35b8-46b6-8bc6-203df0dbe0dc/cancel
+```
+Result: `success = true`
+
+Physical PostgreSQL verification then showed:
+- `reservation_line.released_at`: `2026-09-12T17:24:31.111Z`
+- Availability 2026-10-15: `inventory=1, reserved_count=0, is_blocked=false, status=available, updated_at=2026-09-12T17:24:31.111Z`
+- Availability 2026-10-16: `inventory=1, reserved_count=0, is_blocked=false, status=available, updated_at=2026-09-12T17:24:31.111Z`
+
+The identical release timestamp across the line and availability rows confirms the transactional release operation.
+
+BOOKING-4.3 CANCELLATION/RELEASE PHYSICAL GATE = CLOSED.
+
+### Regression Evidence (2026-09-12 — verified after final `web/web.server.js` fix)
+
+All regression suites executed after the final `web/web.server.js` context propagation fix (`config: this.#commercialRuntime.capabilityContext?.config`):
+
+- BOOKING-4.3 local suite: **24/24 PASS / 0 FAIL**
+- Route-scoping / RUNTIME-PERSISTENCE-1 (R1-R5 + JWT/JWT-WIRING): **16/16 PASS / 0 FAIL**
+- CONTEXT-WIRING: **22/22 PASS / 0 FAIL**
+- Combined route-scoping: **38/38 PASS / 0 FAIL**
+- Smoke tests: **79/79 PASS / 0 FAIL / 100/100**
+
+### Physical Certification Defect Found and Fixed (Earlier Session)
 
 Physical certification exposed a PostgreSQL row-shape defect in `releaseReservationLines()`.
 
@@ -1951,6 +2031,16 @@ No production database was touched.
 
 These infrastructure issues are recorded as persistence/runtime hardening debt and do not invalidate the PostgreSQL behavioral certification of BOOKING-4.3.
 
+### Non-Blocking Technical Debt
+
+The PostgreSQL client currently emits this warning:
+
+```
+SECURITY WARNING: SSL modes 'prefer', 'require', and 'verify-ca' are currently treated as aliases for 'verify-full'.
+```
+
+This is non-blocking. The warning recommends explicitly using `sslmode=verify-full` to preserve the current strict behavior in future `pg`/`pg-connection-string` major versions. Recorded as non-blocking technical debt, not a BOOKING-4.3 certification failure.
+
 ### Explicitly NOT Added
 
 BOOKING-4.3 does NOT introduce:
@@ -1967,18 +2057,123 @@ BOOKING-4.3 does NOT introduce:
 
 ### Next Product Sequence
 
-Broad booking backend expansion now deliberately pauses.
+Broad backend expansion is now deliberately paused.
 
-Next sequence:
+OWNER-SESSION-1, OWNER-SESSION-2, and OWNER-SESSION-3 have already been implemented and certified. They must not be rebuilt. Infrastructure/runtime work should now be opened only when the FIRST MVP exposes a concrete blocker.
 
-1. audit and harden the remaining Owner-session persistence/runtime gap;
-2. resolve the critical PostgreSQL/runtime wiring debt required for production safety;
-3. move into the mobile-first visual MVP;
-4. demonstrate traveler flow: discover -> availability -> reserve -> confirmation;
-5. demonstrate owner flow: login -> reservations/calendar -> manage reservation.
+BOOKING-4.3 is complete and physically certified.
 
-The priority is now a fundable, demonstrable Turistic OS MVP rather than additional booking backend expansion.
+The next product milestone is the **FIRST mobile-first visual MVP**.
 
-### Implementation Commit
+Traveler vertical slice:
 
-`7e0f793` - `feat(booking): enforce atomic capacity and release tracking`
+1. Destination
+2. Discover Experience
+3. Experience / Business Detail
+4. View Availability
+5. Reserve
+6. Confirmation
+
+Owner vertical slice:
+
+1. Login
+2. Reservations / Calendar
+3. Manage Reservation
+
+Email Provider and Payment Provider are **not the immediate next milestones**. They remain future capabilities and must not delay the first demonstrable and fundable Turistic OS product slice.
+
+The implementation should evolve the existing framework-free SSR + Presentation + Design Tokens + PWA architecture. It must not introduce a parallel frontend architecture unless repository evidence demonstrates that the existing presentation pipeline cannot support the MVP.
+
+Infrastructure and Product work are now intentionally separated:
+
+- **Product / FIRST MVP** owns presentation, discovery, business/experience views, availability/reservation UX, and the existing SSR/PWA presentation pipeline.
+- **Infrastructure / Runtime** owns persistence, authentication, tenant isolation, PostgreSQL, sessions, and production-runtime safety.
+- Cross-boundary requirements should be treated as explicit blockers and coordinated rather than independently redesigning the other layer.
+
+### FIRST MVP Presentation Discovery
+
+Initial FIRST MVP repository discovery identified the existing pipeline:
+
+`Configuration Source -> ApplicationResolver -> ApplicationConfig -> RuntimeApplication -> ApplicationPresentationContext -> ViewModel / Adapter -> SSR/PWA Renderer`
+
+The existing renderer already provides a substantial mobile-capable presentation shell. A new frontend framework is not currently required.
+
+Two presentation data cuts have been identified:
+
+1. `web/application/application.schema.js` currently normalizes rich company configuration down to `slug` and `enabled`, causing company presentation data to be lost before it reaches Presentation.
+2. `web/application/application.presentation.js` currently implements `#buildModules()` as an unconditional empty array, preventing catalog/service/company modules from reaching the existing renderer.
+
+Repository-backed company configuration already demonstrates a richer source contract. For example:
+
+`companies/cl/los-rios/valdi/albasie/config.json`
+
+contains company identity, description, branding, contact, social information, enabled categories/modules, team information, and a catalog contract referencing products and services.
+
+The next FIRST MVP discovery step is to trace the existing catalog/content resolution path and establish the smallest Presentation Data Contract required to carry real destination/business/catalog data through the existing architecture.
+
+No speculative catalog architecture should be introduced before this repository path is traced.
+
+### Certified Regression Checkpoint
+
+Final relevant regressions after runtime integration and trace cleanup:
+
+- BOOKING-4.3: **24/24 PASS**
+- RUNTIME-PERSISTENCE tenant route scoping: **38/38 PASS**
+- Global smoke: **79/79 PASS**
+- Total unique checks: **141/141 PASS**
+
+Physical PostgreSQL gates:
+
+- Double-booking / atomic capacity: **CLOSED**
+- Cancellation / release: **CLOSED**
+
+### Implementation Commits
+
+Published on branch `p15.3-development`:
+
+- `7e0f793` — `feat(booking): enforce atomic capacity and release tracking`
+- `3d61d18` — `docs(booking): certify BOOKING-4.3 on physical PostgreSQL`
+- `f681a27` — `fix(auth): propagate provider config through authentication factory`
+- `6b383d8` — `fix(runtime): wire tenant-scoped commercial persistence`
+
+Shared certified Git checkpoint:
+
+`6b383d8`
+
+The branch was successfully pushed to:
+
+`origin/p15.3-development`
+
+Final synchronization verification showed:
+
+`p15.3-development...origin/p15.3-development`
+
+with no ahead/behind divergence at checkpoint `6b383d8`.
+
+The working tree remains intentionally dirty with historical modified and untracked work. That work must not be automatically cleaned, reset, deleted, staged, or committed as part of this checkpoint.
+
+### Current Handoff State
+
+**Shared checkpoint:** `6b383d8`
+
+**Product direction:** FIRST MVP now.
+
+**Infrastructure direction:** support FIRST MVP and address only evidence-backed blockers.
+
+**Do not reopen without evidence:**
+
+- BOOKING-4.3
+- OWNER-SESSION-1
+- OWNER-SESSION-2
+- OWNER-SESSION-3
+- RUNTIME-PERSISTENCE tenant-scoping certification
+
+**Do not prioritize before FIRST MVP unless they become blockers:**
+
+- Email Provider
+- Payment Provider
+- broad booking abstractions
+- additional backend expansion
+
+The immediate objective is a visible, usable, mobile-first Turistic OS vertical slice capable of demonstrating real traveler discovery and reservation plus the minimum owner reservation-management workflow.
+
