@@ -14,12 +14,16 @@ export class AuthEngineFactory {
     }
   }
 
+  setProviderConfig(name, config) {
+    this.#config[name] = config
+  }
+
   create(name, options = {}) {
     const ProviderClass = this.#registry.resolve(name)
     if (!ProviderClass) {
       throw new AuthenticationEngineError(`No auth provider class found for "${name}"`, { name, operation: 'create' })
     }
-    const config = options.config || this.#config[name] || {}
+    const config = { ...options.config, ...this.#config[name] }
     const provider = new ProviderClass(config)
     if (options.eventBus) provider.setEventBus?.(options.eventBus)
     return provider

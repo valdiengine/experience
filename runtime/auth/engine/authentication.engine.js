@@ -235,7 +235,8 @@ export class AuthenticationEngine {
 
   registerProvider(name, ProviderClass, config = {}) {
     this.#registry.register(name, ProviderClass)
-    this.#factory.registerProvider(name, ProviderClass)
+    this.#config[name] = config
+    this.#factory.setProviderConfig(name, config)
   }
 
   setContracts(contracts = {}) {
