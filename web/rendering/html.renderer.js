@@ -23,6 +23,74 @@ import {
 import { escapeHtml, escapeUrl } from './html.escape.js'
 import { DesignTokens, createDesignTokens } from './design.tokens.js'
 
+function hasContactData(contact = {}) {
+  return Boolean(contact.email || contact.phone || contact.address || contact.whatsapp)
+}
+
+const NAV_LABEL_ANCHORS = {
+  inicio: 'inicio',
+  home: 'inicio',
+  contacto: 'contacto',
+  contact: 'contacto',
+  servicios: 'servicios',
+  services: 'servicios',
+  galeria: 'galeria',
+  gallery: 'galeria',
+  categorias: 'categorias',
+  categories: 'categorias',
+  destacados: 'destacados',
+  featured: 'destacados',
+  empresas: 'empresas',
+  companies: 'empresas'
+}
+
+/**
+ * Navigation must only contain traveler-visible targets that actually render.
+ * Explicit hrefs are kept as-is. Path-only items (inherited destination
+ * navigation) are resolved by label to same-page anchors ONLY when the
+ * corresponding section is actually rendered; otherwise the item is omitted.
+ */
+function resolveNavItem(item, rendered = {}) {
+  const explicitHref = typeof item?.href === 'string' ? item.href : ''
+  if (explicitHref && explicitHref !== '#' && explicitHref.trim() !== '') {
+    return explicitHref
+  }
+  const label = String(item?.label || item?.text || '').toLowerCase().trim()
+  const anchor = NAV_LABEL_ANCHORS[label]
+  if (!anchor || !rendered[anchor]) return null
+  return `#${anchor}`
+}
+
+function normalizeNavigation(navigation = {}, rendered = {}) {
+  const headerItems = navigation.header?.items || []
+  const footerColumns = navigation.footer?.columns || []
+
+  const header = { items: [] }
+  for (const item of headerItems) {
+    const href = resolveNavItem(item, rendered)
+    if (!href) continue
+    header.items.push({
+      label: item.label || item.text || '',
+      href
+    })
+  }
+
+  const footer = { columns: [] }
+  for (const column of footerColumns) {
+    const items = []
+    for (const item of column.items || []) {
+      const href = resolveNavItem(item, rendered)
+      if (!href) continue
+      items.push({ label: item.label || item.text || '', href })
+    }
+    if (items.length > 0) {
+      footer.columns.push({ title: column.title || '', items })
+    }
+  }
+
+  return { header, footer }
+}
+
 export class HtmlRenderer {
   constructor(options = {}) {
     this.options = options
@@ -80,6 +148,26 @@ export class HtmlRenderer {
     const destination = presentation.destination || {}
     const company = presentation.company || {}
     const branding = presentation.branding || {}
+
+    const services = this.extractServices(presentation)
+    const gallery = this.extractGallery(presentation)
+    const companies = this.extractCompanies(presentation)
+    const quote = this.extractQuote(presentation)
+    const categories = destination.categories || null
+    const featured = destination.featured || null
+
+    const rendered = {
+      inicio: true,
+      contacto: hasContactData(presentation.contact || {}),
+      servicios: services.length > 0,
+      galeria: gallery.length > 0,
+      empresas: companies.length > 0,
+      categorias: categories && typeof categories === 'object' && Object.keys(categories).length > 0,
+      destacados: Boolean(featured && featured.enabled && featured.categories && featured.categories.length > 0)
+    }
+
+    const normalizedNavigation = normalizeNavigation(presentation.navigation || {}, rendered)
+
     const vm = {
       identity: presentation.identity || {},
       company,
@@ -91,7 +179,7 @@ export class HtmlRenderer {
         ...branding,
         name: branding.name || company.name || destination.name || ''
       },
-      navigation: presentation.navigation || {},
+      navigation: normalizedNavigation,
       seo: this.buildSeo(presentation),
       contact: normalizeContact(presentation.contact || {}),
       hero: {
@@ -99,15 +187,15 @@ export class HtmlRenderer {
         subtitle: company.description || null
       },
       heroImage: this.extractHeroImage(presentation),
-      services: this.extractServices(presentation),
-      gallery: this.extractGallery(presentation),
-      companies: this.extractCompanies(presentation),
-      footer: presentation.navigation?.footer || { columns: [] },
+      services,
+      gallery,
+      companies,
+      footer: normalizedNavigation.footer || { columns: [] },
       copyright: this.buildCopyright(branding, company, destination),
-      quote: this.extractQuote(presentation),
+      quote,
       pwa: presentation.pwa || { enabled: false },
-      categories: destination.categories || null,
-      featured: destination.featured || null
+      categories,
+      featured
     }
 
     return vm
@@ -223,39 +311,41 @@ export class HtmlRenderer {
   }
 
   renderBody(viewModel) {
-    const sections = []
+    const body = []
 
-    sections.push(renderHeader(viewModel))
+    body.push(renderHeader(viewModel))
 
     const installCTAHtml = renderInstallCTA(viewModel)
-    if (installCTAHtml) sections.push(installCTAHtml)
+    if (installCTAHtml) body.push(installCTAHtml)
 
-    sections.push(renderHero(viewModel))
+    const mainSections = []
+    mainSections.push(renderHero(viewModel))
 
     const categoriesHtml = renderCategories(viewModel)
-    if (categoriesHtml) sections.push(categoriesHtml)
+    if (categoriesHtml) mainSections.push(categoriesHtml)
 
     const featuredHtml = renderFeatured(viewModel)
-    if (featuredHtml) sections.push(featuredHtml)
+    if (featuredHtml) mainSections.push(featuredHtml)
 
     const servicesHtml = renderServices(viewModel)
-    if (servicesHtml) sections.push(servicesHtml)
+    if (servicesHtml) mainSections.push(servicesHtml)
 
     const galleryHtml = renderGallery(viewModel)
-    if (galleryHtml) sections.push(galleryHtml)
+    if (galleryHtml) mainSections.push(galleryHtml)
 
     const companiesHtml = renderCompanies(viewModel)
-    if (companiesHtml) sections.push(companiesHtml)
+    if (companiesHtml) mainSections.push(companiesHtml)
 
     const quoteHtml = renderQuote(viewModel)
-    if (quoteHtml) sections.push(quoteHtml)
+    if (quoteHtml) mainSections.push(quoteHtml)
 
     const contactHtml = renderContact(viewModel)
-    if (contactHtml) sections.push(contactHtml)
+    if (contactHtml) mainSections.push(contactHtml)
 
-    sections.push(renderFooter(viewModel))
+    body.push(`<main id="main-content">\n${mainSections.join('\n')}\n</main>`)
+    body.push(renderFooter(viewModel))
 
-    return sections.join('\n')
+    return body.join('\n')
   }
 
   renderSeo(viewModel, request) {
@@ -1147,7 +1237,7 @@ ${utilityStyles}
 
   // Close mobile nav on focus outside
   document.addEventListener('click', function(e) {
-    if (!e.target.closest('.site-header') && nav.classList.contains('is-open')) {
+    if (nav && nav.classList.contains('is-open') && !e.target.closest('.site-header')) {
       nav.classList.remove('is-open');
       toggle.setAttribute('aria-expanded', 'false');
     }

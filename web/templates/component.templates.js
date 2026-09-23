@@ -7,27 +7,69 @@
 
 import { escapeHtml, escapeAttr, escapeUrl } from '../rendering/html.escape.js'
 
+/**
+ * Logo URL policy (MVP, narrowest-safe)
+ *
+ * The renderer cannot verify whether a local asset path physically exists or
+ * will be served (which local prefixes resolve depends on infrastructure —
+ * /static/, /apps/, /media/, /uploads/, etc.). No prefix policy is encoded here
+ * and no future prefix is guessed. Only absolute http(s) URLs (external
+ * resources) are rendered as an <img>; every local/relative logo path falls
+ * back to the text brand name so an unserved logo (e.g. Albasie's current
+ * /assets/.../logo.svg) never renders as a broken traveler-visible image.
+ */
+function isUsableLogoUrl(logo) {
+  if (!logo || typeof logo !== 'string') return false
+  return /^https?:\/\//i.test(logo)
+}
+
+const SOCIAL_PLATFORMS = [
+  { key: 'instagram', label: 'Instagram' },
+  { key: 'facebook', label: 'Facebook' },
+  { key: 'tripadvisor', label: 'TripAdvisor' }
+]
+
+function renderSocialLinks(social = {}) {
+  if (!social || typeof social !== 'object') return ''
+  let html = ''
+  for (const platform of SOCIAL_PLATFORMS) {
+    const url = social[platform.key]
+    if (typeof url !== 'string') continue
+    const safe = escapeUrl(url)
+    if (!safe || !/^https?:\/\//i.test(safe)) continue
+    html += `          <li><a href="${safe}" target="_blank" rel="noopener">${platform.label}</a></li>\n`
+  }
+  return html
+}
+
 export function renderHeader(viewModel = {}) {
   const branding = viewModel.branding || {}
   const navigation = viewModel.navigation || {}
-  const logo = branding.logo || ''
-  const logoAlt = escapeAttr(branding.name || 'Logo')
   const navItems = navigation.header?.items || []
+  const logo = branding.logo || ''
+  const logoUsable = isUsableLogoUrl(logo)
+  const brandName = escapeHtml(branding.name || '')
+  const logoAlt = escapeAttr(branding.name || 'Logo')
 
   let navHtml = ''
   for (const item of navItems) {
-    const href = escapeUrl(item.href) || item.href || '#'
+    const href = escapeUrl(item.href)
+    if (!href || href === '#') continue
     const label = escapeHtml(item.label || item.text || '')
+    if (!label) continue
     navHtml += `        <li><a href="${href}">${label}</a></li>\n`
   }
 
+  const hasNavItems = navHtml.trim().length > 0
+
   return `<header class="site-header">
   <div class="header-container">
-    <a href="/" class="logo" aria-label="${logoAlt}">
-      ${logo ? `<img src="${escapeUrl(logo)}" alt="${logoAlt}" height="40">` : escapeHtml(branding.name || '')}
+    <a href="#inicio" class="logo" aria-label="${logoAlt}">
+      ${logoUsable ? `<img src="${escapeUrl(logo)}" alt="${logoAlt}" height="40">` : brandName}
     </a>
     <nav aria-label="Main navigation">
-      <ul class="nav-menu">
+      ${hasNavItems ? `<button type="button" class="mobile-nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Abrir menú"><span class="nav-toggle-label" aria-hidden="true">Menú</span></button>` : ''}
+      <ul class="nav-menu" id="nav-menu">
 ${navHtml}      </ul>
     </nav>
   </div>
@@ -41,7 +83,7 @@ export function renderHero(viewModel = {}) {
   const subtitle = escapeHtml(hero.subtitle || seo.description || '')
   const heroImage = viewModel.heroImage || ''
 
-  return `<section class="hero">
+  return `<section class="hero" id="inicio">
   <div class="hero-content">
     <h1>${title}</h1>
     ${subtitle ? `<p>${subtitle}</p>` : ''}
@@ -148,13 +190,19 @@ ${itemsHtml}    </div>
 
 export function renderContact(viewModel = {}) {
   const contact = viewModel.contact || {}
+  const company = viewModel.company || {}
+  const social = company.social || {}
 
   const email = contact.email ? escapeHtml(contact.email) : ''
   const phone = contact.phone ? escapeHtml(contact.phone) : ''
   const address = contact.address ? escapeHtml(contact.address) : ''
   const hours = contact.hours ? escapeHtml(contact.hours) : ''
+  const whatsapp = typeof contact.whatsapp === 'string' ? escapeHtml(contact.whatsapp) : ''
+  const whatsappDigits = whatsapp.replace(/\D/g, '')
 
-  if (!email && !phone && !address) {
+  const socialHtml = renderSocialLinks(social)
+
+  if (!email && !phone && !address && !hours && !whatsapp && !socialHtml) {
     return ''
   }
 
@@ -165,6 +213,9 @@ export function renderContact(viewModel = {}) {
   if (phone) {
     contactHtml += `        <li><strong>Phone:</strong> <a href="tel:${escapeAttr(phone)}">${phone}</a></li>\n`
   }
+  if (whatsapp && whatsappDigits) {
+    contactHtml += `        <li><strong>WhatsApp:</strong> <a href="https://wa.me/${escapeAttr(whatsappDigits)}" target="_blank" rel="noopener">${whatsapp}</a></li>\n`
+  }
   if (address) {
     contactHtml += `        <li><strong>Address:</strong> ${address}</li>\n`
   }
@@ -172,12 +223,13 @@ export function renderContact(viewModel = {}) {
     contactHtml += `        <li><strong>Hours:</strong> ${hours}</li>\n`
   }
 
-  return `<section class="contact">
+  return `<section class="contact" id="contacto">
   <div class="contact-container">
     <h2>Contact</h2>
     <address>
       <ul class="contact-list">
 ${contactHtml}      </ul>
+      ${socialHtml ? `<ul class="social-links">\n${socialHtml}      </ul>` : ''}
     </address>
   </div>
 </section>`
@@ -289,10 +341,14 @@ export function renderFooter(viewModel = {}) {
 
     let itemsHtml = ''
     for (const item of items) {
-      const href = escapeUrl(item.href) || '#'
+      const href = escapeUrl(item.href)
+      if (!href || href === '#') continue
       const label = escapeHtml(item.label || '')
+      if (!label) continue
       itemsHtml += `          <li><a href="${href}">${label}</a></li>\n`
     }
+
+    if (!itemsHtml.trim()) continue
 
     columnsHtml += `        <div class="footer-column">
           <h3>${title}</h3>
