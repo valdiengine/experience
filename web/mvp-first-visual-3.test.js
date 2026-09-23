@@ -163,7 +163,7 @@ async function main() {
 
   await test('WhatsApp renders from real company data', () => {
     assertContains(html, 'https://wa.me/56912345678', 'WhatsApp wa.me link missing')
-    assertContains(html, '>+56912345678</a>', 'WhatsApp real number missing as link text')
+    assertContains(html, 'contact-action-value">+56912345678</span>', 'WhatsApp real number missing as visible action value')
   })
 
   await test('Social links render from real company data when present', () => {
@@ -202,6 +202,24 @@ async function main() {
   await test('Mobile nav JS mechanism is preserved', () => {
     assertContains(html, "var toggle = document.querySelector('.mobile-nav-toggle');", 'Toggle JS wiring missing')
     assertContains(html, "var nav = document.querySelector('.nav-menu');", 'Nav JS wiring missing')
+  })
+
+  // CSS-CONTRACT (LAYOUT) REGRESSION — positioning context for the mobile
+  // dropdown. A string test cannot prove browser layout; these assertions only
+  // pin the positioning contract the dropdown depends on:
+  //   - .site-header must establish a positioned containing block
+  //     (position: relative) so .nav-menu's top:100% resolves to "just below
+  //     the header", not "one full viewport down" (the MVP-3 staging bug).
+  //   - the mobile .nav-menu must keep absolute positioning anchored to it.
+  await test('Mobile nav dropdown has a positioned containing block (CSS contract)', () => {
+    const headerBlock = extractBetween(html, '.site-header {', '}\n\n.header-container')
+    assertContains(headerBlock, 'position: relative', 'site-header must be position:relative so the dropdown anchors under the header')
+  })
+
+  await test('Mobile nav dropdown keeps absolute top:100% anchoring (CSS contract)', () => {
+    const mobileNavBlock = extractBetween(html, '@media (max-width: 767px)', '/* Focus styles')
+    assertContains(mobileNavBlock, 'position: absolute', 'Mobile nav-menu must remain absolutely positioned')
+    assertContains(mobileNavBlock, 'top: 100%', 'Mobile nav-menu top:100% must target the header bottom')
   })
 
   const destinationRender = await renderer.render({ domain: 'valdi.app', path: '/' })

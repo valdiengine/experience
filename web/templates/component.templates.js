@@ -23,6 +23,11 @@ function isUsableLogoUrl(logo) {
   return /^https?:\/\//i.test(logo)
 }
 
+function extractDigits(value) {
+  if (typeof value !== 'string') return ''
+  return value.replace(/\D/g, '')
+}
+
 const SOCIAL_PLATFORMS = [
   { key: 'instagram', label: 'Instagram' },
   { key: 'facebook', label: 'Facebook' },
@@ -79,15 +84,46 @@ ${navHtml}      </ul>
 export function renderHero(viewModel = {}) {
   const hero = viewModel.hero || {}
   const seo = viewModel.seo || {}
+  const company = viewModel.company || {}
+  const contact = viewModel.contact || {}
+
+  const hasCompany = Boolean(company && company.name)
+  const isDefaultType = (type) => typeof type === 'string' && type.toLowerCase() === 'company'
+  const eyebrow = hasCompany && typeof company.type === 'string' && !isDefaultType(company.type)
+    ? escapeHtml(company.type)
+    : ''
+
+  const whatsapp = typeof contact.whatsapp === 'string' ? contact.whatsapp : ''
+  const whatsappDigits = extractDigits(whatsapp)
+  const phone = typeof contact.phone === 'string' ? contact.phone : ''
+
+  const canWhatsApp = Boolean(hasCompany && whatsapp && whatsappDigits)
+  const canCall = Boolean(hasCompany && phone)
+
   const title = escapeHtml(hero.title || seo.title || viewModel.destinationName || '')
   const subtitle = escapeHtml(hero.subtitle || seo.description || '')
   const heroImage = viewModel.heroImage || ''
 
+  let actionsHtml = ''
+  if (canWhatsApp || canCall) {
+    actionsHtml = `      <div class="hero-actions">
+`
+    if (canWhatsApp) {
+      actionsHtml += `        <a class="hero-btn hero-btn-primary" href="https://wa.me/${escapeAttr(whatsappDigits)}" target="_blank" rel="noopener">WhatsApp</a>
+`
+    }
+    if (canCall) {
+      actionsHtml += `        <a class="hero-btn hero-btn-secondary" href="tel:${escapeAttr(phone)}">Llamar</a>
+`
+    }
+    actionsHtml += `      </div>
+`
+  }
+
   return `<section class="hero" id="inicio">
   <div class="hero-content">
-    <h1>${title}</h1>
-    ${subtitle ? `<p>${subtitle}</p>` : ''}
-  </div>
+    ${eyebrow ? `<p class="hero-eyebrow">${eyebrow}</p>\n` : ''}    <h1>${title}</h1>
+    ${subtitle ? `<p class="hero-subtitle">${subtitle}</p>\n` : ''}${actionsHtml}  </div>
   ${heroImage ? `<div class="hero-image"><img src="${escapeUrl(heroImage)}" alt="${title}"></div>` : ''}
 </section>`
 }
@@ -193,12 +229,12 @@ export function renderContact(viewModel = {}) {
   const company = viewModel.company || {}
   const social = company.social || {}
 
-  const email = contact.email ? escapeHtml(contact.email) : ''
-  const phone = contact.phone ? escapeHtml(contact.phone) : ''
-  const address = contact.address ? escapeHtml(contact.address) : ''
-  const hours = contact.hours ? escapeHtml(contact.hours) : ''
-  const whatsapp = typeof contact.whatsapp === 'string' ? escapeHtml(contact.whatsapp) : ''
-  const whatsappDigits = whatsapp.replace(/\D/g, '')
+  const email = typeof contact.email === 'string' ? contact.email : ''
+  const phone = typeof contact.phone === 'string' ? contact.phone : ''
+  const address = typeof contact.address === 'string' ? contact.address : ''
+  const hours = typeof contact.hours === 'string' ? contact.hours : ''
+  const whatsapp = typeof contact.whatsapp === 'string' ? contact.whatsapp : ''
+  const whatsappDigits = extractDigits(whatsapp)
 
   const socialHtml = renderSocialLinks(social)
 
@@ -206,32 +242,44 @@ export function renderContact(viewModel = {}) {
     return ''
   }
 
-  let contactHtml = ''
-  if (email) {
-    contactHtml += `        <li><strong>Email:</strong> <a href="mailto:${escapeAttr(email)}">${email}</a></li>\n`
+  let actionsHtml = ''
+  if (whatsapp && whatsappDigits) {
+    actionsHtml += `      <li>
+        <a class="contact-action" href="https://wa.me/${escapeAttr(whatsappDigits)}" target="_blank" rel="noopener">
+          <span class="contact-action-label">WhatsApp</span>
+          <span class="contact-action-value">${escapeHtml(whatsapp)}</span>
+        </a>
+      </li>\n`
   }
   if (phone) {
-    contactHtml += `        <li><strong>Phone:</strong> <a href="tel:${escapeAttr(phone)}">${phone}</a></li>\n`
+    actionsHtml += `      <li>
+        <a class="contact-action" href="tel:${escapeAttr(phone)}">
+          <span class="contact-action-label">Phone</span>
+          <span class="contact-action-value">${escapeHtml(phone)}</span>
+        </a>
+      </li>\n`
   }
-  if (whatsapp && whatsappDigits) {
-    contactHtml += `        <li><strong>WhatsApp:</strong> <a href="https://wa.me/${escapeAttr(whatsappDigits)}" target="_blank" rel="noopener">${whatsapp}</a></li>\n`
+  if (email) {
+    actionsHtml += `      <li>
+        <a class="contact-action" href="mailto:${escapeAttr(email)}">
+          <span class="contact-action-label">Email</span>
+          <span class="contact-action-value">${escapeHtml(email)}</span>
+        </a>
+      </li>\n`
   }
+
+  let infoHtml = ''
   if (address) {
-    contactHtml += `        <li><strong>Address:</strong> ${address}</li>\n`
+    infoHtml += `      <li class="contact-info-row"><strong>Address:</strong> ${escapeHtml(address)}</li>\n`
   }
   if (hours) {
-    contactHtml += `        <li><strong>Hours:</strong> ${hours}</li>\n`
+    infoHtml += `      <li class="contact-info-row"><strong>Hours:</strong> ${escapeHtml(hours)}</li>\n`
   }
 
   return `<section class="contact" id="contacto">
   <div class="contact-container">
     <h2>Contact</h2>
-    <address>
-      <ul class="contact-list">
-${contactHtml}      </ul>
-      ${socialHtml ? `<ul class="social-links">\n${socialHtml}      </ul>` : ''}
-    </address>
-  </div>
+    ${actionsHtml ? `<ul class="contact-actions">\n${actionsHtml}    </ul>\n` : ''}${infoHtml ? `<ul class="contact-info">\n${infoHtml}    </ul>\n` : ''}${socialHtml ? `<ul class="social-links">\n${socialHtml}    </ul>` : ''}  </div>
 </section>`
 }
 

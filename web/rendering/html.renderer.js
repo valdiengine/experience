@@ -420,6 +420,7 @@ ${utilityStyles}
 
 /* Component-specific styles */
 .site-header {
+  position: relative;
   background: var(--color-background);
   border-bottom: 1px solid var(--color-border);
   padding: var(--spacing-md);
@@ -491,6 +492,70 @@ ${utilityStyles}
 .hero p {
   font-size: 1.125rem;
   opacity: 0.95;
+}
+
+/* Mobile mini-app hero opener */
+.hero-eyebrow {
+  display: inline-block;
+  margin-bottom: var(--spacing-md);
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--radius-full);
+  background: rgba(255,255,255,0.14);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-xl);
+}
+
+.hero-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: var(--spacing-sm) var(--spacing-xl);
+  border-radius: var(--radius-full);
+  font-weight: 600;
+  font-size: 1rem;
+  text-decoration: none;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+
+.hero-btn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.hero-btn-primary {
+  background: #fff;
+  color: var(--color-primary);
+  box-shadow: var(--shadow-md);
+}
+
+.hero-btn-primary:hover,
+.hero-btn-primary:focus-visible {
+  background: var(--color-surface);
+  transform: translateY(-1px);
+}
+
+.hero-btn-secondary {
+  background: transparent;
+  color: #fff;
+  border: 2px solid rgba(255,255,255,0.85);
+}
+
+.hero-btn-secondary:hover,
+.hero-btn-secondary:focus-visible {
+  background: rgba(255,255,255,0.14);
+  transform: translateY(-1px);
 }
 
 .services,
@@ -583,29 +648,96 @@ ${utilityStyles}
   color: var(--color-text-muted);
 }
 
-.contact ul {
+/* Touch-first contact actions, info rows, and social chips */
+.contact-actions {
   list-style: none;
   padding: 0;
+  margin: 0 0 var(--spacing-xl);
+  display: grid;
+  gap: var(--spacing-md);
 }
 
-.contact li {
-  margin-bottom: var(--spacing-sm);
+.contact-action {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  min-height: 56px;
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  text-decoration: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+
+.contact-action:hover {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.contact-action:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.contact-action-label {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.contact-action-value {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  text-align: right;
+  word-break: break-word;
+}
+
+.contact-info {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--spacing-xl);
+  display: grid;
   gap: var(--spacing-sm);
 }
 
-.contact a {
+.contact-info-row {
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+
+.social-links {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+}
+
+.social-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
   color: var(--color-primary);
-  transition: color var(--transition-fast);
+  font-weight: 500;
+  text-decoration: none;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
 }
 
-.contact a:hover {
-  color: var(--color-secondary);
-  text-decoration: underline;
+.social-links a:hover {
+  border-color: var(--color-primary);
+  background: rgba(0,0,0,0.03);
 }
 
-.contact a:focus-visible {
+.social-links a:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
