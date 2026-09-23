@@ -43,6 +43,21 @@ export const DEFAULT_CAPABILITIES = Object.freeze({
   'professional-service': ['hero', 'services', 'about', 'credentials', 'contact', 'appointment']
 })
 
+export const COMPANY_PRESENTATION_FIELDS = Object.freeze([
+  'slug',
+  'enabled',
+  'name',
+  'type',
+  'description',
+  'destination',
+  'contact',
+  'branding',
+  'seo',
+  'social',
+  'enabledCategories',
+  'enabledModules'
+])
+
 export function createApplicationConfig(data = {}) {
   return {
     identity: createIdentityConfig(data.identity),
@@ -80,6 +95,16 @@ function createDestinationConfig(destination = {}) {
   }
 }
 
+function copyCompanyValue(value) {
+  if (Array.isArray(value)) {
+    return [...value]
+  }
+  if (value !== null && typeof value === 'object') {
+    return { ...value }
+  }
+  return value
+}
+
 function createCompanyConfig(company = {}) {
   if (company === null || company === undefined) {
     return { slug: null, enabled: false }
@@ -87,10 +112,17 @@ function createCompanyConfig(company = {}) {
   if (typeof company === 'string') {
     return { slug: company, enabled: true }
   }
-  return {
+  const result = {
     slug: company.slug || null,
     enabled: company.enabled !== false
   }
+  for (const field of COMPANY_PRESENTATION_FIELDS) {
+    if (field === 'slug' || field === 'enabled') continue
+    if (company[field] !== undefined && company[field] !== null) {
+      result[field] = copyCompanyValue(company[field])
+    }
+  }
+  return result
 }
 
 function createExperienceConfig(experience = {}) {
@@ -260,6 +292,7 @@ export default {
   CONTENT_SOURCES,
   MIGRATION_STATES,
   DEFAULT_CAPABILITIES,
+  COMPANY_PRESENTATION_FIELDS,
   createApplicationConfig,
   validateExperienceType,
   validateContentSource,

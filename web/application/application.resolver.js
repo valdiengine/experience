@@ -339,17 +339,8 @@ export class ApplicationResolver {
 
     return {
       capabilities,
-      experienceType: companyConfig.experience?.type || null,
-      company: {
-        slug: companyConfig.slug,
-        name: companyConfig.name,
-        type: companyConfig.type,
-        description: companyConfig.description || '',
-        contact: companyConfig.contact || null,
-        branding: companyConfig.branding || null,
-        seo: companyConfig.seo || null,
-        social: companyConfig.social || null
-      },
+      experienceType: companyConfig.experienceType || companyConfig.experience?.type || null,
+      company: companyConfig,
       navigation
     }
   }

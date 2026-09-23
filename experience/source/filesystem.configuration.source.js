@@ -539,6 +539,7 @@ export class FilesystemConfigurationSource extends ConfigurationSource {
       configVersion: config.configVersion || '1.0',
       hero: config.hero || null,
       experience: config.experience || null,
+      experienceType: config.experienceType || config.experience?.type || null,
       capabilities: config.capabilities || {},
       seo: config.seo || null,
       navigation: config.navigation || null

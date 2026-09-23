@@ -22,6 +22,7 @@ import {
 
 import {
   createApplicationConfig,
+  COMPANY_PRESENTATION_FIELDS,
   EXPERIENCE_TYPES,
   CONTENT_SOURCES,
   MIGRATION_STATES,
@@ -92,16 +93,16 @@ export class ApplicationConfigLoader {
       return { slug: null, enabled: false }
     }
     if (typeof routeData.company === 'string') {
-      return {
-        slug: routeData.company,
-        enabled: true
-      }
+      return routeData.company
     }
     if (typeof routeData.company === 'object' && routeData.company !== null) {
-      return {
-        slug: routeData.company.slug || null,
-        enabled: routeData.company.enabled !== false
+      const company = {}
+      for (const field of COMPANY_PRESENTATION_FIELDS) {
+        if (routeData.company[field] !== undefined && routeData.company[field] !== null) {
+          company[field] = routeData.company[field]
+        }
       }
+      return company
     }
     return { slug: null, enabled: false }
   }
