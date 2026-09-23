@@ -78,22 +78,32 @@ export class HtmlRenderer {
 
   buildViewModel(presentation) {
     const destination = presentation.destination || {}
+    const company = presentation.company || {}
+    const branding = presentation.branding || {}
     const vm = {
       identity: presentation.identity || {},
+      company,
       destinationName: destination.name || presentation.metadata?.destinationName || '',
       destinationSlug: destination.slug || presentation.metadata?.destination || '',
       language: presentation.metadata?.language || 'es',
       locale: presentation.metadata?.locale || 'es-CL',
-      branding: presentation.branding || {},
+      branding: {
+        ...branding,
+        name: branding.name || company.name || destination.name || ''
+      },
       navigation: presentation.navigation || {},
       seo: this.buildSeo(presentation),
-      contact: presentation.contact || {},
+      contact: normalizeContact(presentation.contact || {}),
+      hero: {
+        title: company.name || null,
+        subtitle: company.description || null
+      },
       heroImage: this.extractHeroImage(presentation),
       services: this.extractServices(presentation),
       gallery: this.extractGallery(presentation),
       companies: this.extractCompanies(presentation),
       footer: presentation.navigation?.footer || { columns: [] },
-      copyright: this.buildCopyright(presentation),
+      copyright: this.buildCopyright(branding, company, destination),
       quote: this.extractQuote(presentation),
       pwa: presentation.pwa || { enabled: false },
       categories: destination.categories || null,
@@ -106,15 +116,24 @@ export class HtmlRenderer {
   buildSeo(presentation) {
     const seo = presentation.seo || {}
     const destination = presentation.destination || {}
-    if (seo.title) return seo
+    const company = presentation.company || {}
+
+    const enrich = (base) => ({
+      ...base,
+      description: base.description || company.description || ''
+    })
+
+    if (seo.title) {
+      return enrich(seo)
+    }
     if (destination.name === 'Valdi' && destination.slug === 'valdi') {
-      return {
+      return enrich({
         ...seo,
         title: 'Valdi — Turismo en Valdivia',
         description: seo.description || 'Descubre los mejores servicios turísticos, alojamiento, restaurantes y experiencias en Valdivia y Los Ríos, Chile.'
-      }
+      })
     }
-    return seo
+    return enrich(seo)
   }
 
   extractHeroImage(presentation) {
@@ -197,9 +216,9 @@ export class HtmlRenderer {
     }
   }
 
-  buildCopyright(presentation) {
+  buildCopyright(branding = {}, company = {}, destination = {}) {
     const year = new Date().getFullYear()
-    const name = presentation.branding?.name || presentation.destination?.name || ''
+    const name = branding.name || company.name || destination.name || ''
     return `© ${year} ${name}`
   }
 
@@ -277,7 +296,7 @@ export class HtmlRenderer {
         phone: contact.phone || null,
         address: contact.address ? {
           streetAddress: contact.address,
-          addressLocality: viewModel.destinationName || '',
+          addressLocality: viewModel.contact?.city || viewModel.destinationName || '',
           addressCountry: 'CL'
         } : null
       }
@@ -1355,6 +1374,19 @@ ${utilityStyles}
 
 export function createHtmlRenderer(options = {}) {
   return new HtmlRenderer(options)
+}
+
+function normalizeContact(contact = {}) {
+  const address = contact.address
+  if (address && typeof address === 'object' && !Array.isArray(address)) {
+    return {
+      ...contact,
+      address: [address.street, address.city, address.region].filter(Boolean).join(', '),
+      city: address.city || null,
+      region: address.region || null
+    }
+  }
+  return contact
 }
 
 export default HtmlRenderer
