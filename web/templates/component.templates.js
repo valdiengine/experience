@@ -391,20 +391,41 @@ export function renderBookingSection(viewModel = {}) {
     return ''
   }
 
-  const endpoint = typeof booking.availabilityEndpoint === 'string' && booking.availabilityEndpoint
+  const availabilityEndpoint = typeof booking.availabilityEndpoint === 'string' && booking.availabilityEndpoint
     ? booking.availabilityEndpoint
     : `/api/v1/booking/companies/${encodeURIComponent(slug)}/availability`
+  const reservationEndpoint = typeof booking.reservationEndpoint === 'string' && booking.reservationEndpoint
+    ? booking.reservationEndpoint
+    : `/api/v1/booking/companies/${encodeURIComponent(slug)}/reservations`
   const title = booking.title ? escapeHtml(booking.title) : 'Reserva tu experiencia'
   const description = booking.description
     ? escapeHtml(booking.description)
     : 'Consulta disponibilidad y realiza tu reserva en línea con confirmación inmediata'
-  const escape = escapeUrl(endpoint)
 
-  return `<section class="booking" id="reservas">
+  return `<section class="booking" id="reservas" data-booking-slug="${escapeAttr(slug)}" data-booking-availability="${escapeAttr(availabilityEndpoint)}" data-booking-reservation="${escapeAttr(reservationEndpoint)}">
   <div class="booking-container">
-    <h2>${title}</h2>
-    <p>${description}</p>
-    <a class="booking-cta" href="${escape ? escape : '#'}" role="button">Reservar</a>
+    <div class="booking-header">
+      <h2>${title}</h2>
+      <p>${description}</p>
+    </div>
+    <form class="booking-date-form" data-booking-date-form>
+      <div class="booking-date-fields">
+        <label>Check-in <input type="date" name="checkIn" required></label>
+        <label>Check-out <input type="date" name="checkOut" required></label>
+      </div>
+      <button type="submit" class="btn btn-primary">Consultar disponibilidad</button>
+    </form>
+    <div class="booking-state" data-booking-state role="status" aria-live="polite" hidden></div>
+    <form class="booking-traveler-form" data-booking-traveler-form hidden>
+      <div class="booking-traveler-fields">
+        <label>Nombre <input type="text" name="name" required></label>
+        <label>Email <input type="email" name="email"></label>
+        <label>Teléfono <input type="tel" name="phone"></label>
+        <label>Notas <textarea name="notes"></textarea></label>
+      </div>
+      <button type="submit" class="btn btn-primary booking-cta">Reservar</button>
+    </form>
+    <div class="booking-confirmation" data-booking-confirmation role="status" aria-live="polite" hidden></div>
   </div>
 </section>`
 }

@@ -309,7 +309,14 @@ export class HtmlRenderer {
 
   extractBooking(presentation) {
     if (presentation.booking && typeof presentation.booking === 'object') {
-      return presentation.booking
+      const booking = presentation.booking
+      const bookingSlug = typeof booking.slug === 'string' && booking.slug ? booking.slug : null
+      return {
+        ...booking,
+        reservationEndpoint: typeof booking.reservationEndpoint === 'string' && booking.reservationEndpoint
+          ? booking.reservationEndpoint
+          : bookingSlug ? `/api/v1/booking/companies/${encodeURIComponent(bookingSlug)}/reservations` : null
+      }
     }
 
     const capabilities = presentation.capabilities || []
@@ -319,12 +326,16 @@ export class HtmlRenderer {
 
     if (bookingCap?.configuration) {
       const config = bookingCap.configuration
+      const configSlug = typeof config.slug === 'string' && config.slug ? config.slug : null
       return {
         enabled: config.enabled === true,
         slug: config.slug || null,
         title: config.title || null,
         description: config.description || null,
-        availabilityEndpoint: config.availabilityEndpoint || null
+        availabilityEndpoint: config.availabilityEndpoint || null,
+        reservationEndpoint: typeof config.reservationEndpoint === 'string' && config.reservationEndpoint
+          ? config.reservationEndpoint
+          : configSlug ? `/api/v1/booking/companies/${encodeURIComponent(configSlug)}/reservations` : null
       }
     }
 
@@ -1173,12 +1184,149 @@ ${utilityStyles}
     width: 100%;
   }
 }
+
+/* Booking Section */
+.booking {
+  background: var(--color-surface);
+  padding: var(--spacing-section) var(--spacing-md);
+}
+
+.booking-container {
+  max-width: var(--layout-max-width);
+  margin: 0 auto;
+}
+
+.booking-header {
+  text-align: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.booking-header h2 {
+  font-size: 1.75rem;
+  color: var(--color-text);
+  margin-bottom: var(--spacing-sm);
+}
+
+.booking-header p {
+  color: var(--color-text-muted);
+}
+
+.booking-date-form {
+  display: grid;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.booking-date-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.booking-date-fields label,
+.booking-traveler-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  font-size: 0.875rem;
+  color: var(--color-text);
+}
+
+.booking-date-fields input,
+.booking-traveler-fields input,
+.booking-traveler-fields textarea {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  background: var(--color-background);
+  color: var(--color-text);
+}
+
+.booking-date-fields input:focus,
+.booking-traveler-fields input:focus,
+.booking-traveler-fields textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.booking-traveler-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.booking-cta {
+  justify-self: start;
+}
+
+.booking-state,
+.booking-confirmation {
+  margin-top: var(--spacing-lg);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.booking-state[hidden],
+.booking-confirmation[hidden] {
+  display: none;
+}
+
+.booking-state.error {
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+  color: #721c24;
+}
+
+.booking-state.success,
+.booking-confirmation {
+  background: #d4edda;
+  border: 1px solid #c3e6cb;
+  color: #155724;
+}
+
+.booking-state.loading {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.booking-state.loading::before {
+  content: '';
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: booking-spin 0.8s linear infinite;
+  margin-right: var(--spacing-sm);
+  vertical-align: middle;
+}
+
+@keyframes booking-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 767px) {
+  .booking-date-fields,
+  .booking-traveler-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .booking-cta {
+    width: 100%;
+  }
+}
 </style>`
   }
 
   renderScripts(viewModel = {}) {
     var identity = viewModel.identity || {};
     var quoteConfig = viewModel.quote || {};
+    var bookingConfig = viewModel.booking || {};
     var pwa = viewModel.pwa || {};
 
     var pwaScript = '';
@@ -1373,6 +1521,18 @@ ${utilityStyles}
     company: '${identity.company || 'albasie'}',
     destination: '${identity.destination || 'valdi'}',
     quoteConfig: ${JSON.stringify(quoteConfig)}
+  };
+})();
+</script><script>
+(function() {
+  // Booking API configuration from server
+  window.bookingAPIConfig = {
+    applicationId: '${identity.applicationId || 'valdi.app/albasie'}',
+    domain: '${identity.domain || 'valdi.app'}',
+    route: '${identity.route || '/albasie'}',
+    company: '${identity.company || 'albasie'}',
+    destination: '${identity.destination || 'valdi'}',
+    bookingConfig: ${JSON.stringify(bookingConfig)}
   };
 })();
 </script>${pwaScript}<script>
@@ -1619,6 +1779,162 @@ ${utilityStyles}
       });
     });
   }
+})();
+</script><script>
+(function() {
+  if (typeof document === 'undefined') return;
+
+  // Booking widget configuration from server (progressive enhancement)
+  var config = window.bookingAPIConfig || {};
+  var bookingConfig = config.bookingConfig || {};
+
+  var section = document.querySelector('[data-booking-slug]');
+  var dateForm = section ? section.querySelector('[data-booking-date-form]') : null;
+  var stateRegion = section ? section.querySelector('[data-booking-state]') : null;
+  var travelerForm = section ? section.querySelector('[data-booking-traveler-form]') : null;
+  var confirmationRegion = section ? section.querySelector('[data-booking-confirmation]') : null;
+
+  if (!section || !dateForm || !stateRegion || !travelerForm || !confirmationRegion) return;
+
+  var availabilityEndpoint = bookingConfig.availabilityEndpoint ||
+    section.getAttribute('data-booking-availability');
+  var reservationEndpoint = bookingConfig.reservationEndpoint ||
+    section.getAttribute('data-booking-reservation');
+  var slug = bookingConfig.slug || section.getAttribute('data-booking-slug');
+
+  function showState(message, type) {
+    stateRegion.textContent = message;
+    stateRegion.className = 'booking-state ' + (type || '');
+    stateRegion.hidden = false;
+  }
+
+  function hideState() {
+    stateRegion.className = 'booking-state';
+    stateRegion.hidden = true;
+  }
+
+  function setButtonLoading(button, loading) {
+    if (loading) {
+      button.classList.add('loading');
+      button.disabled = true;
+    } else {
+      button.classList.remove('loading');
+      button.disabled = false;
+    }
+  }
+
+  function readDateInput(name) {
+    var input = dateForm.querySelector('input[name="' + name + '"]');
+    return input ? input.value : '';
+  }
+
+  dateForm.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    hideState();
+    confirmationRegion.hidden = true;
+    confirmationRegion.textContent = '';
+
+    var checkIn = readDateInput('checkIn');
+    var checkOut = readDateInput('checkOut');
+    if (!checkIn || !checkOut) {
+      showState('Selecciona una fecha de entrada y salida.', 'error');
+      return;
+    }
+
+    var submitBtn = dateForm.querySelector('button[type="submit"]');
+    if (submitBtn) setButtonLoading(submitBtn, true);
+
+    try {
+      var url = availabilityEndpoint +
+        '?slug=' + encodeURIComponent(slug) +
+        '&checkIn=' + encodeURIComponent(checkIn) +
+        '&checkOut=' + encodeURIComponent(checkOut);
+      var response = await fetch(url);
+      var result = await response.json();
+
+      if (response.status === 409) {
+        showState(result.error || 'No hay disponibilidad para esas fechas. Prueba con otras fechas.', 'error');
+        return;
+      }
+
+      if (!result.success || !result.data || result.data.state !== 'available') {
+        showState(result.error || 'No hay disponibilidad para esas fechas.', 'error');
+        return;
+      }
+
+      travelerForm.hidden = false;
+      showState('Disponibilidad confirmada: ' + checkIn + ' a ' + checkOut + '.', 'success');
+    } catch (error) {
+      console.error('Booking availability error:', error);
+      showState('Error de conexión. Intenta nuevamente.', 'error');
+    } finally {
+      if (submitBtn) setButtonLoading(submitBtn, false);
+    }
+  });
+
+  travelerForm.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    hideState();
+
+    var nameInput = travelerForm.querySelector('input[name="name"]');
+    var emailInput = travelerForm.querySelector('input[name="email"]');
+    var phoneInput = travelerForm.querySelector('input[name="phone"]');
+    var notesInput = travelerForm.querySelector('textarea[name="notes"]') ||
+      travelerForm.querySelector('input[name="notes"]');
+    if (!nameInput) {
+      showState('Ingresa tu nombre para reservar.', 'error');
+      return;
+    }
+
+    var submitBtn = travelerForm.querySelector('button[type="submit"]');
+    if (submitBtn) setButtonLoading(submitBtn, true);
+
+    try {
+      var payload = {
+        applicationId: config.applicationId,
+        domain: config.domain,
+        route: config.route,
+        company: config.company,
+        destination: config.destination,
+        checkIn: readDateInput('checkIn'),
+        checkOut: readDateInput('checkOut'),
+        traveler: {
+          name: nameInput.value,
+          email: emailInput ? emailInput.value : '',
+          phone: phoneInput ? phoneInput.value : '',
+          notes: notesInput ? notesInput.value : ''
+        },
+        configuration: bookingConfig
+      };
+
+      var response = await fetch(reservationEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      var result = await response.json();
+
+      if (response.status === 409) {
+        showState(result.error || 'La disponibilidad cambió. Elige otras fechas e intenta de nuevo.', 'error');
+        return;
+      }
+
+      if (result.success && result.data && result.data.confirmationCode) {
+        confirmationRegion.textContent = 'Reserva confirmada. Tu código de confirmación es ' +
+          result.data.confirmationCode + '.';
+        confirmationRegion.hidden = false;
+        travelerForm.hidden = true;
+        dateForm.reset();
+      } else {
+        showState(result.error || 'No se pudo completar la reserva.', 'error');
+      }
+    } catch (error) {
+      console.error('Booking reservation error:', error);
+      showState('Error de conexión. Intenta nuevamente.', 'error');
+    } finally {
+      if (submitBtn) setButtonLoading(submitBtn, false);
+    }
+  });
 })();
 </script>${pushInitScript}`
   }

@@ -205,12 +205,16 @@ export class ApplicationPresentationAdapter {
   #extractBooking(ctx) {
     const booking = ctx.booking
     if (booking && typeof booking === 'object' && booking.enabled) {
+      const slug = typeof booking.slug === 'string' && booking.slug ? booking.slug : ctx.company?.slug || null
       return {
         enabled: true,
-        slug: typeof booking.slug === 'string' && booking.slug ? booking.slug : ctx.company?.slug || null,
+        slug: slug,
         title: typeof booking.title === 'string' ? booking.title : null,
         description: typeof booking.description === 'string' ? booking.description : null,
         availabilityEndpoint: typeof booking.availabilityEndpoint === 'string' ? booking.availabilityEndpoint : null,
+        reservationEndpoint: typeof booking.reservationEndpoint === 'string' && booking.reservationEndpoint
+          ? booking.reservationEndpoint
+          : slug ? `/api/v1/booking/companies/${encodeURIComponent(slug)}/reservations` : null,
       }
     }
 
@@ -219,12 +223,16 @@ export class ApplicationPresentationAdapter {
     )
     const config = capability?.configuration || {}
     if (config.enabled === true) {
+      const slug = typeof config.slug === 'string' && config.slug ? config.slug : ctx.company?.slug || null
       return {
         enabled: true,
-        slug: typeof config.slug === 'string' && config.slug ? config.slug : ctx.company?.slug || null,
+        slug: slug,
         title: typeof config.title === 'string' ? config.title : null,
         description: typeof config.description === 'string' ? config.description : null,
         availabilityEndpoint: typeof config.availabilityEndpoint === 'string' ? config.availabilityEndpoint : null,
+        reservationEndpoint: typeof config.reservationEndpoint === 'string' && config.reservationEndpoint
+          ? config.reservationEndpoint
+          : slug ? `/api/v1/booking/companies/${encodeURIComponent(slug)}/reservations` : null,
       }
     }
 
