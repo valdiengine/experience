@@ -377,6 +377,38 @@ function formatCurrency(amount, currency = 'CLP') {
   return new Intl.NumberFormat('es-CL', { style: 'currency', currency }).format(amount)
 }
 
+export function renderBookingSection(viewModel = {}) {
+  const booking = viewModel.booking || {}
+
+  if (!booking.enabled) {
+    return ''
+  }
+
+  const slug = typeof booking.slug === 'string' && booking.slug
+    ? booking.slug
+    : viewModel.company?.slug
+  if (!slug) {
+    return ''
+  }
+
+  const endpoint = typeof booking.availabilityEndpoint === 'string' && booking.availabilityEndpoint
+    ? booking.availabilityEndpoint
+    : `/api/v1/booking/companies/${encodeURIComponent(slug)}/availability`
+  const title = booking.title ? escapeHtml(booking.title) : 'Reserva tu experiencia'
+  const description = booking.description
+    ? escapeHtml(booking.description)
+    : 'Consulta disponibilidad y realiza tu reserva en línea con confirmación inmediata'
+  const escape = escapeUrl(endpoint)
+
+  return `<section class="booking" id="reservas">
+  <div class="booking-container">
+    <h2>${title}</h2>
+    <p>${description}</p>
+    <a class="booking-cta" href="${escape ? escape : '#'}" role="button">Reservar</a>
+  </div>
+</section>`
+}
+
 export function renderFooter(viewModel = {}) {
   const branding = viewModel.branding || {}
   const navigation = viewModel.footer?.columns || []
@@ -575,6 +607,7 @@ export default {
   renderCompanies,
   renderContact,
   renderQuote,
+  renderBookingSection,
   renderFooter,
   renderInstallCTA,
   renderCategories,

@@ -62,6 +62,7 @@ export class ApplicationPresentationAdapter {
       experience: this.#extractExperience(ctx),
       modules: this.#extractModules(ctx),
       capabilities: this.#extractCapabilities(ctx),
+      booking: this.#extractBooking(ctx),
       branding: this.#extractBranding(ctx),
       theme: this.#extractTheme(ctx),
       navigation: this.#extractNavigation(ctx),
@@ -95,6 +96,7 @@ export class ApplicationPresentationAdapter {
       experience: this.#extractExperience(ctx),
       modules: this.#extractModules(ctx),
       capabilities: this.#extractCapabilities(ctx),
+      booking: this.#extractBooking(ctx),
       branding: this.#extractBranding(ctx),
       theme: this.#extractTheme(ctx),
       navigation: this.#extractNavigation(ctx),
@@ -198,6 +200,35 @@ export class ApplicationPresentationAdapter {
 
   #extractCapabilities(ctx) {
     return Array.isArray(ctx.capabilities) ? [...ctx.capabilities] : []
+  }
+
+  #extractBooking(ctx) {
+    const booking = ctx.booking
+    if (booking && typeof booking === 'object' && booking.enabled) {
+      return {
+        enabled: true,
+        slug: typeof booking.slug === 'string' && booking.slug ? booking.slug : ctx.company?.slug || null,
+        title: typeof booking.title === 'string' ? booking.title : null,
+        description: typeof booking.description === 'string' ? booking.description : null,
+        availabilityEndpoint: typeof booking.availabilityEndpoint === 'string' ? booking.availabilityEndpoint : null,
+      }
+    }
+
+    const capability = (Array.isArray(ctx.capabilities) ? ctx.capabilities : []).find(
+      (c) => c && typeof c === 'object' && c.name === 'booking'
+    )
+    const config = capability?.configuration || {}
+    if (config.enabled === true) {
+      return {
+        enabled: true,
+        slug: typeof config.slug === 'string' && config.slug ? config.slug : ctx.company?.slug || null,
+        title: typeof config.title === 'string' ? config.title : null,
+        description: typeof config.description === 'string' ? config.description : null,
+        availabilityEndpoint: typeof config.availabilityEndpoint === 'string' ? config.availabilityEndpoint : null,
+      }
+    }
+
+    return { enabled: false }
   }
 
   #extractBranding(ctx) {

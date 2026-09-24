@@ -26,6 +26,7 @@ function seedLineDirectly(store, line) {
 }
 
 function seedReservationDirectly(store, reservation) {
+  if (!store.has('reservation')) store.set('reservation', new Map())
   store.get('reservation').set(reservation.id, reservation)
 }
 
@@ -39,7 +40,7 @@ class Booking31Test extends BaseCapabilityTest {
     const store = bundle.store
 
     const resA = { id: 'res-a', tenantId: TEST_TENANT_ID, accommodationId: 'acc-a', status: 'confirmed' }
-    store.get('reservation').set(resA.id, resA)
+    seedReservationDirectly(store, resA)
 
     seedLineDirectly(store, {
       id: 'line-a1',

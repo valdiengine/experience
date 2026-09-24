@@ -15,6 +15,7 @@ import {
   renderCompanies,
   renderContact,
   renderQuote,
+  renderBookingSection,
   renderFooter,
   renderInstallCTA,
   renderCategories,
@@ -153,6 +154,7 @@ export class HtmlRenderer {
     const gallery = this.extractGallery(presentation)
     const companies = this.extractCompanies(presentation)
     const quote = this.extractQuote(presentation)
+    const booking = this.extractBooking(presentation)
     const categories = destination.categories || null
     const featured = destination.featured || null
 
@@ -193,6 +195,7 @@ export class HtmlRenderer {
       footer: normalizedNavigation.footer || { columns: [] },
       copyright: this.buildCopyright(branding, company, destination),
       quote,
+      booking,
       pwa: presentation.pwa || { enabled: false },
       categories,
       featured
@@ -304,6 +307,30 @@ export class HtmlRenderer {
     }
   }
 
+  extractBooking(presentation) {
+    if (presentation.booking && typeof presentation.booking === 'object') {
+      return presentation.booking
+    }
+
+    const capabilities = presentation.capabilities || []
+    const bookingCap = capabilities.find(c =>
+      typeof c === 'object' && c.name === 'booking'
+    )
+
+    if (bookingCap?.configuration) {
+      const config = bookingCap.configuration
+      return {
+        enabled: config.enabled === true,
+        slug: config.slug || null,
+        title: config.title || null,
+        description: config.description || null,
+        availabilityEndpoint: config.availabilityEndpoint || null
+      }
+    }
+
+    return { enabled: false }
+  }
+
   buildCopyright(branding = {}, company = {}, destination = {}) {
     const year = new Date().getFullYear()
     const name = branding.name || company.name || destination.name || ''
@@ -338,6 +365,9 @@ export class HtmlRenderer {
 
     const quoteHtml = renderQuote(viewModel)
     if (quoteHtml) mainSections.push(quoteHtml)
+
+    const bookingHtml = renderBookingSection(viewModel)
+    if (bookingHtml) mainSections.push(bookingHtml)
 
     const contactHtml = renderContact(viewModel)
     if (contactHtml) mainSections.push(contactHtml)
