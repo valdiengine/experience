@@ -2177,3 +2177,77 @@ The working tree remains intentionally dirty with historical modified and untrac
 
 The immediate objective is a visible, usable, mobile-first Turistic OS vertical slice capable of demonstrating real traveler discovery and reservation plus the minimum owner reservation-management workflow.
 
+---
+
+## Product Booking Checkpoints — MVP-AVAILABILITY-RESERVATION-1
+
+### Phase A — Published checkpoint
+
+**`527bfb9`** — `feat(booking): add traveler booking product adapter`
+
+Implemented Product booking adapter with:
+- slug-based traveler routing
+- server-authoritative booking target resolution
+- traveler-scoped context
+- availability endpoint
+- reservation endpoint
+- safe traveler serialization
+- internal tenant/business/accommodation/destination IDs never accepted as browser authority
+- authoritative reservation path reaching the certified BOOKING-4.3 repository path
+
+### Phase B-UI — Published checkpoint
+
+**`360eb1b`** — `feat(booking): add interactive traveler booking widget`
+
+Implemented interactive traveler booking UI:
+- native date selection
+- availability request
+- loading state
+- available/unavailable state
+- traveler reservation form
+- reservation submission
+- confirmation state
+- recoverable `409 AVAILABILITY_CONFLICT`
+- duplicate request/submission protection
+- progressive enhancement
+- mobile-first integration into the existing company mini-app
+- confirmation code accepted only from successful server response
+- no client-generated confirmation code
+- no browser-authoritative internal IDs
+
+### Certification evidence (observed this session)
+
+- booking UI: `52/52`
+- availability/reservation Product gate: `23/23`
+- quote-form regression: `14/14`
+- PWA: `22/22`
+- production-ready: `67/67`
+
+### Multi-night semantic boundary
+
+Certified current behavior:
+- check-in is **inclusive**
+- check-out is **exclusive**
+- every required inventory night in the requested range is evaluated
+- whole-stay availability is **false** if any required night is blocked/unavailable
+- a required night with no reservable capacity prevents the complete stay from being considered available
+- the browser does **not** fabricate whole-stay availability
+- no fabricated whole-stay numeric capacity is presented
+
+**Explicit boundary — `MULTI_NIGHT_NUMERIC_CAPACITY_AGGREGATION_NOT_IMPLEMENTED`**
+
+The current certified contract does NOT promise a discrete numeric whole-stay bottleneck such as `4, 1, 3 → wholeStayCapacity = 1`, and `Math.min()` must NOT be added. This is not classified as a defect or infrastructure blocker; it is simply outside the current certified contract and may be designed later if Product UX requires a numeric whole-stay capacity.
+
+### Physical-certification boundary
+
+The following are **NOT** claimed by these product checkpoints and remain pending for the next milestone:
+- physical PostgreSQL/Neon traveler booking certification for this Product flow
+- physical Albasie booking
+- physical staging booking
+- Passenger multi-process booking registration certification
+- real browser/phone reservation confirmation
+
+### Next milestone
+
+**`PHYSICAL-BOOKING-1`** — physical traveler booking certification (traveler company page → select dates → real availability → submit reservation → certified PostgreSQL reservation path → repository-generated confirmation → confirmation UI; plus, where the domain supports capacity competition, last-available-capacity 409 conflict certification). Documented here as the next milestone; **not executed during this checkpoint**.
+
