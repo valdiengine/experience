@@ -69,6 +69,7 @@ export class ApplicationPresentationAdapter {
       navigation: this.#extractNavigation(ctx),
       zoneNavigation: this.#extractZoneNavigation(ctx),
       zoneContent: this.#extractZoneContent(ctx),
+      zonePresentation: this.#extractZonePresentation(ctx),
       seo: this.#extractSEO(ctx),
       i18n: this.#extractI18n(ctx),
       maps: this.#extractMaps(ctx),
@@ -105,6 +106,7 @@ export class ApplicationPresentationAdapter {
       navigation: this.#extractNavigation(ctx),
       zoneNavigation: this.#extractZoneNavigation(ctx),
       zoneContent: this.#extractZoneContent(ctx),
+      zonePresentation: this.#extractZonePresentation(ctx),
       seo: this.#extractSEO(ctx),
       i18n: this.#extractI18n(ctx),
       maps: this.#extractMaps(ctx),
@@ -311,6 +313,29 @@ export class ApplicationPresentationAdapter {
     }
     const { content, applicationId } = zoneContent
     return { ...content, applicationId }
+  }
+
+  /**
+   * APP-ZONE-PRESENT-1
+   *
+   * Passes the validated, Application-scoped visual identity to the view
+   * model. Scope authority is engine-derived (cssScope comes exclusively from
+   * generateZoneNavigationScope via the Paired navigation). version/variant
+   * are engine-owned; tokens are the effective (variant + overrides) set.
+   */
+  #extractZonePresentation(ctx) {
+    const zonePres = ctx.zonePresentation
+    if (!zonePres || !zonePres.content || !zonePres.scope) {
+      return null
+    }
+    const { content, applicationId, scope } = zonePres
+    return Object.freeze({
+      version: content.version,
+      variant: content.variant || null,
+      tokens: Object.freeze({ ...content.tokens }),
+      applicationId,
+      cssScope: scope.cssScope || null
+    })
   }
 
   #extractSEO(ctx) {

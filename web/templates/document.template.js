@@ -26,7 +26,8 @@ export function renderDocument(options = {}) {
     manifest = '/manifest.json',
     appleTouchIcon = null,
     themeColor = null,
-    appleWebApp = null
+    appleWebApp = null,
+    dataApplicationScope = null
   } = options
 
   const escapedTitle = escapeHtml(title)
@@ -39,6 +40,9 @@ export function renderDocument(options = {}) {
   const metaTags = renderMetaTags(escapedTitle, escapedDescription, robots)
   const jsonLdScripts = renderJsonLd(jsonLd)
   const visualIdentityTags = renderVisualIdentityTags(favicon, appleTouchIcon, themeColor, appleWebApp)
+  const applicationScopeAttr = dataApplicationScope
+    ? ` data-application-scope="${escapeAttr(dataApplicationScope)}"`
+    : ''
 
   return `<!DOCTYPE html>
 <html lang="${escapeAttr(language)}">
@@ -56,7 +60,7 @@ export function renderDocument(options = {}) {
   ${styles}
   ${head}
 </head>
-<body>
+<body${applicationScopeAttr}>
   <a href="#main-content" class="skip-link">Skip to main content</a>
   ${body}
   ${scripts}

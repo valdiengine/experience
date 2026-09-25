@@ -1,7 +1,7 @@
 # CURRENT_STATE.md
 
 > Exact snapshot of project state. Update after each completed phase.
-> Last updated: **APP-ZONE-TABS-2 — REAL VISUAL INTEGRATION: ISLA TEJA** (2026-09-25)
+> Last updated: **APP-ZONE-PRESENT-1 — FIRST LEVEL-2 APPLICATION-SCOPED VISUAL IDENTITY** (2026-09-25)
 
 ## Platform Status
 
@@ -148,6 +148,7 @@
 | 109 | RUNTIME-PERSISTENCE-1 | Runtime Persistence Context Wiring (JWT Config + Tenant Scoping + Passenger Path) | Infrastructure |
 | 110 | APP-ZONE-TABS-1 | Zone Navigation Content Contract + Presentation Tabs Strategy | Product |
 | 111 | APP-ZONE-TABS-2 | Real Visual Integration: Isla Teja (structured screen content + styling) | Product |
+| 112 | APP-ZONE-PRESENT-1 | First Level-2 Application-Scoped Visual Identity (declarative zonePresentation) | Product |
 
 ## Registered Capabilities (32)
 
@@ -2390,3 +2391,34 @@ Verified independent of these changes (involved files clean vs HEAD; identical r
 - Isla Teja currently reports `hasInstallableApp: false`. This does **not** invalidate cache/Application isolation: the PWA middleware supplies route-scoped defaults. It means Isla Teja does not yet define an explicit `installableApp` identity/configuration (name, short name, description, icons/colors and related install metadata).
 - Future explicit Isla Teja installability should extend the existing PWA capability (candidate future milestone: `APP-ZONE-PWA-1`), not create a Zone-specific Service Worker or duplicate cache subsystem.
 - The historical local `docs/pwa/PWA_2_1_ZONE_ISOLATION.md` describes the same core isolation contract but remains an untracked historical document; this audit does not add or modify it.
+
+## APP-ZONE-PRESENT-1 — First Level-2 Application-Scoped Visual Identity
+
+**Status:** IMPLEMENTED (2026-09-25) — first Level-2 capability on top of the committed ZoneNavigation/ZoneContent stack.
+**Verdict:** APP_ZONE_PRESENT_1_IMPLEMENTED (not staged/committed/pushed/deployed).
+**Scope:** an OPTIONAL, declarative, Application-scoped visual identity (`zonePresentation`) consumed by `valdi.app/isla-teja` as the first configured consumer. Zone Navigation (`layout: 'tabs'`), Zone Content, PWA, Booking, and router contracts are unchanged. corral/costa/albasie keep byte-identical Level-1 output.
+
+### Contract (experience layer)
+
+- `experience/presentation/zone.presentation.js` — declarative identity contract + fail-closed validator:
+  - Shape: `{ version: '1', variant?: Engine enum, tokens?: { <token>: CSS color } }`.
+  - `ZONE_PRESENTATION_VERSION = '1'` (sole supported version); `ZONE_PRESENTATION_VARIANTS = ['nature']`; `ZONE_PRESENTATION_TOKEN_KEYS` allowlist = `primary, secondary, accent, surface, background, text, textMuted, border` (minimal vocabulary — the exact `--color-*` custom properties Level-1 already consumes); `ZONE_PRESENTATION_RESERVED_KEYS = ['version','variant','tokens']`; `ZONE_PRESENTATION_VARIANT_TOKENS.nature = { primary:'#3a7d66', secondary:'#1f3530', accent:'#e8d5a3' }`.
+  - `ZONE_PRESENTATION_FORBIDDEN_FIELDS` (36 entries: scope/scopeId/applicationId/domain/class/className/selector/css/cssFile/path/url/style/html/rawHtml/htmlContent/innerHTML/dangerouslySetInnerHTML/image/icon/font/background/backgroundImage/layout/geometry/x/y/width/height/rotation/spacing/position/responsive/animation/behavior/script).
+  - Fail-closed rules: plain object; version required == '1'; variant optional Engine enum; tokens optional depth-1 object with ≥1 allowlisted key; values plain CSS colors (`#rgb/#rrggbb/#rrggbbaa`, `rgb()/rgba()/hsl()/hsla()` with channel range checks — rejects `rgb(300)`, `var(--x)`, `url(...)`, CSS-injection strings); ANY unknown/forbidden key rejects the WHOLE block (never silent stripping); `{ version: '1' }` alone is invalid (no visual direction); input unmutated; output deep-frozen; effective `tokens` = variant defaults ∪ config overrides; **scope never comes from config**.
+- `experience/presentation/zone.presentation.test.js` — **17/17** contract tests (variant/tokens accepted, merge order, hex+function color shapes, invalid colors + injection rejected, version enforcement, unknown variant/token/root/forbidden keys, tokens shape, bare version rejected, scope never from config, input unmutated, deep-frozen output, vocabulary constants, raw-CSS/customCss rejected).
+
+### Runtime flow (web layer)
+
+- `web/routing/route.config.js` — isla-teja route gains `zonePresentation: { version: '1', variant: 'nature', tokens: { primary:'#3a7d66', secondary:'#1f3530', accent:'#e8d5a3' } }` (declarative only; no other routes touched).
+- `web/application/application.presentation.js` — `#buildZonePresentation()` validates the route block (`validateZonePresentationConfig`), reuses the Paired navigation engine scope (`generateZoneNavigationScope` → cssScope `zn-valdi-app-isla-teja-isla-teja-main`), returns `{ content, applicationId, scope }`; ANY invalid block → `null` → App renders certified Level-1 (fail-closed). New `get zonePresentation()` accessor; context gains `zonePresentation`.
+- `application.presentation.adapter.js` — `#extractZonePresentation(ctx)` in BOTH `#fromApplicationContext` and `#fromPlainObject`; viewModel carries `{ version, variant, tokens (frozen), applicationId, cssScope }`, `null` when absent.
+- `application.presentation.renderer.js` — forwards `zonePresentation` in the frozen presentation payload.
+- `web/rendering/html.renderer.js` — `buildViewModel` exposes `zonePresentation`; `render()` passes `dataApplicationScope` (cssScope) to the document only when resolved; `renderStyles` appends `renderZonePresentationStyles(viewModel)` after the L1 styles — emits `[data-application-scope="<cssScope>"] { --color-<token>: <value>; ... }` gated on presence (no `:root` mutation, no new CSS vocabulary).
+- `web/templates/document.template.js` — optional `data-application-scope` attribute on `<body>` (escaped), absent by default → corral/costa/albasie HTML byte-identical.
+
+### Isolation proof + regression
+
+- `web/zone-presentation.test.js` — **11/11** integration tests (route carries block and validates; pipeline surfaces version/variant/tokens/applicationId/cssScope; **engine scope authority** — identity cssScope equals `generateZoneNavigationScope` output, never from config; SSR emits scoped identity + body hook; `data-application-scope` appears exactly twice; no `:root` mutation; L1 tabs/content/hero untouched; corral/costa carry no identity CSS/hook/tokens; albasie byte-equivalence unaffected; **invalid declared block fails closed** — Application still renders Level-1, then restored block is served again; config matches documented contract; no isla-teja-specific capability files).
+- Focused re-certification (all framework-free `node <file>` runners): ZonePresentation contract **17/17**, web zone-presentation **11/11**, ZoneNavigation contract **17/17**, ZoneContent **14/14**, tabs strategy **9/9**, web zone-navigation **12/12**, web zone-navigation.tabs-2 **13/13** = **93/93 core**, plus Presentation core **12/12** and Components **14/14**.
+- Pre-existing failures re-verified UNCHANGED: `presentation.integration` **36/37** (`testInternalFieldsNotExposed` vs `quoteAPIConfig`), `p15.8.3` **55/56** (capabilities freeze), `p15.10.2` **46/50** (4 known), `experience.test` **13/14** (config navigation), `showcase-1` **5/20** (albasie company config). `p15.8.4` **47/47** still green after the adapter/renderer additions.
+- Unrelated dirty working tree (277 lines historical) remains untouched; no staging/commit/push performed — staging control stays with the user/GitHub after this report.

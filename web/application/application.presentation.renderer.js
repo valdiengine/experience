@@ -85,6 +85,7 @@ export class ApplicationPresentationRenderer {
         navigation: adapted.navigation,
         zoneNavigation: adapted.zoneNavigation,
         zoneContent: adapted.zoneContent,
+        zonePresentation: adapted.zonePresentation,
         seo: adapted.seo,
         i18n: adapted.i18n,
         maps: adapted.maps,

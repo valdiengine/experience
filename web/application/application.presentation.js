@@ -31,6 +31,7 @@ import {
   validateZoneContentConfig,
   validateZoneContentPairing
 } from '../../experience/content/zone.content.js'
+import { validateZonePresentationConfig } from '../../experience/presentation/zone.presentation.js'
 
 export const APPLICATION_PRESENTATION_EVENTS = {
   APPLICATION_PRESENTATION_STARTED: 'application:presentation:started',
@@ -96,6 +97,7 @@ export class ApplicationPresentationContext {
       navigation: this.#buildNavigation(),
       zoneNavigation: this.#buildZoneNavigation(),
       zoneContent: this.#buildZoneContent(),
+      zonePresentation: this.#buildZonePresentation(),
       seo: this.#buildSEO(),
       i18n: this.#buildI18n(),
       maps: this.#buildMaps(),
@@ -383,6 +385,57 @@ export class ApplicationPresentationContext {
     }
   }
 
+  /**
+   * APP-ZONE-PRESENT-1
+   *
+   * Optional, declarative, Application-scoped visual identity (Level 2).
+   * Builds the presentation-safe ZonePresentation payload straight from the
+   * authoritative route configuration (ROUTE_CONFIG.zonePresentation).
+   *
+   * Fail-closed: the config is validated by the engine contract
+   * (validateZonePresentationConfig). Any invalid, forbidden, or unknown field
+   * rejects the whole block and this returns null — the Application then
+   * renders the certified Level-1 baseline. Scope authority never comes from
+   * the config: the Application-scoped cssScope is the Paired ZoneNavigation
+   * engine scope (generateZoneNavigationScope), so identity is always
+   * contained inside the App's own navigation scope.
+   */
+  #buildZonePresentation() {
+    const identity = this.#runtime.identity
+    if (!identity || !identity.applicationId || !identity.domain || !identity.route) {
+      return null
+    }
+
+    try {
+      const navigation = this.#buildZoneNavigation()
+      if (!navigation || !navigation.scope) {
+        return null
+      }
+
+      const routeEntry = ROUTE_CONFIG.routes.find(route =>
+        (route.domain === identity.domain && route.path === identity.route) ||
+        `${route.domain}${route.path}` === identity.applicationId
+      )
+      const raw = routeEntry && routeEntry.zonePresentation ? routeEntry.zonePresentation : null
+      if (!raw) {
+        return null
+      }
+
+      const validated = validateZonePresentationConfig(raw)
+      if (!validated.valid || !validated.presentation) {
+        return null
+      }
+
+      return Object.freeze({
+        content: validated.presentation,
+        applicationId: identity.applicationId,
+        scope: navigation.scope
+      })
+    } catch (error) {
+      return null
+    }
+  }
+
   #buildSEO() {
     const seo = this.#runtime.configuration?.seo || {}
 
@@ -515,6 +568,10 @@ export class ApplicationPresentationContext {
 
   get zoneContent() {
     return this.#presentationContext.zoneContent || null
+  }
+
+  get zonePresentation() {
+    return this.#presentationContext.zonePresentation || null
   }
 
   get composition() {

@@ -198,6 +198,18 @@ export const ROUTE_CONFIG = {
             note: 'La isla se conecta con el centro de Valdivia por el Puente Pedro de Valdivia; por su costanera se recorre el borde del río.'
           }
         ]
+      },
+      // APP-ZONE-PRESENT-1: first Level-2 Application-scoped visual identity.
+      // Declarative only. Environment "nature" default tokens come from the
+      // Engine; scope authority stays with generateZoneNavigationScope().
+      zonePresentation: {
+        version: '1',
+        variant: 'nature',
+        tokens: {
+          primary: '#3a7d66',
+          secondary: '#1f3530',
+          accent: '#e8d5a3'
+        }
       }
     },
 

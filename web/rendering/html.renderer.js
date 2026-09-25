@@ -138,6 +138,7 @@ export class HtmlRenderer {
       favicon: pwaConfig?.favicon || viewModel.branding?.favicon || null,
       appleTouchIcon: pwaConfig?.appleTouchIcon || viewModel.branding?.appleTouchIcon || null,
       themeColor: pwaConfig?.themeColor || null,
+      dataApplicationScope: viewModel.zonePresentation?.cssScope || null,
       appleWebApp: pwaEnabled ? {
         capable: true,
         title: pwaConfig?.name || viewModel.branding?.name || 'Application',
@@ -185,6 +186,7 @@ export class HtmlRenderer {
       navigation: normalizedNavigation,
       zoneNavigation: presentation.zoneNavigation || null,
       zoneContent: presentation.zoneContent || null,
+      zonePresentation: presentation.zonePresentation || null,
       seo: this.buildSeo(presentation),
       contact: normalizeContact(presentation.contact || {}),
       hero: {
@@ -1326,7 +1328,7 @@ ${utilityStyles}
     width: 100%;
   }
 }
-</style>${this.renderZoneNavigationStyles(viewModel)}`
+</style>${this.renderZoneNavigationStyles(viewModel)}${this.renderZonePresentationStyles(viewModel)}`
   }
 
   /**
@@ -1564,15 +1566,51 @@ ${zoneContentStyles}
 }
 
 @media (min-width: 768px) {
-  .${s} .zone-nav-rail {
-    overflow: visible;
+    .${s} .zone-nav-rail {
+      overflow: visible;
+    }
+
+    .${s} .zone-nav-tabs {
+      justify-content: center;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+  }
+  </style>`
   }
 
-  .${s} .zone-nav-tabs {
-    justify-content: center;
-    flex-wrap: wrap;
-    min-width: 0;
-  }
+  /**
+   * APP-ZONE-PRESENT-1 - Engine-generated, Application-scoped visual identity.
+   *
+   * Emitted ONLY when the Application's validated ZonePresentation config
+   * reaches the view model (gated on the engine-derived cssScope). Tokens map
+   * to the EXACT same --color-* custom properties the Level-1 engine styles
+   * already consume, so no new CSS vocabulary exists — only scoped
+   * reassignment under the Application's own navigation scope, never :root.
+   */
+  renderZonePresentationStyles(viewModel = {}) {
+    const zonePres = viewModel?.zonePresentation
+    if (!zonePres || !zonePres.cssScope) {
+      return ''
+    }
+
+    const s = zonePres.cssScope
+    const tokens = zonePres.tokens || {}
+    const entries = Object.entries(tokens)
+    if (entries.length === 0) {
+      return ''
+    }
+
+    const declarations = entries
+      .map(([name, value]) => `  --color-${name}: ${value};`)
+      .join('\n')
+
+    return `<style>
+/* ZonePresentation - Application-scoped visual identity (APP-ZONE-PRESENT-1) */
+/* Scope authority: cssScope derived exclusively from generateZoneNavigationScope. */
+/* Tokens === Level-1 --color-* custom properties; no new CSS vocabulary. */
+[data-application-scope="${s}"] {
+${declarations}
 }
 </style>`
   }
