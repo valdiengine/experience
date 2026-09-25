@@ -68,6 +68,7 @@ export class ApplicationPresentationAdapter {
       theme: this.#extractTheme(ctx),
       navigation: this.#extractNavigation(ctx),
       zoneNavigation: this.#extractZoneNavigation(ctx),
+      zoneContent: this.#extractZoneContent(ctx),
       seo: this.#extractSEO(ctx),
       i18n: this.#extractI18n(ctx),
       maps: this.#extractMaps(ctx),
@@ -103,6 +104,7 @@ export class ApplicationPresentationAdapter {
       theme: this.#extractTheme(ctx),
       navigation: this.#extractNavigation(ctx),
       zoneNavigation: this.#extractZoneNavigation(ctx),
+      zoneContent: this.#extractZoneContent(ctx),
       seo: this.#extractSEO(ctx),
       i18n: this.#extractI18n(ctx),
       maps: this.#extractMaps(ctx),
@@ -293,6 +295,22 @@ export class ApplicationPresentationAdapter {
       scope: zoneNav.scope,
       activeKey: null
     })
+  }
+
+  /**
+   * APP-ZONE-TABS-2
+   *
+   * Passes the validated Zone Content (content layer only) to the view model.
+   * The renderer maps panel component kinds to real, structured panel bodies;
+   * no visual/layout concern lives in the content.
+   */
+  #extractZoneContent(ctx) {
+    const zoneContent = ctx.zoneContent
+    if (!zoneContent || !zoneContent.content || !Array.isArray(zoneContent.content.items) || zoneContent.content.items.length === 0) {
+      return null
+    }
+    const { content, applicationId } = zoneContent
+    return { ...content, applicationId }
   }
 
   #extractSEO(ctx) {

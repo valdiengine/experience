@@ -627,6 +627,79 @@ ${itemsHtml}    </div>
  * as deep links to semantic panels (all panels rendered). JS enhancement later
  * applies ARIA tab semantics on the same server-rendered nodes.
  */
+
+/**
+ * Zone panel body (APP-ZONE-TABS-2): maps a zone content item (keyed by the
+ * navigation contentRef) to structured, traveler-visible panel markup by
+ * component kind. Content is delivered by the content layer and painted here;
+ * no visual/layout concern ever enters the content, and no destination
+ * conditionals live in presentation. Content-less routes (corral/costa today)
+ * keep the original generic intro baseline. All dynamic text is escaped.
+ */
+function renderZonePanelBody(item, content, destinationName) {
+  const label = item.label || ''
+  const intro = destinationName ? `${label} en ${destinationName}.` : `${label}.`
+
+  if (!content || typeof content !== 'object') {
+    return `        <p>${escapeHtml(intro)}</p>`
+  }
+
+  const lead = content.lead || intro
+  let inner = `        <p class="zone-content-lead">${escapeHtml(lead)}</p>\n`
+
+  if (content.component === 'zone.intro') {
+    const paragraphs = (Array.isArray(content.paragraphs) ? content.paragraphs : [])
+      .filter(p => typeof p === 'string')
+      .map(p => `          <p>${escapeHtml(p)}</p>\n`)
+      .join('')
+    if (paragraphs) {
+      inner += `        <div class="zone-content-paragraphs">\n${paragraphs}        </div>\n`
+    }
+  }
+
+  if (content.component === 'zone.list') {
+    const listItems = (Array.isArray(content.items) ? content.items : [])
+      .map(entry => {
+        let li = `          <li class="zone-content-item" data-zone-content-item>\n`
+        if (entry.name) {
+          li += `            <h4 class="zone-content-item-name">${escapeHtml(entry.name)}</h4>\n`
+        }
+        if (entry.description) {
+          li += `            <p class="zone-content-item-description">${escapeHtml(entry.description)}</p>\n`
+        }
+        if (entry.note) {
+          li += `            <p class="zone-content-item-note">${escapeHtml(entry.note)}</p>\n`
+        }
+        li += `          </li>\n`
+        return li
+      })
+      .join('')
+    if (listItems) {
+      inner += `        <ul class="zone-content-list">\n${listItems}        </ul>\n`
+    }
+  }
+
+  if (content.component === 'zone.map') {
+    let mapBody = ''
+    if (content.location) {
+      mapBody += `          <p class="zone-content-map-location">${escapeHtml(content.location)}</p>\n`
+    }
+    if (Array.isArray(content.coordinates) && content.coordinates.length === 2) {
+      const lat = Number(content.coordinates[0]).toFixed(4)
+      const lng = Number(content.coordinates[1]).toFixed(4)
+      mapBody += `          <p class="zone-content-map-coords">Lat ${escapeHtml(lat)} · Lng ${escapeHtml(lng)}</p>\n`
+    }
+    if (content.note) {
+      mapBody += `          <p class="zone-content-map-note">${escapeHtml(content.note)}</p>\n`
+    }
+    if (mapBody) {
+      inner += `        <div class="zone-content-map">\n${mapBody}        </div>\n`
+    }
+  }
+
+  return `        <div class="zone-content" data-zone-content="${escapeAttr(item.contentRef)}">\n${inner}      </div>`
+}
+
 export function renderZoneNavigation(viewModel = {}) {
   const zoneNav = viewModel.zoneNavigation
   if (!zoneNav || zoneNav.layout !== 'tabs' || !Array.isArray(zoneNav.items) || zoneNav.items.length === 0) {
@@ -639,6 +712,16 @@ export function renderZoneNavigation(viewModel = {}) {
   const safeScope = escapeAttr(cssScope)
   const safeLayout = escapeAttr(zoneNav.layout)
 
+  const contentByRef = new Map()
+  const zoneContent = viewModel.zoneContent
+  if (zoneContent && Array.isArray(zoneContent.items)) {
+    for (const entry of zoneContent.items) {
+      if (entry && entry.contentRef) {
+        contentByRef.set(entry.contentRef, entry)
+      }
+    }
+  }
+
   let tabsHtml = ''
   let panelsHtml = ''
   for (const item of zoneNav.items) {
@@ -650,10 +733,10 @@ export function renderZoneNavigation(viewModel = {}) {
     if (!label || !tabId || !panelId) continue
 
     const activeClass = item.active ? ' is-active' : ''
-    const intro = destinationName ? `${label} en ${escapeHtml(destinationName)}.` : `${label}.`
+    const content = contentByRef.get(item.contentRef) || null
 
     tabsHtml += `        <li><a class="zone-nav-tab${activeClass}" id="${escapeAttr(tabId)}" href="#${escapeAttr(panelId)}" data-zone-tab="${escapeAttr(key)}" data-zone-panel-ref="${escapeAttr(panelId)}">${label}</a></li>\n`
-    panelsHtml += `      <section class="zone-nav-panel${activeClass}" id="${escapeAttr(panelId)}" data-zone-panel="${escapeAttr(key)}" data-zone-content-ref="${escapeAttr(contentRef)}" aria-labelledby="${escapeAttr(tabId)}" tabindex="-1">\n        <h3>${label}</h3>\n        <p>${intro}</p>\n      </section>\n`
+    panelsHtml += `      <section class="zone-nav-panel${activeClass}" id="${escapeAttr(panelId)}" data-zone-panel="${escapeAttr(key)}" data-zone-content-ref="${escapeAttr(contentRef)}" aria-labelledby="${escapeAttr(tabId)}" tabindex="-1">\n        <h3>${label}</h3>\n${renderZonePanelBody(item, content, destinationName)}      </section>\n`
   }
 
   if (!tabsHtml.trim() || !panelsHtml.trim()) {

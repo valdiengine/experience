@@ -184,6 +184,7 @@ export class HtmlRenderer {
       },
       navigation: normalizedNavigation,
       zoneNavigation: presentation.zoneNavigation || null,
+      zoneContent: presentation.zoneContent || null,
       seo: this.buildSeo(presentation),
       contact: normalizeContact(presentation.contact || {}),
       hero: {
@@ -1344,6 +1345,101 @@ ${utilityStyles}
     }
 
     const s = zoneNav.scope.cssScope
+
+    const hasZoneContent = !!(viewModel?.zoneContent &&
+      Array.isArray(viewModel.zoneContent.items) &&
+      viewModel.zoneContent.items.length > 0)
+
+    // APP-ZONE-TABS-2: Level-1 structured panel content styling. Emitted ONLY
+    // when the Application actually delivers structured zone content (e.g.
+    // /isla-teja); content-less zone Applications keep the pristine engine
+    // baseline without zone content CSS.
+    const zoneContentStyles = hasZoneContent ? `
+/* Zone Content bodies (APP-ZONE-TABS-2): real structured panel content,
+   fully L1 token-driven and scoped to the per-Application cssScope. */
+.${s} .zone-content {
+  margin-top: var(--spacing-md);
+}
+
+.${s} .zone-content-lead {
+  color: var(--color-text-muted);
+  margin-bottom: var(--spacing-md);
+}
+
+.${s} .zone-content-paragraphs {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
+.${s} .zone-content-paragraphs p {
+  color: var(--color-text-muted);
+}
+
+.${s} .zone-content-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.${s} .zone-content-item {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+}
+
+.${s} .zone-content-item-name {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: var(--spacing-sm);
+}
+
+.${s} .zone-content-item-description {
+  color: var(--color-text-muted);
+  font-size: 0.925rem;
+  margin-bottom: var(--spacing-sm);
+}
+
+.${s} .zone-content-item-note {
+  color: var(--color-primary);
+  font-size: 0.875rem;
+}
+
+.${s} .zone-content-map {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.${s} .zone-content-map-location {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.${s} .zone-content-map-coords {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.${s} .zone-content-map-note {
+  color: var(--color-text);
+  font-size: 0.925rem;
+}
+
+@media (max-width: 767px) {
+  .${s} .zone-content-list {
+    grid-template-columns: 1fr;
+  }
+}
+` : ''
+
     return `<style>
 /* Zone Navigation (tabs) - scope: ${s} */
 /* The root selector is a same-element compound: the SSR root emits the
@@ -1441,6 +1537,7 @@ ${utilityStyles}
   color: var(--color-text-muted);
 }
 
+${zoneContentStyles}
 /* Progressive enhancement: only the active tabpanel is visible once enhanced */
 .${s}.zone-nav.is-enhanced .zone-nav-panel {
   display: none;

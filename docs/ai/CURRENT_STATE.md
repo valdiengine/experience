@@ -1,7 +1,7 @@
 # CURRENT_STATE.md
 
 > Exact snapshot of project state. Update after each completed phase.
-> Last updated: **APP-ZONE-TABS-1 — ZONE NAVIGATION CONTENT + PRESENTATION TABS STRATEGY** (2026-09-24)
+> Last updated: **APP-ZONE-TABS-2 — REAL VISUAL INTEGRATION: ISLA TEJA** (2026-09-25)
 
 ## Platform Status
 
@@ -147,6 +147,7 @@
 | 108 | BOOKING-4.3 | PostgreSQL Atomic Capacity & Double-Booking Protection (Physical Certification) | Product |
 | 109 | RUNTIME-PERSISTENCE-1 | Runtime Persistence Context Wiring (JWT Config + Tenant Scoping + Passenger Path) | Infrastructure |
 | 110 | APP-ZONE-TABS-1 | Zone Navigation Content Contract + Presentation Tabs Strategy | Product |
+| 111 | APP-ZONE-TABS-2 | Real Visual Integration: Isla Teja (structured screen content + styling) | Product |
 
 ## Registered Capabilities (32)
 
@@ -2258,7 +2259,7 @@ The following are **NOT** claimed by these product checkpoints and remain pendin
 
 **Status:** IMPLEMENTED (2026-09-24) — post-implementation audit **fixes applied and re-certified** (same session).
 **Verdict:** APP_ZONE_TABS_READY → **APP_ZONE_TABS_1_IMPLEMENTED** → **READY_FOR_COMMIT**
-**Scope:** First milestone of the FIRST mobile-first visual MVP presentation layer: engine-generated Zone Navigation shown as tabs, server-rendered, progressive enhancement, shared across Applications with identity isolation. **Not staged/committed/pushed/deployed.**
+**Scope:** First milestone of the FIRST mobile-first visual MVP presentation layer: engine-generated Zone Navigation shown as tabs, server-rendered, progressive enhancement, shared across Applications with identity isolation. **Committed as `14cfcf3` on `p15.3-development` (this section is history; the ABT-2 milestone below builds on it).**
 
 ### Contract
 
@@ -2329,4 +2330,45 @@ Verified independent of these changes (involved files clean vs HEAD; identical r
 - No changes to certified Booking/persistence infra, resolver/schema/loader/validator, or `#checkInfrastructureLeaks`.
 - No L2/L3 styling seams, no grid/radial/lotus/freeform/columns layouts, no History API.
 - Audit constraints honored: milestone not broadened, ZoneNavigation not redesigned, no new client framework; only root CSS selector, scoped root id, and instance-safe multi-root enhancement changed.
+
+## APP-ZONE-TABS-2 — Real Visual Integration: Isla Teja
+
+**Status:** IMPLEMENTED (2026-09-25) — first REAL Zone Application on top of the committed ZoneNavigation capability.
+**Verdict:** APP_ZONE_TABS_2_IMPLEMENTED
+**Scope:** `valdi.app/isla-teja` is now a real, mobile-first, SSR/no-JS readable Zone Application whose tab panels are painted with structured, validated traveler content delivered by the content layer (spanish, real Isla Teja places) — still `layout: 'tabs'`, still the same engine + capability + contract as `/corral` and `/costa`, with hard Application isolation preserved. The zone content is implemented and tested but **not staged/committed/pushed/deployed**.
+
+### Content contract (content layer)
+
+- `experience/content/zone.content.js` — structured panel CONTENT contract keyed by the exact `contentRef` the ZoneNavigation contract already uses (`namespace:zone:section`):
+  - `ZONE_CONTENT_COMPONENTS` mirrors `ZONE_NAVIGATION_COMPONENTS` (`zone.intro`, `zone.list`, `zone.map`).
+  - Kind-specific bodies: `zone.intro` → `paragraphs: string[]` (required, no `items`/map fields); `zone.list` → `items: [{ name, description?, note? }]` (required, name required, no map fields); `zone.map` → `location` + `coordinates [lat, lng]` (two finite numbers) + optional `note`, no intro/list fields.
+  - Optional `title`/`lead` (non-empty strings when present).
+  - Same forbidden field list as ZoneNavigation (x/y/width/height/rotation/circle/star/triangle/css/colors/styles/background/color/zIndex/html/rawHtml/htmlContent/innerHTML/dangerouslySetInnerHTML/className/style) + **recursive** raw-HTML detection (arrays/objects scanned) + **recursive Presentation-field rejection anywhere in the semantic shape** (nested list entries, nested objects — invalid config is rejected, never silently stripped) + payload is **deep-frozen** (deepFreeze).
+  - Validation: `validateZoneContentConfig` → `{ valid, errors, content }`. Pairing: `validateZoneContentPairing(navigation, content)` enforces same `scopeId`, exact contentRef coverage (no orphans, no gaps), no duplicate refs, and matching component kind per contentRef.
+  - `ZoneContent` class (`create`, `validate`, `items`/`size`, `hasItem`, `getItem`, `toJSON`) + `ZoneContentError`.
+- Content is authoritative in `web/routing/route.config.js` (`zoneContent`), same route the navigation lives on — presentation never resolves or invents it.
+
+### Source (application-scoped)
+
+- `web/routing/route.config.js` — `/isla-teja` (exact match, OWNERSHIP.EXPERIENCE, `destination: 'valdi'`, `zone: 'isla-teja'`, `experienceType: 'tourism-destination'`, `enabled: true`):
+  - `zoneNavigation`: scopeId `isla-teja-main`, 6 items descubre→gastronomia→alojamientos→actividades→servicios→mapa, refs `valdi:isla-teja:*`.
+  - `zoneContent`: scopeId `isla-teja-main` + 6 items (**1:1 with navigation**, same order): zone.intro (2 paragraphs), zone.list ×4 (Gastronomía: category-level copy — cocina sureña, panaderías & cafés, comida al aire libre; Alojamientos: category-level copy — hospedajes del sector universitario, hoteles del centro, cabañas ribereñas; Actividades: Museo de la Exploración R.A. Philippi, Jardín Botánico UACh, Parque Saval, costanera + Puente Pedro de Valdivia; Servicios: información turística, accesos/transporte urbano vía Puente Pedro de Valdivia, recorridos a pie y en bicicleta) and zone.map (`Isla Teja — Valdivia, Región de Los Ríos, Chile`, `coordinates [-39.8051, -73.2499]`, note). **Correction pass (2026-09-25):** all copy conservatively fact-checked — no invented lodgings/businesses (no Kunstmann as an Isla Teja venue), no direct Isla Teja→Corral ferry/embarcadero claims, no "mouth of the river" transport phrasing, and **Puente Pedro de Valdivia** (not Puente Calle-Calle) is the stated downtown-Isla Teja connection. The category copy is a prototype stand-in, deliberately category-level where verified named venues are not established.
+- `ApplicationPresentationContext` (`web/application/application.presentation.js`) — new `#buildZoneContent()` reads `ROUTE_CONFIG` keyed by identity, validates via `validateZoneContentConfig` + `validateZoneContentPairing` against `#buildZoneNavigation()`, and exposes `{ content, applicationId }` on the presentation context; `#buildZoneContent` returns `null` when a route has no `zoneContent` (corral/costa/albasie). New `get zoneContent()` accessor.
+- Adapter (`application.presentation.adapter.js`) — `#extractZoneContent(ctx)` in BOTH `#fromApplicationContext` and `#fromPlainObject`; returns `{ ...content, applicationId }` (keeps identity binding), `null` when absent.
+- Renderer (`application.presentation.renderer.js`) — `zoneContent` included in the presentation payload → `HtmlRenderer.buildViewModel`.
+
+### SSR + Level-1 presentation (generic, no destination conditionals)
+
+- `web/templates/component.templates.js` — `renderZonePanelBody(item, content, destinationName)` maps panel component kind → structured, escaped markup: `zone.intro` paragraphs, `zone.list` `<ul class="zone-content-list">` item cards (name/description/note), `zone.map` location/coordinates/note. Content resolution is **by contentRef** against `viewModel.zoneContent`. Content-less routes keep the byte-identical generic `<p>` baseline, and the `<h3>${label}</h3>` + `data-zone-content-ref` + tab/panel id invariants are untouched.
+- `web/rendering/html.renderer.js` — `renderZoneNavigationStyles` now emits the Level-1 token-driven `.${cssScope} .zone-content-*` rules **only when the Application delivers zoneContent** (corral/costa keep the pristine engine baseline, zero content CSS); the base tab/panel styles, the same-element compound root selector, and the instance-safe multi-root enhancement script are unchanged.
+
+### Tests (all green, plain `node <file>` framework-free runners)
+
+- `experience/content/zone.content.test.js` — **14/14** (vocabulary alignment, forbidden fields, valid config, style/visual/raw-HTML/duplicate-unstructured-contentRef rejection, **nested forbidden Presentation fields rejected deep inside list entries and nested objects**, kind contracts, pairing coverage/orphans/kinds/scope, ZoneContent class, immutability).
+- `web/zone-navigation.tabs-2.test.js` — **13/13** (route carries zoneContent, contract+pairing validate, real content semantics, pipeline serves content bound to identity, SSR renders real content, **strong escaping proof via the real pipeline — semantic ampersand renders as `&amp;` with no raw form in text nodes**, corral/costa keep generic baseline, no cross-application leak, presentation stays generic/no visual tokens/no CSS in content, a11y wiring, level-1 gated scoped styling, SEO, no duplicate capability files).
+- Baseline re-certified untouched: `web/zone-navigation.test.js` **12/12**, `zone.navigation` **17/17**, `zone.navigation.tabs` **9/9**, `presentation.integration` **36/37** (pre-existing `testInternalFieldsNotExposed`).
+
+### Git safety
+
+- Nothing staged, committed, pushed, or deployed by this milestone (nor by the **2026-09-25 correction pass**). Working tree remains intentionally dirty (historical files + ABT-2 changes). Changed files (this correction pass only): `web/routing/route.config.js` (factual Isla Teja copy), `experience/content/zone.content.js` (recursive Presentation-field rejection), `experience/content/zone.content.test.js` (nested rejection tests), `web/zone-navigation.tabs-2.test.js` (content-correct tests + strengthened escaping proof), `docs/ai/CURRENT_STATE.md` (this section + ABT-1 status fix).
 

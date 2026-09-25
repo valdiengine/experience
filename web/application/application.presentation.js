@@ -27,6 +27,10 @@ import { MIGRATION_STATE } from '../routing/route.migration.controller.js'
 import { ROUTE_CONFIG } from '../routing/route.config.js'
 import { validateZoneNavigationConfig } from '../../experience/navigation/zone.navigation.js'
 import { generateZoneNavigationScope } from '../../experience/navigation/zone.navigation.scope.js'
+import {
+  validateZoneContentConfig,
+  validateZoneContentPairing
+} from '../../experience/content/zone.content.js'
 
 export const APPLICATION_PRESENTATION_EVENTS = {
   APPLICATION_PRESENTATION_STARTED: 'application:presentation:started',
@@ -91,6 +95,7 @@ export class ApplicationPresentationContext {
       theme: this.#buildTheme(),
       navigation: this.#buildNavigation(),
       zoneNavigation: this.#buildZoneNavigation(),
+      zoneContent: this.#buildZoneContent(),
       seo: this.#buildSEO(),
       i18n: this.#buildI18n(),
       maps: this.#buildMaps(),
@@ -327,6 +332,57 @@ export class ApplicationPresentationContext {
     }
   }
 
+  /**
+   * APP-ZONE-TABS-2
+   *
+   * Builds the presentation-safe Zone Content payload. Content lives in the
+   * content layer (authoritative route configuration, same source as the
+   * ZoneNavigation content it paints) and is validated by the engine content
+   * contract before delivery. It is strictly cross-validated against the
+   * ZoneNavigation contentRefs/component kinds so a route can never present
+   * fragmented or orphaned panels. Layout/visual concerns are never stored
+   * here; the renderer only maps component kind → panel body.
+   */
+  #buildZoneContent() {
+    const identity = this.#runtime.identity
+    if (!identity || !identity.applicationId || !identity.domain || !identity.route) {
+      return null
+    }
+
+    try {
+      const navigation = this.#buildZoneNavigation()
+      if (!navigation || !navigation.content) {
+        return null
+      }
+
+      const routeEntry = ROUTE_CONFIG.routes.find(route =>
+        (route.domain === identity.domain && route.path === identity.route) ||
+        `${route.domain}${route.path}` === identity.applicationId
+      )
+      const raw = routeEntry && routeEntry.zoneContent ? routeEntry.zoneContent : null
+      if (!raw) {
+        return null
+      }
+
+      const validated = validateZoneContentConfig(raw)
+      if (!validated.valid || !validated.content) {
+        return null
+      }
+
+      const pairing = validateZoneContentPairing(navigation.content, validated.content)
+      if (!pairing.valid) {
+        return null
+      }
+
+      return Object.freeze({
+        content: validated.content,
+        applicationId: identity.applicationId
+      })
+    } catch (error) {
+      return null
+    }
+  }
+
   #buildSEO() {
     const seo = this.#runtime.configuration?.seo || {}
 
@@ -455,6 +511,10 @@ export class ApplicationPresentationContext {
 
   get zoneNavigation() {
     return this.#presentationContext.zoneNavigation || null
+  }
+
+  get zoneContent() {
+    return this.#presentationContext.zoneContent || null
   }
 
   get composition() {
