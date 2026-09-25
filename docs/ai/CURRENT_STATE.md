@@ -2368,7 +2368,25 @@ Verified independent of these changes (involved files clean vs HEAD; identical r
 - `web/zone-navigation.tabs-2.test.js` — **13/13** (route carries zoneContent, contract+pairing validate, real content semantics, pipeline serves content bound to identity, SSR renders real content, **strong escaping proof via the real pipeline — semantic ampersand renders as `&amp;` with no raw form in text nodes**, corral/costa keep generic baseline, no cross-application leak, presentation stays generic/no visual tokens/no CSS in content, a11y wiring, level-1 gated scoped styling, SEO, no duplicate capability files).
 - Baseline re-certified untouched: `web/zone-navigation.test.js` **12/12**, `zone.navigation` **17/17**, `zone.navigation.tabs` **9/9**, `presentation.integration` **36/37** (pre-existing `testInternalFieldsNotExposed`).
 
-### Git safety
+### Git closure
 
-- Nothing staged, committed, pushed, or deployed by this milestone (nor by the **2026-09-25 correction pass**). Working tree remains intentionally dirty (historical files + ABT-2 changes). Changed files (this correction pass only): `web/routing/route.config.js` (factual Isla Teja copy), `experience/content/zone.content.js` (recursive Presentation-field rejection), `experience/content/zone.content.test.js` (nested rejection tests), `web/zone-navigation.tabs-2.test.js` (content-correct tests + strengthened escaping proof), `docs/ai/CURRENT_STATE.md` (this section + ABT-1 status fix).
+- APP-ZONE-TABS-2 was committed on `p15.3-development` as `b58c13e` (`feat(app-zone): integrate Isla Teja zone content`) and pushed successfully. Post-push verification confirmed local and remote at `b58c13e629d43fe394666ef9ec3da7f38cee081f`.
+- Exact milestone manifest: 10 files (7 modified tracked + 3 new). Explicit staging was used; no `git add .`, `git add -A`, clean/reset/restore/stash, or destructive handling of the historical dirty tree.
+- Final focused re-certification before commit: ZoneContent **14/14**, APP-ZONE-TABS-2 **13/13**, ZoneNavigation integration **12/12**, ZoneNavigation contract **17/17**, tabs Presentation **9/9** = **65/65**.
 
+### APP-ZONE PWA Isolation Audit (2026-09-25)
+
+**Verdict:** EXISTING_PWA_ISOLATION_REUSED — no parallel APP ZONE PWA/cache system is required.
+
+- The current Stage execution path is `cPanel/Passenger -> web/staging.passenger.js -> startWeb() -> PublicWebServer`.
+- `PublicWebServer.initialize()` includes `createPWAMiddleware({ maxAge: 86400 })` in the real middleware chain after domain resolution and before route ownership/public-route handling.
+- `web/middleware/pwa.middleware.js` implements Application-scoped Service Worker cache isolation through `APPLICATION_CACHE_PREFIX = 'app-cache-{appIdNorm}-'`. Activation deletes only obsolete caches whose names start with that exact Application prefix; it does not perform generic cross-Application cache deletion.
+- Physical execution of the current `generateServiceWorker()` confirmed distinct identities:
+  - `valdi.app/isla-teja` -> scope `/isla-teja/`, prefix `app-cache-valdi_app_isla_teja-`, cache `app-cache-valdi_app_isla_teja-v1`
+  - `valdi.app/corral` -> `app-cache-valdi_app_corral-v1`
+  - `valdi.app/costa` -> `app-cache-valdi_app_costa-v1`
+  - `valdi.app/albasie` -> `app-cache-valdi_app_albasie-v1`
+- The real `ApplicationResolver` successfully resolves `{ domain: 'valdi.app', path: '/isla-teja/' }` as ApplicationIdentity `{ domain: 'valdi.app', route: '/isla-teja/', applicationId: 'valdi.app/isla-teja/', destination: 'valdi', region: null, zone: 'isla-teja', type: 'zone' }`.
+- Isla Teja currently reports `hasInstallableApp: false`. This does **not** invalidate cache/Application isolation: the PWA middleware supplies route-scoped defaults. It means Isla Teja does not yet define an explicit `installableApp` identity/configuration (name, short name, description, icons/colors and related install metadata).
+- Future explicit Isla Teja installability should extend the existing PWA capability (candidate future milestone: `APP-ZONE-PWA-1`), not create a Zone-specific Service Worker or duplicate cache subsystem.
+- The historical local `docs/pwa/PWA_2_1_ZONE_ISOLATION.md` describes the same core isolation contract but remains an untracked historical document; this audit does not add or modify it.
