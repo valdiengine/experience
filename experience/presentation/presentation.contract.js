@@ -122,7 +122,11 @@ export const SECTION_TYPES = [
   'contact',
   'footer',
   'content',
-  'cta'
+  'cta',
+  'zone.navigation',
+  'zone.intro',
+  'zone.list',
+  'zone.map'
 ]
 
 export const MODULE_TYPES = [

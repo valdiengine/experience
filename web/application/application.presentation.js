@@ -24,6 +24,9 @@
 import { RENDERING_MODE, PRESENTATION_STATUS } from './application.runtime.js'
 import { OWNERSHIP } from '../routing/route.registry.js'
 import { MIGRATION_STATE } from '../routing/route.migration.controller.js'
+import { ROUTE_CONFIG } from '../routing/route.config.js'
+import { validateZoneNavigationConfig } from '../../experience/navigation/zone.navigation.js'
+import { generateZoneNavigationScope } from '../../experience/navigation/zone.navigation.scope.js'
 
 export const APPLICATION_PRESENTATION_EVENTS = {
   APPLICATION_PRESENTATION_STARTED: 'application:presentation:started',
@@ -87,6 +90,7 @@ export class ApplicationPresentationContext {
       branding: this.#buildBranding(),
       theme: this.#buildTheme(),
       navigation: this.#buildNavigation(),
+      zoneNavigation: this.#buildZoneNavigation(),
       seo: this.#buildSEO(),
       i18n: this.#buildI18n(),
       maps: this.#buildMaps(),
@@ -274,6 +278,55 @@ export class ApplicationPresentationContext {
     })
   }
 
+  /**
+   * APP-ZONE-TABS-1
+   *
+   * Builds the presentation-safe Zone Navigation payload. Content comes from
+   * authoritative route configuration (ROUTE_CONFIG.zoneNavigation), matched
+   * by ApplicationIdentity (domain + route/applicationId). The engine scope is
+   * derived server-side from the ApplicationIdentity plus the content scopeId.
+   *
+   * Layout selection intentionally does NOT happen here: this context exposes
+   * validated content + engine scope only, and the presentation adapter
+   * applies the tabs strategy.
+   */
+  #buildZoneNavigation() {
+    const identity = this.#runtime.identity
+    if (!identity || !identity.applicationId || !identity.domain || !identity.route) {
+      return null
+    }
+
+    try {
+      const routeEntry = ROUTE_CONFIG.routes.find(route =>
+        (route.domain === identity.domain && route.path === identity.route) ||
+        `${route.domain}${route.path}` === identity.applicationId
+      )
+      const raw = routeEntry && routeEntry.zoneNavigation ? routeEntry.zoneNavigation : null
+      if (!raw) {
+        return null
+      }
+
+      const validated = validateZoneNavigationConfig(raw)
+      if (!validated.valid || !validated.navigation) {
+        return null
+      }
+
+      const { scopeId, items } = validated.navigation
+      const scope = generateZoneNavigationScope(identity.applicationId, scopeId)
+
+      return Object.freeze({
+        content: Object.freeze({
+          scopeId,
+          items: Object.freeze(items.map(item => Object.freeze({ ...item })))
+        }),
+        scope: Object.freeze(scope),
+        applicationId: identity.applicationId
+      })
+    } catch (error) {
+      return null
+    }
+  }
+
   #buildSEO() {
     const seo = this.#runtime.configuration?.seo || {}
 
@@ -398,6 +451,10 @@ export class ApplicationPresentationContext {
 
   get configuration() {
     return this.#runtime.configuration
+  }
+
+  get zoneNavigation() {
+    return this.#presentationContext.zoneNavigation || null
   }
 
   get composition() {

@@ -75,7 +75,18 @@ export const ROUTE_CONFIG = {
       type: 'zone',
       experienceType: 'tourism-destination',
       migrationState: 'EXPERIENCE',
-      enabled: true
+      enabled: true,
+      zoneNavigation: {
+        scopeId: 'corral-main',
+        items: [
+          { key: 'descubre', label: 'Descubre', component: 'zone.intro', contentRef: 'valdi:corral:descubre' },
+          { key: 'gastronomia', label: 'Gastronomía', component: 'zone.list', contentRef: 'valdi:corral:gastronomia' },
+          { key: 'alojamientos', label: 'Alojamientos', component: 'zone.list', contentRef: 'valdi:corral:alojamientos' },
+          { key: 'actividades', label: 'Actividades', component: 'zone.list', contentRef: 'valdi:corral:actividades' },
+          { key: 'comercio', label: 'Comercio', component: 'zone.list', contentRef: 'valdi:corral:comercio' },
+          { key: 'mapa', label: 'Mapa', component: 'zone.map', contentRef: 'valdi:corral:mapa' }
+        ]
+      }
     },
     {
       domain: 'valdi.app',
@@ -87,7 +98,18 @@ export const ROUTE_CONFIG = {
       type: 'zone',
       experienceType: 'tourism-destination',
       migrationState: 'EXPERIENCE',
-      enabled: true
+      enabled: true,
+      zoneNavigation: {
+        scopeId: 'costa-main',
+        items: [
+          { key: 'descubre', label: 'Descubre', component: 'zone.intro', contentRef: 'valdi:costa:descubre' },
+          { key: 'gastronomia', label: 'Gastronomía', component: 'zone.list', contentRef: 'valdi:costa:gastronomia' },
+          { key: 'alojamientos', label: 'Alojamientos', component: 'zone.list', contentRef: 'valdi:costa:alojamientos' },
+          { key: 'actividades', label: 'Actividades', component: 'zone.list', contentRef: 'valdi:costa:actividades' },
+          { key: 'comercio', label: 'Comercio', component: 'zone.list', contentRef: 'valdi:costa:comercio' },
+          { key: 'mapa', label: 'Mapa', component: 'zone.map', contentRef: 'valdi:costa:mapa' }
+        ]
+      }
     },
 
     // natales.app routes

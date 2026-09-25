@@ -41,6 +41,10 @@ export class ComponentRegistry {
     this.#sections.set('content', { id: 'content', name: 'Content', type: 'section' })
     this.#sections.set('cta', { id: 'cta', name: 'Call to Action', type: 'section' })
     this.#sections.set('quote', { id: 'quote', name: 'Quote', type: 'section' })
+    this.#sections.set('zone.navigation', { id: 'zone.navigation', name: 'Zone Navigation', type: 'section' })
+    this.#sections.set('zone.intro', { id: 'zone.intro', name: 'Zone Introduction', type: 'section' })
+    this.#sections.set('zone.list', { id: 'zone.list', name: 'Zone List', type: 'section' })
+    this.#sections.set('zone.map', { id: 'zone.map', name: 'Zone Map', type: 'section' })
 
     this.#modules.set('reservations', { id: 'reservations', name: 'Reservations', type: 'module' })
     this.#modules.set('availability', { id: 'availability', name: 'Availability', type: 'module' })

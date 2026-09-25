@@ -1,7 +1,7 @@
 # CURRENT_STATE.md
 
 > Exact snapshot of project state. Update after each completed phase.
-> Last updated: **PLATFORM v4.5 — BOOKING-4.3 PHYSICAL POSTGRESQL CERTIFIED** (2026-09-12)
+> Last updated: **APP-ZONE-TABS-1 — ZONE NAVIGATION CONTENT + PRESENTATION TABS STRATEGY** (2026-09-24)
 
 ## Platform Status
 
@@ -146,6 +146,7 @@
 | 107 | P15.11 | MVP Live Integration — Quote, Notification & File Persistence | Product |
 | 108 | BOOKING-4.3 | PostgreSQL Atomic Capacity & Double-Booking Protection (Physical Certification) | Product |
 | 109 | RUNTIME-PERSISTENCE-1 | Runtime Persistence Context Wiring (JWT Config + Tenant Scoping + Passenger Path) | Infrastructure |
+| 110 | APP-ZONE-TABS-1 | Zone Navigation Content Contract + Presentation Tabs Strategy | Product |
 
 ## Registered Capabilities (32)
 
@@ -2250,4 +2251,82 @@ The following are **NOT** claimed by these product checkpoints and remain pendin
 ### Next milestone
 
 **`PHYSICAL-BOOKING-1`** — physical traveler booking certification (traveler company page → select dates → real availability → submit reservation → certified PostgreSQL reservation path → repository-generated confirmation → confirmation UI; plus, where the domain supports capacity competition, last-available-capacity 409 conflict certification). Documented here as the next milestone; **not executed during this checkpoint**.
+
+---
+
+## APP-ZONE-TABS-1 — Zone Navigation Content Contract + Presentation Tabs Strategy
+
+**Status:** IMPLEMENTED (2026-09-24) — post-implementation audit **fixes applied and re-certified** (same session).
+**Verdict:** APP_ZONE_TABS_READY → **APP_ZONE_TABS_1_IMPLEMENTED** → **READY_FOR_COMMIT**
+**Scope:** First milestone of the FIRST mobile-first visual MVP presentation layer: engine-generated Zone Navigation shown as tabs, server-rendered, progressive enhancement, shared across Applications with identity isolation. **Not staged/committed/pushed/deployed.**
+
+### Contract
+
+- `experience/navigation/zone.navigation.js` — core content contract: `ZoneNavigation`, `createZoneNavigation`, `validateZoneNavigationConfig`, `ZoneNavigationError`. Layouts: `['tabs']`. Components: `['zone.intro','zone.list','zone.map']`. Forbidden content fields (x/y/width/height/rotation/circle/star/triangle/css/colors/styles/background/color/zIndex), raw HTML in string values, duplicate keys, empty items, invalid `scopeId`/`item.key` (`^[a-z0-9][a-z0-9-]*$`), non-structured `contentRef` (`^\w+:\w+:\w+$`), and unresolvable components are all rejected. Internal items and returned copies are frozen (immutability contract).
+- `experience/navigation/zone.navigation.scope.js` — engine-generated scope: `scope = applicationId::scopeId`, `cssScope = zn-<sanitized app>-<sanitized scope>`. Scope is server-derived from ApplicationIdentity (domain+route) + scopeId; never browser-supplied.
+- Content and presentation are decoupled: content (`items[] {key,label,component,contentRef}`) never changes when the layout changes.
+
+### Presentation strategy (first seam)
+
+- `experience/presentation/zone.navigation.tabs.js` — `presentZoneNavigationTabs({content, scope, activeKey})` returns a frozen descriptor (`layout:'tabs'`, items with `tabId`/`panelId`, scope, activeKey) plus `ZONE_TABS_EVENTS`.
+- Strategy applied in the presentation **adapter** (`#extractZoneNavigation(ctx)`); context exposes validated content + engine scope only.
+- Registry (`component.registry.js`) + `SECTION_TYPES` (`presentation.contract.js`) + component barrel now include `zone.navigation`, `zone.intro`, `zone.list`, `zone.map`.
+
+### Content source (application-scoped, not whitelist-expanded)
+
+- `web/routing/route.config.js` — `zoneNavigation` added to `/corral` (scopeId `corral-main`, 6 items: descubre → zone.intro `valdi:corral:descubre`; gastronomia/alojamientos/actividades/comercio → zone.list `valdi:corral:*`; mapa → zone.map `valdi:corral:mapa`) and `/costa` (scopeId `costa-main`, same 6 items with `valdi:costa:*`).
+- `ApplicationPresentationContext.#buildZoneNavigation()` reads `ROUTE_CONFIG` **directly** keyed by identity (domain+route or `domain+path` == applicationId). It is deliberately NOT carried through `runtime.configuration` / loader / schema / validator whitelist, so `resolver`, `schema`, `loader`, `validator` and `#checkInfrastructureLeaks` are untouched.
+
+### SSR + progressive enhancement
+
+- `web/templates/component.templates.js` — `renderZoneNavigation` SSR: `section.zone-nav.<cssScope>` with a deterministic root DOM id `id="${cssScope}-nav"` (server-derived from the engine scope — never a global literal, and unique per Application) + plain anchor tabs (`href="#<panelId>"`) + stacked semantic panels (`aria-labelledby`, `tabindex`, `data-zone-*`). Fully readable/shareable without JS.
+- `web/rendering/html.renderer.js` — scoped L1 styles (`renderZoneNavigationStyles`, all selectors prefixed `.<cssScope>`; the root rule is a **same-element compound** `.${cssScope}.zone-nav` matching the SSR class structure; rail `overflow-x:auto` on mobile only, no page-level horizontal overflow, no `body{overflow-x:hidden}` hack) + a progressive-enhancement IIFE that is **instance-safe**: it discovers every `[data-zone-nav]` root via `querySelectorAll` and enhances each independently with root-local tab/panel lookup (adds `role=tablist/tab/tabpanel`, `aria-selected`/`aria-controls`, keyboard Arrow/Home/End/Enter/Space, click, `hashchange` + hash-driven initial selection). Roles/aria-selected are enhancement-only — never SSR markup.
+- **URL state decision (finalized): hash-based panel anchors** (`#<panelId>`, e.g. `#zn-valdi-app-corral-corral-main-panel-descubre`). No History API. JS activation sets `location.hash`; the `hashchange` listener preserves back-button semantics. SSR baseline + any in-page anchor link navigates to the stacked (no-JS) panel; JS enhancement upgrades to tabs.
+
+### Two-Application no-leak proof
+
+- `/corral` renders scope `valdi.app/corral::corral-main` (cssScope `zn-valdi-app-corral-corral-main`, root id `zn-valdi-app-corral-corral-main-nav`) and `/costa` renders `valdi.app/costa::costa-main` — tabId/panelId/scope/root-id are disjoint (verified by `web/zone-navigation.test.js`). A non-zone application renders with `zoneNavigation: null`, unchanged.
+
+### Tests (all green, plain `node <file>` framework-free runners)
+
+- `experience/navigation/zone.navigation.test.js` — **17/17**
+- `experience/presentation/zone.navigation.tabs.test.js` — **9/9**
+- `web/zone-navigation.test.js` — **12/12** (integration through real `HtmlRenderer`: route config, corral+costa pipelines, two-app no-leak, non-zone unchanged, SSR no-JS readable, a11y wiring relationships, responsive no page horizontal overflow, SEO still renders for zones, **plus post-implementation audit coverage** — root CSS selector matches the SSR-emitted class structure via cssSelectorMatchesClassSet, root DOM id is deterministic/scoped/unique (never `explorar`), and a framework-free DOM stub executes the real enhancement script against two roots proving independent enhancement, root-local tab/panel lookup, and no cross-instance hashchange/click selection).
+
+### Post-implementation audit re-certification (2026-09-24)
+
+- Fixes applied: root CSS selector `.${cssScope} .zone-nav` → same-element `.${cssScope}.zone-nav` (also the two `.is-enhanced` panel rules); root id `id="explorar"` → `id="${cssScope}-nav"`; enhancement script `document.querySelector('[data-zone-nav]')` → `document.querySelectorAll('[data-zone-nav]')` with per-root `enhance()`.
+- Re-run gates (exact counts): focused `web/zone-navigation.test.js` 12/12, `zone.navigation` 17/17, `zone.navigation.tabs` 9/9, `presentation` 12/12, `components` 14/14, `web.test.js` 14/14, `visual-identity` 27/27, `presentation.integration` 36/37 (pre-existing), p15.9.0 45/45, p15.9.9 73/73, p15.10.0 51/51, p15.10.1 73/73, p15.10.3 55/55; prod-stage-1 {rendering-parity, e2e 35/35, zone-identity 33/33, routing.regression} all pass; p15.6.2 41/41, p15.6.3 26/26, p15.7.1–7.4 (41/35/36/52), p15.8.0 70/70, p15.8.1 74/74, p15.8.2 60/60, p15.8.4 47/47, p15.8.5 35/35, p15.8.3 55/56 (pre-existing), p15.9.1 89/89, p15.9.2 50/50 (flake re-confirmed: 49/50 once on 1-ms timestamp), p15.9.5 41/41, p15.9.6 48/48, p15.9.7 41/41, p15.9.8 76/76, p15.11.0–11.4/11.7 (52/58/70/30/47/24); runtime smoke 6/6, health 15/15, bootstrap 8/8; `booking43` 24/24, `visitor.lifecycle` 27/27; `experience/experience.test.js` 13/14 (pre-existing albasie navigation null).
+
+### Regression evidence this session
+
+- `experience/presentation/presentation.test.js` 12/12; `components.test.js` 14/14; `experience/p15.2.mvp.test.js` 14/14.
+- Booking/Product certification: `booking3` 23/23, `booking31` 14/14, `booking41` 36/36, `booking42` 30/30, `booking43` 24/24, `capability.base` EXIT 0.
+- Aggregate lifecycles: availability 31/31, commercial 33/33, business 36/36, reservation 21/21, visitor 27/27.
+- Runtime: smoke 6/6, health 15/15, bootstrap 8/8.
+- SSR/PWA/presentation gates: `web.test.js` 14/14, `visual-identity` 27/27, `production.ready` 67/67, `config-authority` 6/6, mvp-first-visual 1–4, `mvp-booking-ui-1` 52/52, `mvp-availability-reservation-1`, `mvp-prod-1`, `mvp-demo-1`, ecosystem 1/2, owner-1/2 (70/70), master-admin-1, quote-form, staging-host-resolution, dev.localhost.
+- Prod-stage-1: zone-identity, routing.regression, rendering-parity, e2e, destination-presentation — all pass.
+- p15 gates pass: 7.1–7.4, 8.0/8.1/8.2/8.4/8.5, 9.0/9.1/9.2/9.5/9.6/9.7/9.8/9.9, 10.0/10.1/10.3/10.4, 11.0 (52)/11.1 (58)/11.2 (70)/11.3/11.4/11.7/11.7.orchestration, 6.2 (41)/6.3 (26).
+
+### Pre-existing / environmental failures (NOT introduced by this milestone)
+
+Verified independent of these changes (involved files clean vs HEAD; identical result with zoneNavigation content stripped; or environmental state):
+
+- `web/p15.8.3.test.js` — 55/56: `Capabilities array is immutable` — `application.resolver.js` `#composeCapabilities` rebuilds capabilities via `.map()` without freezing (`web/application/application.resolver.js:378`,`:445`). Resolver file identical to HEAD.
+- `web/p15.9.9.1.test.js` — 33/33 assertions pass then uncaught throw: `saveDraft(TEST_APP_ID, ...)` on a **fresh empty** in-memory persistence instance (`web/application/persistence/inmemory.application.persistence.js:121-126` requires the application to exist first). Test defect; persistence file identical to HEAD.
+- `web/presentation.integration.test.js` — 36/37: `testInternalFieldsNotExposed` lazy substring `'config'` matches the legitimate pre-existing `window.quoteAPIConfig` inline script (`web/rendering/html.renderer.js` quote script, present before this milestone; probe confirmed no zone markup on the valdi.app home rendering).
+- `web/p15.10.2.test.js` — 46/50: live-route discovery assertions expect `inspection.success` but `createRouteMigrationManager().inspectRoute` returns `{valid,route,migration,transitions,preview}` — no `success` key. Identical with/without the corral/costa zoneNavigation content.
+- `web/showcase-1.test.js` — 5/20 and `experience/experience.test.js` 13/14: albasie config data still carries `type: tourism-operator`, `hero: null`, `navigation: null`; showcase/loader expect boat/hero/navigation content. Config data unchanged by this milestone.
+- `web/persistence-root-safety.regression.test.js` — section 5 expects "only one interaction file"; `data/interactions/valdi.app/albasie/interactions/` currently holds **52 real interaction files** (real product data — not touched).
+- `web/p15.11.5.test.js` (CRLF header-injection error) and `web/p15.11.6.test.js` (WhatsApp phone validation error) — notification adapter certification suites, files untouched by this milestone.
+- `web/push-4.2-diagnostic.test.js` — 4/5 (campaign not marked sent in staging push path), push/staging infra untouched.
+- `web/p15.9.2.test.js` — flaky once (49/50), then 3 consecutive 50/50; imports do not include any milestone files.
+- Server/live-driven suites not run offline: p15.6.4.live, p15.6.4.e2e, live-1/2, dev-start, owner-stage-2-e2e, push-*, pwa-*, pilot-*, pwa-2.x.
+
+### Explicitly NOT done
+
+- No `git add`/commit/stage/push/deploy. Working tree remains intentionally dirty (historical + this milestone's untracked/modified files) — finalization owned by user/ChatGPT.
+- No changes to certified Booking/persistence infra, resolver/schema/loader/validator, or `#checkInfrastructureLeaks`.
+- No L2/L3 styling seams, no grid/radial/lotus/freeform/columns layouts, no History API.
+- Audit constraints honored: milestone not broadened, ZoneNavigation not redesigned, no new client framework; only root CSS selector, scoped root id, and instance-safe multi-root enhancement changed.
 

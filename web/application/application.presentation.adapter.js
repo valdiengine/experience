@@ -17,6 +17,7 @@
 
 import { ApplicationPresentationContext } from './application.presentation.js'
 import { PresentationAdapter } from '../../experience/presentation/presentation.adapter.js'
+import { presentZoneNavigationTabs } from '../../experience/presentation/zone.navigation.tabs.js'
 
 export const INTERNAL_FIELDS = [
   'config',
@@ -66,6 +67,7 @@ export class ApplicationPresentationAdapter {
       branding: this.#extractBranding(ctx),
       theme: this.#extractTheme(ctx),
       navigation: this.#extractNavigation(ctx),
+      zoneNavigation: this.#extractZoneNavigation(ctx),
       seo: this.#extractSEO(ctx),
       i18n: this.#extractI18n(ctx),
       maps: this.#extractMaps(ctx),
@@ -100,6 +102,7 @@ export class ApplicationPresentationAdapter {
       branding: this.#extractBranding(ctx),
       theme: this.#extractTheme(ctx),
       navigation: this.#extractNavigation(ctx),
+      zoneNavigation: this.#extractZoneNavigation(ctx),
       seo: this.#extractSEO(ctx),
       i18n: this.#extractI18n(ctx),
       maps: this.#extractMaps(ctx),
@@ -270,6 +273,26 @@ export class ApplicationPresentationAdapter {
       header: { items: [] },
       footer: { columns: [] }
     }
+  }
+
+  /**
+   * APP-ZONE-TABS-1
+   *
+   * Applies the tabs presentation strategy to the validated ZoneNavigation
+   * content + engine scope produced by the ApplicationPresentationContext.
+   * Content is never mutated; layout/id details are presentation-only.
+   */
+  #extractZoneNavigation(ctx) {
+    const zoneNav = ctx.zoneNavigation
+    if (!zoneNav || !zoneNav.content || !Array.isArray(zoneNav.content.items) || zoneNav.content.items.length === 0) {
+      return null
+    }
+
+    return presentZoneNavigationTabs({
+      content: zoneNav.content,
+      scope: zoneNav.scope,
+      activeKey: null
+    })
   }
 
   #extractSEO(ctx) {

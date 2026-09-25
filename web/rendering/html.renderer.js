@@ -19,7 +19,8 @@ import {
   renderFooter,
   renderInstallCTA,
   renderCategories,
-  renderFeatured
+  renderFeatured,
+  renderZoneNavigation
 } from '../templates/component.templates.js'
 import { escapeHtml, escapeUrl } from './html.escape.js'
 import { DesignTokens, createDesignTokens } from './design.tokens.js'
@@ -182,6 +183,7 @@ export class HtmlRenderer {
         name: branding.name || company.name || destination.name || ''
       },
       navigation: normalizedNavigation,
+      zoneNavigation: presentation.zoneNavigation || null,
       seo: this.buildSeo(presentation),
       contact: normalizeContact(presentation.contact || {}),
       hero: {
@@ -358,6 +360,9 @@ export class HtmlRenderer {
 
     const mainSections = []
     mainSections.push(renderHero(viewModel))
+
+    const zoneNavHtml = renderZoneNavigation(viewModel)
+    if (zoneNavHtml) mainSections.push(zoneNavHtml)
 
     const categoriesHtml = renderCategories(viewModel)
     if (categoriesHtml) mainSections.push(categoriesHtml)
@@ -1320,6 +1325,158 @@ ${utilityStyles}
     width: 100%;
   }
 }
+</style>${this.renderZoneNavigationStyles(viewModel)}`
+  }
+
+  /**
+   * APP-ZONE-TABS-1 - L1 engine base styling for Zone Navigation (tabs).
+   *
+   * Every selector is prefixed with the per-Application cssScope so no two
+   * Applications can collide on CSS selectors/scopes. Mobile uses an
+   * internally-scrolling compact rail (overflow-x on the rail only) so the
+   * page itself never overflows horizontally; desktop centers the pills and
+   * panels act as tabpanels once enhanced.
+   */
+  renderZoneNavigationStyles(viewModel = {}) {
+    const zoneNav = viewModel?.zoneNavigation
+    if (!zoneNav || !zoneNav.scope || !zoneNav.scope.cssScope) {
+      return ''
+    }
+
+    const s = zoneNav.scope.cssScope
+    return `<style>
+/* Zone Navigation (tabs) - scope: ${s} */
+/* The root selector is a same-element compound: the SSR root emits the
+   zone-nav class and the scoped class on the very same element. */
+.${s}.zone-nav {
+  padding: var(--spacing-section) var(--spacing-md);
+}
+
+.${s} .zone-nav-container {
+  max-width: var(--layout-max-width);
+  margin: 0 auto;
+}
+
+.${s} .zone-nav-title {
+  text-align: center;
+  font-size: 1.5rem;
+  color: var(--color-text);
+  margin-bottom: var(--spacing-xl);
+}
+
+.${s} .zone-nav-rail {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  max-width: 100%;
+}
+
+.${s} .zone-nav-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.${s} .zone-nav-tabs {
+  list-style: none;
+  margin: 0;
+  padding: var(--spacing-xs);
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--spacing-sm);
+  min-width: max-content;
+}
+
+.${s} .zone-nav-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 var(--spacing-lg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.925rem;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.${s} .zone-nav-tab:hover,
+.${s} .zone-nav-tab:focus-visible {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.${s} .zone-nav-tab.is-active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.${s} .zone-nav-panels {
+  margin-top: var(--spacing-lg);
+}
+
+.${s} .zone-nav-panel {
+  padding: var(--spacing-lg) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.${s} .zone-nav-panel:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-md);
+}
+
+.${s} .zone-nav-panel h3 {
+  font-size: 1.25rem;
+  color: var(--color-text);
+  margin-bottom: var(--spacing-md);
+}
+
+.${s} .zone-nav-panel p {
+  color: var(--color-text-muted);
+}
+
+/* Progressive enhancement: only the active tabpanel is visible once enhanced */
+.${s}.zone-nav.is-enhanced .zone-nav-panel {
+  display: none;
+}
+
+.${s}.zone-nav.is-enhanced .zone-nav-panel.is-active {
+  display: block;
+}
+
+@media (max-width: 767px) {
+  .${s} .zone-nav-rail {
+    margin-left: calc(var(--spacing-md) * -2);
+    margin-right: calc(var(--spacing-md) * -2);
+  }
+
+  .${s} .zone-nav-tabs {
+    padding-left: var(--spacing-lg);
+    padding-right: var(--spacing-lg);
+  }
+
+  .${s} .zone-nav-panel {
+    padding: var(--spacing-lg) var(--spacing-md);
+  }
+}
+
+@media (min-width: 768px) {
+  .${s} .zone-nav-rail {
+    overflow: visible;
+  }
+
+  .${s} .zone-nav-tabs {
+    justify-content: center;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+}
 </style>`
   }
 
@@ -1328,6 +1485,137 @@ ${utilityStyles}
     var quoteConfig = viewModel.quote || {};
     var bookingConfig = viewModel.booking || {};
     var pwa = viewModel.pwa || {};
+
+    var zoneNavScript = '';
+    if (viewModel.zoneNavigation) {
+      zoneNavScript = `<script>
+(function() {
+  if (typeof document === 'undefined') return;
+
+  // APP-ZONE-TABS-1 (audit): enhancement is instance-safe. Every
+  // [data-zone-nav] root in the document is enhanced independently, with all
+  // tab/panel lookups scoped inside its own subtree, so multiple roots never
+  // cross-select. The root DOM id is server-derived from the cssScope, so no
+  // two roots can ever share an id.
+  var roots = document.querySelectorAll('[data-zone-nav]');
+  if (roots.length === 0) return;
+
+  for (var iRoot = 0; iRoot < roots.length; iRoot++) {
+    enhance(roots[iRoot]);
+  }
+
+  function enhance(root) {
+  var tabs = Array.prototype.slice.call(root.querySelectorAll('[data-zone-tab]'));
+  var panels = Array.prototype.slice.call(root.querySelectorAll('[data-zone-panel]'));
+  if (tabs.length === 0 || tabs.length !== panels.length) return;
+
+  var tablist = root.querySelector('.zone-nav-tabs');
+  if (!tablist) return;
+
+  function panelFor(tab) {
+    var ref = tab.getAttribute('data-zone-panel-ref');
+    for (var i = 0; i < panels.length; i++) {
+      if (panels[i].id === ref) return panels[i];
+    }
+    return null;
+  }
+
+  function setActive(key, opts) {
+    opts = opts || {};
+    tabs.forEach(function(tab) {
+      var active = tab.getAttribute('data-zone-tab') === key;
+      tab.classList.toggle('is-active', active);
+      tab.setAttribute('role', 'tab');
+      tab.setAttribute('aria-selected', active ? 'true' : 'false');
+      tab.setAttribute('tabindex', active ? '0' : '-1');
+      var panel = panelFor(tab);
+      if (panel) tab.setAttribute('aria-controls', panel.id);
+    });
+    panels.forEach(function(panel) {
+      var active = panel.getAttribute('data-zone-panel') === key;
+      panel.classList.toggle('is-active', active);
+      panel.setAttribute('role', 'tabpanel');
+      if (opts.focus && active) {
+        try { panel.focus(); } catch (e) {}
+      }
+    });
+  }
+
+  function activate(key, opts) {
+    opts = opts || {};
+    setActive(key, opts);
+    var panel = null;
+    for (var i = 0; i < tabs.length; i++) {
+      if (tabs[i].getAttribute('data-zone-tab') === key) {
+        panel = panelFor(tabs[i]);
+        break;
+      }
+    }
+    if (panel && window.location.hash !== '#' + panel.id) {
+      window.location.hash = panel.id;
+    }
+  }
+
+  function keyFromHash() {
+    var hash = window.location.hash;
+    if (!hash) return null;
+    var target = hash.slice(1);
+    for (var i = 0; i < tabs.length; i++) {
+      var panel = panelFor(tabs[i]);
+      if (panel && (panel.id === target || tabs[i].getAttribute('data-zone-tab') === target)) {
+        return tabs[i].getAttribute('data-zone-tab');
+      }
+    }
+    return null;
+  }
+
+  root.classList.add('is-enhanced');
+  tablist.setAttribute('role', 'tablist');
+  tablist.setAttribute('aria-label', root.getAttribute('aria-label') || 'Explorar');
+
+  tabs.forEach(function(tab) {
+    tab.addEventListener('click', function(e) {
+      e.preventDefault();
+      activate(tab.getAttribute('data-zone-tab'));
+    });
+  });
+
+  tablist.addEventListener('keydown', function(e) {
+    var focused = document.activeElement;
+    if (!focused) return;
+    var current = focused.getAttribute('data-zone-tab');
+    if (current === null) return;
+    var index = tabs.indexOf(focused);
+    if (index < 0) return;
+    var next = null;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      next = tabs[(index + 1) % tabs.length];
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      next = tabs[(index - 1 + tabs.length) % tabs.length];
+    } else if (e.key === 'Home') {
+      next = tabs[0];
+    } else if (e.key === 'End') {
+      next = tabs[tabs.length - 1];
+    }
+    if (next) {
+      e.preventDefault();
+      activate(next.getAttribute('data-zone-tab'), { focus: true });
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      activate(current);
+    }
+  });
+
+  window.addEventListener('hashchange', function() {
+    var key = keyFromHash();
+    if (key) setActive(key);
+  });
+
+  setActive(keyFromHash() || tabs[0].getAttribute('data-zone-tab'));
+  }
+})();
+</script>`;
+    }
 
     var pwaScript = '';
     if (pwa.enabled && pwa.serviceWorkerUrl) {
@@ -1936,7 +2224,7 @@ ${utilityStyles}
     }
   });
 })();
-</script>${pushInitScript}`
+</script>${pushInitScript}${zoneNavScript}`
   }
 }
 

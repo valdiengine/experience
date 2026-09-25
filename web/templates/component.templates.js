@@ -620,6 +620,59 @@ ${itemsHtml}    </div>
 </section>`
 }
 
+/**
+ * Zone Navigation (tabs) - APP-ZONE-TABS-1
+ *
+ * SRR baseline is fully readable without JavaScript: plain anchor links acting
+ * as deep links to semantic panels (all panels rendered). JS enhancement later
+ * applies ARIA tab semantics on the same server-rendered nodes.
+ */
+export function renderZoneNavigation(viewModel = {}) {
+  const zoneNav = viewModel.zoneNavigation
+  if (!zoneNav || zoneNav.layout !== 'tabs' || !Array.isArray(zoneNav.items) || zoneNav.items.length === 0) {
+    return ''
+  }
+
+  const scope = zoneNav.scope || {}
+  const cssScope = typeof scope.cssScope === 'string' && scope.cssScope ? scope.cssScope : 'zone-nav'
+  const destinationName = viewModel.destinationName || ''
+  const safeScope = escapeAttr(cssScope)
+  const safeLayout = escapeAttr(zoneNav.layout)
+
+  let tabsHtml = ''
+  let panelsHtml = ''
+  for (const item of zoneNav.items) {
+    const key = item.key
+    const label = escapeHtml(item.label || '')
+    const tabId = item.tabId
+    const panelId = item.panelId
+    const contentRef = item.contentRef
+    if (!label || !tabId || !panelId) continue
+
+    const activeClass = item.active ? ' is-active' : ''
+    const intro = destinationName ? `${label} en ${escapeHtml(destinationName)}.` : `${label}.`
+
+    tabsHtml += `        <li><a class="zone-nav-tab${activeClass}" id="${escapeAttr(tabId)}" href="#${escapeAttr(panelId)}" data-zone-tab="${escapeAttr(key)}" data-zone-panel-ref="${escapeAttr(panelId)}">${label}</a></li>\n`
+    panelsHtml += `      <section class="zone-nav-panel${activeClass}" id="${escapeAttr(panelId)}" data-zone-panel="${escapeAttr(key)}" data-zone-content-ref="${escapeAttr(contentRef)}" aria-labelledby="${escapeAttr(tabId)}" tabindex="-1">\n        <h3>${label}</h3>\n        <p>${intro}</p>\n      </section>\n`
+  }
+
+  if (!tabsHtml.trim() || !panelsHtml.trim()) {
+    return ''
+  }
+
+  return `<section class="zone-nav ${safeScope}" id="${safeScope}-nav" data-zone-nav data-zone-layout="${safeLayout}" data-zone-scope="${escapeAttr(scope.scope || '')}" aria-label="Explorar">
+  <div class="zone-nav-container">
+    <h2 class="zone-nav-title">Explora</h2>
+    <div class="zone-nav-rail">
+      <ul class="zone-nav-tabs">
+${tabsHtml}      </ul>
+    </div>
+    <div class="zone-nav-panels">
+${panelsHtml}    </div>
+  </div>
+</section>`
+}
+
 export default {
   renderHeader,
   renderHero,
@@ -632,5 +685,6 @@ export default {
   renderFooter,
   renderInstallCTA,
   renderCategories,
-  renderFeatured
+  renderFeatured,
+  renderZoneNavigation
 }

@@ -16,6 +16,7 @@ export { CompaniesComponent } from './companies.component.js'
 export { ContactComponent } from './contact.component.js'
 export { FooterComponent } from './footer.component.js'
 export { QuoteUIComponent, QUOTE_COMPONENT_EVENTS } from './quote.component.js'
+export { ZoneNavigationTabsComponent } from './zone-navigation-tabs.component.js'
 
 import { BaseComponent } from './base.component.js'
 import { HeaderComponent } from './header.component.js'
@@ -26,6 +27,7 @@ import { CompaniesComponent } from './companies.component.js'
 import { ContactComponent } from './contact.component.js'
 import { FooterComponent } from './footer.component.js'
 import { QuoteUIComponent } from './quote.component.js'
+import { ZoneNavigationTabsComponent } from './zone-navigation-tabs.component.js'
 
 export default {
   BaseComponent,
@@ -36,5 +38,6 @@ export default {
   CompaniesComponent,
   ContactComponent,
   FooterComponent,
-  QuoteUIComponent
+  QuoteUIComponent,
+  ZoneNavigationTabsComponent
 }
