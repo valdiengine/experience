@@ -16,6 +16,7 @@ import { resolve, isAbsolute } from 'path'
 const ENV_FILES = {
   development: ['.env.development', '.env.local', '.env'],
   testing: ['.env.test', '.env.local', '.env'],
+  staging: ['.env.staging', '.env.local', '.env'],
   production: ['.env.production', '.env.local', '.env'],
 }
 

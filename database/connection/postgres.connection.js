@@ -25,12 +25,18 @@ export function createPool() {
   const poolConfig = getPoolConfig()
   const sslConfig = getSslConfig()
 
+  const connectionOptions = process.env.DATABASE_URL
+    ? { connectionString: config.url }
+    : {
+        host: config.host,
+        port: config.port,
+        database: config.database,
+        user: config.user,
+        password: config.password,
+      }
+
   pool = new Pool({
-    host: config.host,
-    port: config.port,
-    database: config.database,
-    user: config.user,
-    password: config.password,
+    ...connectionOptions,
     ssl: sslConfig,
     max: poolConfig.max,
     idleTimeoutMillis: poolConfig.idleTimeoutMillis,
@@ -166,3 +172,4 @@ export default {
   closePool,
   getPoolStats,
 }
+

@@ -46,7 +46,7 @@ const DEFAULTS = {
     database: process.env.POSTGRES_DB || 'valdi_prod',
     user: process.env.POSTGRES_USER || '',
     password: process.env.POSTGRES_PASSWORD || '',
-    ssl: { mode: 'require', rejectUnauthorized: false },
+    ssl: { mode: 'verify-full', rejectUnauthorized: true },
     pool: {
       max: 50,
       idleTimeoutMillis: 300000,
@@ -61,7 +61,7 @@ const DEFAULTS = {
     database: process.env.POSTGRES_DB,
     user: process.env.POSTGRES_USER,
     password: process.env.POSTGRES_PASSWORD,
-    ssl: { rejectUnauthorized: true },
+    ssl: { mode: 'verify-full', rejectUnauthorized: true },
     pool: {
       max: 2,
       idleTimeoutMillis: 60000,
@@ -141,7 +141,7 @@ export function getSslConfig() {
   const sslEnv = process.env.DATABASE_SSL
 
   if (sslEnv === 'verify') {
-    return { mode: 'require', rejectUnauthorized: true }
+    return { mode: 'verify-full', rejectUnauthorized: true }
   }
 
   if (sslEnv === 'true' || sslEnv === '1') {
@@ -182,7 +182,9 @@ export function validateConfig() {
   const env = getEnvironment()
   const errors = []
 
-  if (env === 'staging') {
+  if ((env === 'staging' || env === 'production') && process.env.DATABASE_URL) {
+    // DATABASE_URL is a complete PostgreSQL configuration in managed environments.
+  } else if (env === 'staging') {
     if (!config.host) {
       errors.push('POSTGRES_HOST is required in staging')
     }
@@ -246,3 +248,4 @@ export default {
   validateConfig,
   drizzleConfig,
 }
+

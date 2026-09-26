@@ -19,11 +19,13 @@ export async function startWeb(options = {}) {
   const port = options.port || DEFAULT_PORT
   const host = options.host || DEFAULT_HOST
   const env = options.env || DEFAULT_ENV
+  const persistenceProvider = options.persistenceProvider || process.env.PERSISTENCE_PROVIDER || 'mock'
 
   const server = new PublicWebServer({
     port,
     host,
     env,
+    persistenceProvider,
     staticRoot: options.staticRoot,
     publicRoot: options.publicRoot
   })
@@ -33,6 +35,7 @@ export async function startWeb(options = {}) {
 
   console.log(`Public Web Server started on ${host}:${port}`)
   console.log(`Environment: ${env}`)
+  console.log(`Persistence provider: ${persistenceProvider}`)
 
   return {
     server,

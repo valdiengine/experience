@@ -42,17 +42,31 @@ export const COMMERCIAL_CAPABILITIES = [
  * @param {object} repositoryRuntime - RepositoryEngine module
  * @param {object} context - Capability context (used as repository context, requires tenant)
  */
-function createRepositoriesFacade(repositoryRuntime, context) {
+export function createRepositoriesFacade(repositoryRuntime, context) {
   const resolved = new Map()
 
   const resolve = async (entityName) => {
+    console.log('[RUNTIME-PERSISTENCE-1 TRACE] createRepositoriesFacade.resolve ENTRY', {
+      entityName,
+      contextTenantId: context?.tenant?.id,
+    })
     if (resolved.has(entityName)) return resolved.get(entityName)
     if (!repositoryRuntime || typeof repositoryRuntime.get !== 'function') return null
     try {
       const repo = await repositoryRuntime.get(entityName, context)
+      console.log('[RUNTIME-PERSISTENCE-1 TRACE] createRepositoriesFacade.resolve EXIT', {
+        entityName,
+        contextTenantId: context?.tenant?.id,
+        repoResolved: !!repo,
+      })
       if (repo) resolved.set(entityName, repo)
       return repo || null
-    } catch {
+    } catch (err) {
+      console.log('[RUNTIME-PERSISTENCE-1 TRACE] createRepositoriesFacade.resolve ERROR', {
+        entityName,
+        contextTenantId: context?.tenant?.id,
+        error: err.message,
+      })
       return null
     }
   }

@@ -19,6 +19,10 @@ export class BaseRepository {
     if (new.target === BaseRepository) {
       throw new Error('BaseRepository is abstract — extend it')
     }
+    console.log('[RUNTIME-PERSISTENCE-1 TRACE] BaseRepository.constructor', {
+      entityName: this.constructor.entityName,
+      contextTenantId: context?.tenant?.id,
+    })
     this.#adapter = adapter
     this.#context = context
     this.config = config
@@ -55,12 +59,20 @@ export class BaseRepository {
   _buildQuery(query) {
     let q = { ...query }
     const tenant = this.#context?.tenant
+    const tenantIdStr = tenant && typeof tenant === 'string' ? tenant : tenant?.id
     if (tenant && typeof tenant === 'string') q = { ...q, tenantId: tenant }
     else if (tenant && typeof tenant === 'object' && tenant.id) q = { ...q, tenantId: tenant.id }
     const destination = this.#context?.destination
     if (destination && typeof destination === 'string') q = { ...q, destinationId: destination }
     if (this.constructor.softDeletable && !q._includeDeleted) q = { ...q, deletedAt: null }
     const { _includeDeleted, ...clean } = q
+    console.log('[RUNTIME-PERSISTENCE-1 TRACE] BaseRepository._buildQuery', {
+      entityName: this.constructor.entityName,
+      contextTenantId: this.#context?.tenant?.id,
+      tenantIdStr,
+      inputQuery: query,
+      outputQuery: clean,
+    })
     return clean
   }
 

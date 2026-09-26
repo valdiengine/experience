@@ -56,13 +56,19 @@ export const REPOSITORY_REGISTRATIONS = [
  * @param {object} repositoryRuntime - RepositoryEngine module from the booted runtime
  * @returns {object[]} - Registry listing of registered repositories
  */
-export function registerRepositories(repositoryRuntime) {
+export function registerRepositories(repositoryRuntime, options = {}) {
   if (!repositoryRuntime) {
     throw new RepositoryBootstrapError('Repository runtime is not available — runtime must boot first', {})
   }
+  const providerByEntity = options.providerByEntity || {}
+
   try {
     for (const { entityName, class: RepoClass } of REPOSITORY_REGISTRATIONS) {
-      repositoryRuntime.register(entityName, { class: RepoClass })
+      const providerName = providerByEntity[entityName]
+      repositoryRuntime.register(entityName, {
+        class: RepoClass,
+        ...(providerName ? { config: { providerName } } : {}),
+      })
     }
     return repositoryRuntime.registry.list()
   } catch (err) {

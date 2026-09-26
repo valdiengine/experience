@@ -27,7 +27,7 @@ export class RepositoryEngine {
     this.#transactionManager.setEventBus(eventBus)
   }
 
-  registerAdapter(providerName, AdapterClass) { this.#factory.registerAdapter(providerName, AdapterClass) }
+  registerAdapter(providerName, AdapterClass, entityName = null) { this.#factory.registerAdapter(providerName, AdapterClass, entityName) }
   registerDecorator(name, decoratorFn) { this.#factory.registerDecorator(name, decoratorFn) }
 
   register(entityName, descriptor) {
