@@ -56,6 +56,17 @@ export const ROUTE_CONFIG = {
     },
     {
       domain: 'valdi.app',
+      path: '/ensueno-curinanco',
+      match: 'exact',
+      ownership: OWNERSHIP.EXPERIENCE,
+      destination: 'valdi',
+      company: 'ensueno-curinanco',
+      experienceType: 'accommodation',
+      migrationState: 'EXPERIENCE',
+      enabled: true
+    },
+    {
+      domain: 'valdi.app',
       path: '/empresa',
       match: 'prefix',
       ownership: OWNERSHIP.WORDPRESS,
