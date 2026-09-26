@@ -1,7 +1,7 @@
 # CURRENT_STATE.md
 
 > Exact snapshot of project state. Update after each completed phase.
-> Last updated: **BOOKING-4.4 — PHYSICAL POSTGRESQL CERTIFIED** (2026-09-26)
+> Last updated: **C4 — ENSUEÑO CURIÑANCO BOOKING APPLICATION INTEGRATED** (2026-09-26)
 
 ## Platform Status
 
@@ -19,7 +19,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Phases completed | 100+ (P0 through P15.11, BOOKING-4.3, RUNTIME-PERSISTENCE-1, BOOKING-4.4) |
+| Phases completed | 100+ (P0 through P15.11, BOOKING-4.3, RUNTIME-PERSISTENCE-1, BOOKING-4.4, C4) |
 | Capabilities registered | 35 (Business sub-managers: 12) |
 | Architecture specs | 35 + 12 audit reports |
 | SDK specifications | 9 |
@@ -150,6 +150,7 @@
 | 111 | APP-ZONE-TABS-2 | Real Visual Integration: Isla Teja (structured screen content + styling) | Product |
 | 112 | APP-ZONE-PRESENT-1 | First Level-2 Application-Scoped Visual Identity (declarative zonePresentation) | Product |
 | 113 | BOOKING-4.4 | Generic PostgreSQL Booking Write Lifecycle Physical Certification (A–J Gate) | Product |
+| 114 | C4 | Ensueño Curiñanco Booking Application Integration (source committed, pushed, regression-certified) | Product |
 
 ## Registered Capabilities (32)
 
@@ -2261,6 +2262,78 @@ This certification demonstrates that generic **Product Booking → ReservationMa
 - physically PostgreSQL-certified
 
 C4 is **NOT implemented in this task**.
+
+---
+
+## C4 — Ensueño Curiñanco Booking Application Integration
+
+**Status:** `C4 — ENSUEÑO CURIÑANCO BOOKING APPLICATION INTEGRATED`
+**Certification Date:** 2026-09-26
+**Source Commit:** `ccfc6d2f07120f9fc6fa6c4f9989eaf044f31521` — `feat(booking): integrate ensueno curinanco application`
+**Synchronization:** committed, pushed, synchronized (`LOCAL == REMOTE == ccfc6d2f07120f9fc6fa6c4f9989eaf044f31521`)
+**Branch:** `p15.3-development`
+**Regression-certified:** Yes
+
+### Source Manifest (5 files — 756 insertions)
+
+1. `companies/cl/los-rios/valdi/ensueno-curinanco/config.js`
+2. `companies/cl/los-rios/valdi/ensueno-curinanco/config.json`
+3. `experience/booking/ensueno.booking.provision.js`
+4. `web/ensueno-booking-1.test.js`
+5. `web/routing/route.config.js`
+
+### Application / Route / Product Contract
+
+- Application: Ensueño Curiñanco
+- Route: `/ensueno-curinanco`
+- Domain: `valdi.app`
+- Destination: `valdi`
+- Experience type: `accommodation`
+- Product ID: `cabina-ensueno`
+- Category: `cabins`
+- Inventory: `4`
+- Currency: `CLP`
+- Base guests: `2`
+- Maximum guests: `4`
+- Check-in configuration: `16:00`
+- Checkout configuration: `13:00`
+
+### Inventory Semantics
+
+`inventory = 4` means four cabin inventory units per night. One reservation consumes exactly one cabin inventory unit per night. `guestCount` is occupancy metadata and MUST NOT multiply inventory consumption.
+
+The C4 integration test proves four reservations can consume the four cabin units and a fifth overlapping reservation is rejected with `409 AVAILABILITY_CONFLICT`.
+
+### Pricing Implementation Boundary
+
+- Base price `CLP 90,000` is implemented/tested by the current Booking integration.
+- `CLP 100,000` for four guests is **configured but NOT implemented** as active Booking pricing.
+- `CLP 8,000` additional guest/night is **configured but NOT implemented** as active Booking pricing.
+- Check-in `16:00` and checkout `13:00` are Application configuration/content only; generic Booking enforcement is NOT claimed.
+
+### Regression Evidence
+
+- Focused C4 regression: `web/ensueno-booking-1.test.js` → `21/21 PASS`
+- Generic MVP Availability/Reservation regression: `web/mvp-availability-reservation-1.test.js` → `23/23 PASS`
+
+### Architectural Boundary
+
+C4 does NOT introduce a second Booking engine. Ensueño is an Application-specific provisioning/configuration layer over the already certified generic Booking foundation (BOOKING-4.4, certified commit `96c53cae5cc759f794a2d02d47939ea6ccbb41af`).
+
+### Explicitly NOT Claimed
+
+- no claim that configured 4-guest pricing (`CLP 100,000`) is active
+- no claim that additional-guest/night pricing (`CLP 8,000`) is active
+- no claim that generic Booking enforces check-in/check-out times
+- no claim of physical staging booking yet
+- no claim of real browser/phone reservation confirmation yet
+- no claim that deferred read-side availability parity debt is closed
+
+The deferred debt `READ_SIDE_AVAILABILITY_PARITY_DEBT_DEFERRED` remains open and unchanged.
+
+### Next Milestone
+
+**MVP2-ENSUENO-STAGE-1** — deploy and certify the visible Ensueño Booking Application through the real `stage.valdi.app` Passenger/runtime path.
 
 ---
 
