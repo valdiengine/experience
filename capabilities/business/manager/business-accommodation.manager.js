@@ -21,7 +21,7 @@ export class BusinessAccommodationManager {
   }
 
   get #auth() {
-    return this.#context?.runtime?.auth || null
+    return this.#context?.runtime?.auth?.context || this.#context?.runtime?.auth || null
   }
 
   get #accommodationRepo() {

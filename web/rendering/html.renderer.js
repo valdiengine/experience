@@ -2280,7 +2280,11 @@ ${declarations}
         return;
       }
 
-      if (!result.success || !result.data || result.data.state !== 'available') {
+      var dates = (result.data && Array.isArray(result.data.dates)) ? result.data.dates : [];
+      var allNightsAvailable = dates.length > 0 &&
+        dates.every(function(day) { return day && day.status === 'available'; });
+
+      if (!result.success || !result.data || !allNightsAvailable) {
         showState(result.error || 'No hay disponibilidad para esas fechas.', 'error');
         return;
       }
@@ -2302,6 +2306,7 @@ ${declarations}
     var nameInput = travelerForm.querySelector('input[name="name"]');
     var emailInput = travelerForm.querySelector('input[name="email"]');
     var phoneInput = travelerForm.querySelector('input[name="phone"]');
+    var guestCountInput = travelerForm.querySelector('input[name="guestCount"]');
     var notesInput = travelerForm.querySelector('textarea[name="notes"]') ||
       travelerForm.querySelector('input[name="notes"]');
     if (!nameInput) {
@@ -2314,20 +2319,13 @@ ${declarations}
 
     try {
       var payload = {
-        applicationId: config.applicationId,
-        domain: config.domain,
-        route: config.route,
-        company: config.company,
-        destination: config.destination,
         checkIn: readDateInput('checkIn'),
         checkOut: readDateInput('checkOut'),
-        traveler: {
-          name: nameInput.value,
-          email: emailInput ? emailInput.value : '',
-          phone: phoneInput ? phoneInput.value : '',
-          notes: notesInput ? notesInput.value : ''
-        },
-        configuration: bookingConfig
+        guestName: nameInput.value,
+        guestEmail: emailInput ? emailInput.value : '',
+        guestPhone: phoneInput ? phoneInput.value : '',
+        guestCount: guestCountInput ? parseInt(guestCountInput.value, 10) : 1,
+        notes: notesInput ? notesInput.value : ''
       };
 
       var response = await fetch(reservationEndpoint, {

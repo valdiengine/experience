@@ -34,7 +34,10 @@ export class ReservationCapability extends BaseCapability {
     this.#timer = new ReservationTimer(context)
     this.#recovery = new ReservationRecovery(context)
     if (typeof this.#manager.hydrate === 'function') {
-      await this.#manager.hydrate()
+      const tenantId = context?.tenant?.id
+      if (tenantId && tenantId !== 'commercial') {
+        await this.#manager.hydrate()
+      }
     }
   }
 

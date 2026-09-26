@@ -46,7 +46,7 @@ export class ReservationRepository extends BaseRepository {
     this._enforceNotDisposed()
     this._enforceWritable()
 
-    const hasPostgresAdapter = this.adapter?.client?.db != null
+    const hasPostgresAdapter = this.adapter?.provider?.name === 'postgres'
     if (!hasPostgresAdapter) {
       return this.#createReservationFallback(reservationData, lineData)
     }
@@ -189,11 +189,14 @@ export class ReservationRepository extends BaseRepository {
       channel: reservationData.channel || reservationData.source || null,
     }
 
-    const hasPostgresAdapter = this.adapter?.client?.db != null
-    const hasAtomicMethod = typeof this.createReservationWithLine === 'function'
+    const quantity = lineData.quantity || 1
+    const dates = this.#expandDateRange(lineData.temporal)
 
-    if (r.accommodationId && hasAtomicMethod && hasPostgresAdapter) {
-      return this.createReservationWithLine(r, lineData)
+    const store = this.adapter?.constructor?.store
+    const availStore = store?.get?.('availability') || null
+
+    if (dates.length > 0) {
+      this.#consumeMockAvailability(r, dates, quantity, availStore)
     }
 
     await this.create(r)
@@ -207,7 +210,7 @@ export class ReservationRepository extends BaseRepository {
       targetType: lineData.targetType,
       targetId: lineData.targetId,
       temporal: lineData.temporal,
-      quantity: lineData.quantity || 1,
+      quantity,
       unitPrice: lineData.unitPrice || null,
       lineTotal: lineData.lineTotal || null,
       metadata: lineData.metadata || {},
@@ -216,9 +219,148 @@ export class ReservationRepository extends BaseRepository {
       updatedAt: new Date().toISOString(),
     }
 
+    if (store) {
+      this.#persistMockLine(line)
+    }
+
     return { reservation, line }
   }
 
+  #mockAvailabilityRow(availStore, tenantId, accommodationId, date) {
+    if (!availStore) return null
+    for (const row of availStore.values()) {
+      if (row?.tenantId === tenantId && row?.accommodationId === accommodationId && row?.date === date) {
+        return row
+      }
+    }
+    return null
+  }
+
+  #consumeMockAvailability(r, dates, quantity, availStore) {
+    const pending = []
+    for (const date of dates) {
+      const row = this.#mockAvailabilityRow(availStore, r.tenantId, r.accommodationId, date)
+      if (!row) throw new AvailabilityConflictError(`No capacity for ${date}`)
+      const isBlocked = row.isBlocked === true
+      const inventory = Number(row.inventory ?? row.capacity) || 0
+      const reservedCount = Number(row.reservedCount ?? (row.capacity != null && row.available != null ? row.capacity - row.available : 0)) || 0
+      if (isBlocked || row.status !== 'available' || reservedCount + quantity > inventory) {
+        throw new AvailabilityConflictError(`No capacity for ${date}`)
+      }
+      const nextReservedCount = reservedCount + quantity
+      pending.push({
+        row,
+        nextReservedCount,
+        status: nextReservedCount >= inventory ? 'reserved' : 'available',
+      })
+    }
+    for (const update of pending) {
+      const inventory = Number(update.row.inventory ?? update.row.capacity) || 0
+      availStore.set(update.row.id, {
+        ...update.row,
+        reservedCount: update.nextReservedCount,
+        available: Math.max(0, inventory - update.nextReservedCount),
+        status: update.status,
+        updatedAt: new Date().toISOString(),
+      })
+    }
+  }
+
+  #persistMockLine(line) {
+    const store = this.adapter?.constructor?.store
+    if (!store || !line?.id) return
+    if (!store.has('reservation_lines')) store.set('reservation_lines', new Map())
+    store.get('reservation_lines').set(line.id, line)
+  }
+
+  #releaseMockCapacity(reservationId, tenantId) {
+    const store = this.adapter?.constructor?.store
+    if (!store) return { released: [], noOp: true }
+
+    const linesStore = store.get('reservation_lines')
+    const availStore = store.get('availability')
+    if (!linesStore || !availStore) return { released: [], noOp: true }
+
+    const released = []
+    for (const line of Array.from(linesStore.values())) {
+      if (line?.reservationId !== reservationId || line.releasedAt) continue
+      if (line.temporal?.mode === 'DATE_RANGE') {
+        const dates = this.#expandDateRange(line.temporal)
+        for (const date of dates) {
+          const row = this.#mockAvailabilityRow(availStore, tenantId, line.targetId, date)
+          if (!row) continue
+          const inventory = Number(row.inventory ?? row.capacity) || 0
+          const releasedQty = Number(line.quantity || 1)
+          const reservedCount = Math.max(0, (Number(row.reservedCount ?? (row.capacity != null && row.available != null ? row.capacity - row.available : 0)) || 0) - releasedQty)
+          availStore.set(row.id, {
+            ...row,
+            reservedCount,
+            available: Math.max(0, inventory - reservedCount),
+            status: row.isBlocked === true ? 'blocked' : (reservedCount >= inventory ? 'reserved' : 'available'),
+            updatedAt: new Date().toISOString(),
+          })
+        }
+      }
+      const now = new Date().toISOString()
+      linesStore.set(line.id, { ...line, releasedAt: now, updatedAt: now })
+      released.push({ ...line, releasedAt: now })
+    }
+
+    return { released, noOp: released.length === 0 }
+  }
+
+  async cancelReservationWithRelease(reservationData, tenantId) {
+    this._enforceNotDisposed()
+    this._enforceInitialized()
+    this._enforceWritable()
+
+    const hasPostgres = this.adapter?.provider?.name === 'postgres'
+
+    if (!hasPostgres) {
+      this.#releaseMockCapacity(reservationData.id, tenantId)
+      return this.update(
+        { id: reservationData.id, tenantId },
+        reservationData
+      )
+    }
+
+    return transaction(async (client) => {
+      const reservationResult = await client.query(
+        `UPDATE reservations
+         SET status = $1,
+             cancelled_at = $2,
+             special_requests = $3,
+             updated_at = NOW()
+         WHERE id = $4
+           AND tenant_id = $5
+         RETURNING *`,
+        [
+          reservationData.status,
+          reservationData.cancelledAt || null,
+          reservationData.notes || null,
+          reservationData.id,
+          tenantId,
+        ]
+      )
+
+      if (reservationResult.rows.length === 0) {
+        throw new Error(
+          `Reservation ${reservationData.id} update failed - not found or not authorized`
+        )
+      }
+
+      const release = await this.releaseReservationLines(
+        client,
+        reservationData.id,
+        tenantId
+      )
+
+      return {
+        reservation: reservationResult.rows[0],
+        release,
+      }
+    })
+  }
   async releaseReservationLines(client, reservationId, tenantId) {
     const linesResult = await client.query(`
       SELECT rl.*
@@ -283,7 +425,7 @@ export class ReservationRepository extends BaseRepository {
     this._enforceNotDisposed()
     this._enforceInitialized()
 
-    const hasPostgres = this.adapter?.client?.db != null
+    const hasPostgres = this.adapter?.provider?.name === 'postgres'
 
     if (hasPostgres) {
       const result = await query(

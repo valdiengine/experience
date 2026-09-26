@@ -12,6 +12,8 @@
 import { BaseCapabilityTest, runIfMain } from '../capability/capability.base.test.js'
 import { assertEvent, assertAuthorization, storeRows } from '../capability/capability.assertions.js'
 import { createReservationData } from '../fixtures/reservation.fixture.js'
+import { createAvailabilityNightsData, dateOffset } from '../fixtures/availability.fixture.js'
+import { InMemoryRepositoryAdapter } from '../capability/capability.mock.repositories.js'
 import { RESERVATION_EVENTS } from '../../capabilities/reservation/reservation.events.js'
 import { RESERVATION_STATUS } from '../../capabilities/reservation/reservation.status.js'
 import { RESERVATION_PERMISSIONS } from '../../capabilities/reservation/reservation.permissions.js'
@@ -25,6 +27,15 @@ class ReservationLifecycleTest extends BaseCapabilityTest {
     const { identity } = bundle
     const reservation = bundle.capability('reservation')
     const manager = reservation.manager
+
+    // Authoritative availability nights for the fixture reservation span
+    // (checkIn dateOffset(1) → checkOut dateOffset(3), customers 2×qty=1).
+    InMemoryRepositoryAdapter.seed('availability', createAvailabilityNightsData(
+      'acc-test',
+      dateOffset(1),
+      dateOffset(3),
+      { inventory: 4, reservedCount: 0, available: 4 }
+    ))
 
     // 1. Create request
     const created = await manager.createRequest(createReservationData({ id: 'res-1' }), identity)

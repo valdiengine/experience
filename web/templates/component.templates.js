@@ -421,6 +421,7 @@ export function renderBookingSection(viewModel = {}) {
         <label>Nombre <input type="text" name="name" required></label>
         <label>Email <input type="email" name="email"></label>
         <label>Teléfono <input type="tel" name="phone"></label>
+        <label>Huéspedes <input type="number" name="guestCount" min="1" step="1" value="2"></label>
         <label>Notas <textarea name="notes"></textarea></label>
       </div>
       <button type="submit" class="btn btn-primary booking-cta">Reservar</button>

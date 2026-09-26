@@ -111,7 +111,7 @@ export class ApiServer {
    */
   async #handleRequest(req, res) {
     try {
-      const parsed = this.#parseRequest(req);
+      const parsed = await this.#parseRequest(req);
 
       let i = 0;
       const next = async () => {
@@ -136,13 +136,13 @@ export class ApiServer {
    * @param {IncomingMessage} req
    * @returns {Request}
    */
-  #parseRequest(req) {
+  async #parseRequest(req) {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const pathname = url.pathname;
 
     let body = null;
     if (req.headers['content-type']?.includes('application/json')) {
-      body = this.#parseBody(req);
+      body = await this.#parseBody(req);
     }
 
     return {

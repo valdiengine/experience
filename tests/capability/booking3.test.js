@@ -17,11 +17,17 @@
  */
 import { BaseCapabilityTest, runIfMain } from './capability.base.test.js'
 import { createReservationData } from '../fixtures/reservation.fixture.js'
+import { createAvailabilityNightsData } from '../fixtures/availability.fixture.js'
+import { InMemoryRepositoryAdapter } from './capability.mock.repositories.js'
 import { RESERVATION_STATUS } from '../../capabilities/reservation/reservation.status.js'
 
 class Booking3Test extends BaseCapabilityTest {
   constructor() {
     super('booking3')
+  }
+
+  seedNights(accommodationId, checkIn, checkOut) {
+    InMemoryRepositoryAdapter.seed('availability', createAvailabilityNightsData(accommodationId, checkIn, checkOut))
   }
 
   async runScenario(bundle) {
@@ -40,6 +46,7 @@ class Booking3Test extends BaseCapabilityTest {
       guests: 2,
     })
 
+    this.seedNights('acc-booking3-001', '2026-09-10', '2026-09-12')
     const created = await manager.createRequest(testReservationData, identity)
     this.check('create-success', created.success === true, 'createRequest succeeded')
     this.check('status-requested', created.status === 'requested', 'status is requested')
@@ -60,6 +67,7 @@ class Booking3Test extends BaseCapabilityTest {
       guests: 5,
     })
 
+    this.seedNights('acc-booking3-002', '2026-10-01', '2026-10-05')
     const guestHeavyCreated = await manager.createRequest(guestHeavyData, identity)
     this.check('guest-heavy-success', guestHeavyCreated.success === true, 'guest-heavy reservation created')
 
@@ -74,6 +82,7 @@ class Booking3Test extends BaseCapabilityTest {
       },
     })
 
+    this.seedNights('acc-booking3-003', '2026-12-25', '2026-12-30')
     const datesCreated = await manager.createRequest(datesData, identity)
     this.check('dates-success', datesCreated.success === true, 'dates reservation created')
 
@@ -100,6 +109,7 @@ class Booking3Test extends BaseCapabilityTest {
       id: 'booking3-res-4',
       accommodationId: 'acc-booking3-004',
     })
+    this.seedNights('acc-booking3-004', directData.dates.checkIn, directData.dates.checkOut)
     const directCreated = await manager.createRequest(directData, identity)
     this.check('direct-without-quote', directCreated.success === true, 'direct reservation without Quote succeeds')
 
@@ -115,6 +125,7 @@ class Booking3Test extends BaseCapabilityTest {
       dates: { checkIn: '2026-11-01', checkOut: '2026-11-03' },
       guests: 1,
     }
+    this.seedNights('acc-booking3-005', '2026-11-01', '2026-11-03')
     const resourceCreated = await manager.createRequest(resourceData, identity)
     this.check('resource-accepted', resourceCreated.success === true, 'reservation with resourceId accepted')
 

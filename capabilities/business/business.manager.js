@@ -36,7 +36,7 @@ export class BusinessManager {
   #payment
   #notification
 
-  constructor(context) {
+  constructor(context, reservationManager = null) {
     this.#context = context
     this.#accommodation = new BusinessAccommodationManager(context)
     this.#brand = new BusinessBrandManager(context)
@@ -45,7 +45,7 @@ export class BusinessManager {
     this.#statistics = new BusinessStatisticsManager(context)
     this.#cms = new BusinessCmsManager(context)
     this.#availability = new BusinessAvailabilityManager(context)
-    this.#reservation = new BusinessReservationManager(context)
+    this.#reservation = new BusinessReservationManager(context, reservationManager)
     this.#visitor = new BusinessVisitorManager(context)
     this.#payment = new BusinessPaymentManager(context)
     this.#notification = new BusinessNotificationManager(context)
@@ -56,7 +56,7 @@ export class BusinessManager {
   }
 
   get #auth() {
-    return this.#context?.runtime?.auth || null
+    return this.#context?.runtime?.auth?.context || this.#context?.runtime?.auth || null
   }
 
   get #eventBus() {

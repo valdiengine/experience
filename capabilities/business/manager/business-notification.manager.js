@@ -15,7 +15,7 @@ export class BusinessNotificationManager {
   }
 
   get #auth() {
-    return this.#context?.runtime?.auth || null
+    return this.#context?.runtime?.auth?.context || this.#context?.runtime?.auth || null
   }
 
   get #notification() {

@@ -1,6 +1,7 @@
 /**
  * Availability fixtures (P13.5.7) — deterministic dates + window/day inputs.
  */
+import { AvailabilityCalendar } from '../../capabilities/availability/availability.calendar.js'
 
 export function dateOffset(days) {
   const d = new Date(Date.now() + days * 86400000)
@@ -22,6 +23,24 @@ export function createAvailabilityDayData(accommodationId, date, overrides = {})
     currency: 'ARS',
     ...overrides,
   }
+}
+
+/**
+ * Per-night availability rows for a check-in/check-out reservation span,
+ * using the same exclusive-check-out expansion as the reservation repository.
+ * Each row receives a deterministic id, suitable for
+ * InMemoryRepositoryAdapter.seed('availability', rows).
+ */
+export function createAvailabilityNightsData(accommodationId, checkIn, checkOut, overrides = {}) {
+  const end = new Date(checkOut)
+  end.setDate(end.getDate() - 1)
+  const nights = AvailabilityCalendar.expandRange(checkIn, end.toISOString().split('T')[0])
+  return nights.map((date) =>
+    createAvailabilityDayData(accommodationId, date, {
+      id: `avail-${accommodationId}-${date}`,
+      ...overrides,
+    })
+  )
 }
 
 /**

@@ -17,7 +17,8 @@ import { createBusinessData } from '../fixtures/business.fixture.js'
 import { createAccommodationData } from '../fixtures/accommodation.fixture.js'
 import { createVisitorData } from '../fixtures/visitor.fixture.js'
 import { createReservationData } from '../fixtures/reservation.fixture.js'
-import { createAvailabilityDayData, createAvailabilityWindowData } from '../fixtures/availability.fixture.js'
+import { createAvailabilityDayData, createAvailabilityWindowData, createAvailabilityNightsData, dateOffset } from '../fixtures/availability.fixture.js'
+import { InMemoryRepositoryAdapter } from '../capability/capability.mock.repositories.js'
 import { BUSINESS_EVENTS, BUSINESS_ACCOMMODATION_EVENTS, BUSINESS_RESERVATION_EVENTS } from '../../capabilities/business/business.events.js'
 import { RESERVATION_EVENTS } from '../../capabilities/reservation/reservation.events.js'
 import { BUSINESS_PERMISSIONS } from '../../capabilities/business/business.permissions.js'
@@ -75,6 +76,12 @@ class CommercialAggregateTest extends BaseCapabilityTest {
     const visitorId = visitorCreated.data.id
     await this.checkAsync(assertAuthorization(bundle, VISITOR_PERMISSIONS.CREATE, 'authorize(visitor:create) recorded'), 'auth-visitor')
     // 5. Reservation: create referencing business + accommodation + visitor
+    InMemoryRepositoryAdapter.seed('availability', createAvailabilityNightsData(
+      accId,
+      dateOffset(1),
+      dateOffset(3),
+      { inventory: 4, reservedCount: 0, available: 4 }
+    ))
     const resCreated = await reservationManager.createReservation(bizId, createReservationData({ id: 'res-commercial-1', businessId: bizId, accommodationId: accId, visitorId }), identity)
     this.check('res-created', resCreated.success === true, 'createReservation succeeded')
     await this.checkAsync(assertEvent(bundle, RESERVATION_EVENTS.CREATED, 'reservation:created emitted'), 'res-created-event')

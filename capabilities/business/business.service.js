@@ -411,40 +411,41 @@ export class BusinessService {
     return this.#manager.getReservation(null, reservationId, { tenantId })
   }
 
-  async createReservation(data, { tenantId, userId }) {
-    return this.#manager.createReservation(null, data, { tenantId, userId })
+  async createReservation(data, identity) {
+    const businessId = data?.businessId || null
+    return this.#manager.createReservation(businessId, data, identity)
   }
 
-  async updateReservation(reservationId, data, { tenantId, userId }) {
-    return this.#manager.updateReservation(null, reservationId, data, { tenantId, userId })
+  async updateReservation(reservationId, data, identity) {
+    return this.#manager.updateReservation(null, reservationId, data, identity)
   }
 
-  async patchReservation(reservationId, data, { tenantId, userId }) {
-    return this.#manager.updateReservation(null, reservationId, data, { tenantId, userId })
+  async patchReservation(reservationId, data, identity) {
+    return this.#manager.updateReservation(null, reservationId, data, identity)
   }
 
-  async deleteReservation(reservationId, { tenantId, userId }) {
-    return this.#manager.deleteReservation(null, reservationId, { tenantId, userId })
+  async deleteReservation(reservationId, identity) {
+    return this.#manager.deleteReservation(null, reservationId, identity)
   }
 
-  async confirmReservation(reservationId, { tenantId, userId }) {
-    return this.#manager.confirmReservation(null, reservationId, { tenantId, userId })
+  async confirmReservation(reservationId, identity) {
+    return this.#manager.confirmReservation(null, reservationId, identity)
   }
 
-  async rejectReservation(reservationId, reason, { tenantId, userId }) {
-    return this.#manager.rejectReservation(null, reservationId, reason, { tenantId, userId })
+  async rejectReservation(reservationId, reason, identity) {
+    return this.#manager.rejectReservation(null, reservationId, reason, identity)
   }
 
-  async cancelReservation(reservationId, reason, { tenantId, userId }) {
-    return this.#manager.cancelReservation(null, reservationId, reason, { tenantId, userId })
+  async cancelReservation(reservationId, reason, identity) {
+    return this.#manager.cancelReservation(null, reservationId, reason, identity)
   }
 
-  async checkInReservation(reservationId, { tenantId, userId }) {
-    return this.#manager.checkInReservation(null, reservationId, { tenantId, userId })
+  async checkInReservation(reservationId, identity) {
+    return this.#manager.checkInReservation(null, reservationId, identity)
   }
 
-  async checkOutReservation(reservationId, { tenantId, userId }) {
-    return this.#manager.checkOutReservation(null, reservationId, { tenantId, userId })
+  async checkOutReservation(reservationId, identity) {
+    return this.#manager.checkOutReservation(null, reservationId, identity)
   }
 
   async findByVisitor(businessId, visitorId, identity) {

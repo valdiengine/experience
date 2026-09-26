@@ -16,6 +16,8 @@ import { createBusinessData } from '../fixtures/business.fixture.js'
 import { createAccommodationData } from '../fixtures/accommodation.fixture.js'
 import { createVisitorData } from '../fixtures/visitor.fixture.js'
 import { createReservationData } from '../fixtures/reservation.fixture.js'
+import { createAvailabilityNightsData, dateOffset } from '../fixtures/availability.fixture.js'
+import { InMemoryRepositoryAdapter } from '../capability/capability.mock.repositories.js'
 import { BUSINESS_EVENTS, BUSINESS_ACCOMMODATION_EVENTS, BUSINESS_VISITOR_EVENTS, BUSINESS_RESERVATION_EVENTS } from '../../capabilities/business/business.events.js'
 import { VISITOR_EVENTS } from '../../capabilities/visitor/visitor.events.js'
 import { RESERVATION_EVENTS } from '../../capabilities/reservation/reservation.events.js'
@@ -52,6 +54,12 @@ class BusinessLifecycleTest extends BaseCapabilityTest {
     this.check('visitor-created-row', visitorRows.length === 1, 'visitor row persisted')
     await this.checkAsync(assertEvent(bundle, VISITOR_EVENTS.CREATED, 'visitor:created emitted'), 'visitor-created-event')
     // 4. Create a reservation under the business
+    InMemoryRepositoryAdapter.seed('availability', createAvailabilityNightsData(
+      accRows[0].id,
+      dateOffset(1),
+      dateOffset(3),
+      { inventory: 4, reservedCount: 0, available: 4 }
+    ))
     const resManager = business.manager.getReservationManager()
     const reservation = await resManager.createReservation(businessId, createReservationData({ businessId, accommodationId: accRows[0].id, visitorId: visitorRows[0].id, id: 'res-biz-1' }), identity)
     this.check('reservation-created', reservation.success === true, 'createReservation succeeded')

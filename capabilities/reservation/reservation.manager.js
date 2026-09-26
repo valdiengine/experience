@@ -23,7 +23,7 @@ export class ReservationManager {
   #context = null
   #reservations = new Map()
 
-  constructor(context) {
+constructor(context) {
     this.#context = context
   }
 
@@ -108,12 +108,10 @@ export class ReservationManager {
     await this.#checkPermission(identity, RESERVATION_PERMISSIONS.CREATE)
 
     const tenant = this.#context?.tenant
-    const tenantId = data.tenantId
-      || (tenant && typeof tenant === 'object' ? tenant.id : tenant)
-      || null
+    const tenantId = (tenant && typeof tenant === 'object' ? tenant.id : tenant) || data.tenantId || null
 
     const reservation = {
-      id: data.id || `res_${Date.now()}`,
+      id: data.id || crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       tenantId,
       businessId: data.businessId || null,
       accommodationId: data.accommodationId || null,
@@ -134,14 +132,9 @@ export class ReservationManager {
       return { success: false, errors: validation.errors }
     }
 
-    this.#reservations.set(reservation.id, reservation)
-
-    const hasPostgresAdapter = this.#repo?.adapter?.client?.db != null
-    const hasAtomicMethod = typeof this.#repo?.createReservationWithLine === 'function'
-
-    if (reservation.accommodationId && hasAtomicMethod && hasPostgresAdapter) {
+    if (reservation.accommodationId) {
       const lineData = {
-        id: `rl_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+        id: crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         lineOrder: 1,
         targetType: 'accommodation',
         targetId: reservation.accommodationId,
@@ -156,7 +149,11 @@ export class ReservationManager {
         metadata: {},
       }
 
-      await this.#repo.createReservationWithLine(reservation, lineData)
+      const persisted = await this.#repo.createReservationWithLine(reservation, lineData)
+      if (!persisted) {
+        throw new Error(`Reservation ${reservation.id} was not persisted`)
+      }
+      this.#reservations.set(reservation.id, reservation)
     } else {
       await this.#persist(reservation, true)
     }
@@ -212,7 +209,6 @@ export class ReservationManager {
     }
 
     const updated = ReservationWorkflow.transition(reservation, RESERVATION_STATUS.OWNER_PENDING)
-    this.#reservations.set(reservationId, updated)
     await this.#persist(updated)
 
     const communication = this.#context?.capabilities?.get?.('communication')
@@ -244,7 +240,6 @@ export class ReservationManager {
     }
 
     let updated = ReservationWorkflow.transition(reservation, RESERVATION_STATUS.OWNER_CONFIRMED)
-    this.#reservations.set(reservationId, updated)
     await this.#persist(updated)
     this.#emit(RESERVATION_EVENTS.OWNER_CONFIRMED, { reservationId, reservation: updated })
 
@@ -268,7 +263,6 @@ export class ReservationManager {
     }
 
     updated = ReservationWorkflow.transition(updated, RESERVATION_STATUS.PAYMENT_PENDING)
-    this.#reservations.set(reservationId, updated)
     await this.#persist(updated)
     this.#emit(RESERVATION_EVENTS.PAYMENT_PENDING, { reservationId, reservation: updated })
 
@@ -291,7 +285,6 @@ export class ReservationManager {
 
     const updated = ReservationWorkflow.transition(reservation, RESERVATION_STATUS.REJECTED)
     updated.notes = reason ? `${updated.notes}\nRechazada: ${reason}` : updated.notes
-    this.#reservations.set(reservationId, updated)
     await this.#persist(updated)
 
     const notifications = this.#context?.capabilities?.get?.('notifications')
@@ -325,17 +318,27 @@ export class ReservationManager {
     const updated = ReservationWorkflow.transition(reservation, RESERVATION_STATUS.CANCELLED)
     updated.notes = reason ? `${updated.notes}\nCancelada: ${reason}` : updated.notes
     updated.cancelledAt = new Date().toISOString()
-    this.#reservations.set(reservationId, updated)
-    await this.#persist(updated)
+    const isPostgres = this.#context?.config?.persistenceProvider === 'postgres'
 
-    const availability = this.#context?.capabilities?.get?.('availability')
-    if (availability?.updateAvailability) {
-      await availability.updateAvailability([{
-        date: reservation.dates.checkIn,
-        endDate: reservation.dates.checkOut,
-        status: 'available',
-        resourceId: reservation.resourceId,
-      }])
+    if (isPostgres) {
+      if (!this.#repo?.cancelReservationWithRelease) {
+        throw new Error(`Reservation repository cannot release capacity for ${reservationId}`)
+      }
+
+      await this.#repo.cancelReservationWithRelease(updated, reservation.tenantId)
+      this.#cacheReservation(updated)
+    } else {
+      await this.#persist(updated)
+
+      const availability = this.#context?.capabilities?.get?.('availability')
+      if (availability?.updateAvailability) {
+        await availability.updateAvailability([{
+          date: reservation.dates.checkIn,
+          endDate: reservation.dates.checkOut,
+          status: 'available',
+          resourceId: reservation.resourceId,
+        }])
+      }
     }
 
     const notifications = this.#context?.capabilities?.get?.('notifications')
@@ -366,7 +369,6 @@ export class ReservationManager {
     }
 
     const updated = ReservationWorkflow.transition(reservation, RESERVATION_STATUS.EXPIRED)
-    this.#reservations.set(reservationId, updated)
     await this.#persist(updated)
 
     const notifications = this.#context?.capabilities?.get?.('notifications')
@@ -398,7 +400,6 @@ export class ReservationManager {
 
     const updated = ReservationWorkflow.transition(reservation, RESERVATION_STATUS.COMPLETED)
     updated.completedAt = new Date().toISOString()
-    this.#reservations.set(reservationId, updated)
     await this.#persist(updated)
 
     this.#emit(RESERVATION_EVENTS.COMPLETED, { reservationId, reservation: updated })
@@ -428,7 +429,6 @@ export class ReservationManager {
     patch.tenantId = reservation.tenantId
 
     const updated = { ...reservation, ...patch, updatedAt: new Date().toISOString() }
-    this.#reservations.set(id, updated)
     await this.#persist(updated)
     this.#emit(RESERVATION_EVENTS.UPDATED, { reservationId: id, reservation: updated, changes: data })
     return { success: true, data: updated }
@@ -447,7 +447,6 @@ export class ReservationManager {
 
     const updated = ReservationWorkflow.transition(reservation, RESERVATION_STATUS.CHECKED_IN)
     updated.checkedInAt = new Date().toISOString()
-    this.#reservations.set(reservationId, updated)
     await this.#persist(updated)
     this.#emit(RESERVATION_EVENTS.CHECKED_IN, { reservationId, reservation: updated })
     return { success: true }
@@ -466,7 +465,6 @@ export class ReservationManager {
 
     const updated = ReservationWorkflow.transition(reservation, RESERVATION_STATUS.CHECKED_OUT)
     updated.checkedOutAt = new Date().toISOString()
-    this.#reservations.set(reservationId, updated)
     await this.#persist(updated)
     this.#emit(RESERVATION_EVENTS.CHECKED_OUT, { reservationId, reservation: updated })
     return { success: true }
@@ -484,7 +482,6 @@ export class ReservationManager {
     if (!reservation) return { success: false, errors: ['Reservation not found'] }
 
     const updated = ReservationWorkflow.transition(reservation, RESERVATION_STATUS.NO_SHOW)
-    this.#reservations.set(reservationId, updated)
     await this.#persist(updated)
     this.#emit(RESERVATION_EVENTS.NO_SHOW, { reservationId, reservation: updated })
     return { success: true }
@@ -504,7 +501,6 @@ export class ReservationManager {
     const updated = ReservationWorkflow.transition(reservation, RESERVATION_STATUS.ARCHIVED)
     updated.previousStatus = reservation.status
     updated.archivedAt = new Date().toISOString()
-    this.#reservations.set(reservationId, updated)
     await this.#persist(updated)
     this.#emit(RESERVATION_EVENTS.ARCHIVED, { reservationId, reservation: updated })
     return { success: true }
@@ -531,7 +527,6 @@ export class ReservationManager {
       archivedAt: null,
       updatedAt: new Date().toISOString(),
     }
-    this.#reservations.set(reservationId, restored)
     await this.#persist(restored)
     this.#emit(RESERVATION_EVENTS.RESTORED, { reservationId, reservation: restored })
     return { success: true, data: restored }
@@ -548,10 +543,10 @@ export class ReservationManager {
     const reservation = await this.#loadReservation(reservationId)
     if (!reservation) return { success: false, errors: ['Reservation not found'] }
 
-    this.#reservations.delete(reservationId)
     if (this.#repo) {
       await this.#repo.delete({ id: reservationId })
     }
+    this.#reservations.delete(reservationId)
     if (this.#context?.dataManager) {
       const reservations = this.#context.dataManager.get('reservations') || []
       const index = reservations.findIndex(r => r.id === reservationId)
@@ -579,6 +574,42 @@ export class ReservationManager {
    */
   getAll() {
     return Array.from(this.#reservations.values())
+  }
+
+  /**
+   * Find reservation by ID using repository (repository-first, not cache)
+   * @param {string} reservationId
+   * @returns {Promise<object|null>}
+   */
+  async findById(reservationId) {
+    if (this.#repo) {
+      const isPostgres = this.#context?.config?.persistenceProvider === 'postgres'
+      try {
+        const found = await this.#repo.findById(reservationId)
+        if (found) return found
+        if (isPostgres) return null
+      } catch (error) {
+        if (isPostgres) throw error
+      }
+    }
+    return null
+  }
+
+  /**
+   * Find all reservations using repository (repository-first, not cache)
+   * @param {object} filter - Optional filter criteria
+   * @returns {Promise<object[]>}
+   */
+  async findAll(filter = {}) {
+    if (this.#repo) {
+      const isPostgres = this.#context?.config?.persistenceProvider === 'postgres'
+      try {
+        return await this.#repo.findMany(filter)
+      } catch (error) {
+        if (isPostgres) throw error
+      }
+    }
+    return []
   }
 
   /**
@@ -807,32 +838,48 @@ export class ReservationManager {
    * Persist reservation to repository and caches
    * @private
    */
-  async #persist(reservation, isNew = false) {
-    if (this.#repo) {
-      try {
-        if (isNew) {
-          await this.#repo.create(reservation)
-        } else {
-          const updated = await this.#repo.update({ id: reservation.id }, reservation)
-          if (!updated) {
-            await this.#repo.create(reservation)
-          }
-        }
-      } catch (err) {
-        console.error(`[ReservationManager] Failed to persist reservation ${reservation.id}:`, err.message)
-      }
-    }
+  #cacheReservation(reservation) {
     this.#reservations.set(reservation.id, reservation)
+
     if (this.#context?.dataManager) {
       const reservations = this.#context.dataManager.get('reservations') || []
       const index = reservations.findIndex(r => r.id === reservation.id)
+
       if (index >= 0) {
         reservations[index] = reservation
       } else {
         reservations.push(reservation)
       }
+
       this.#context.dataManager.set('reservations', reservations)
     }
+  }
+  async #persist(reservation, isNew = false) {
+    const isPostgres = this.#context?.config?.persistenceProvider === 'postgres'
+
+    if (this.#repo) {
+      if (isNew) {
+        const created = await this.#repo.create(reservation)
+        if (isPostgres && !created) {
+          throw new Error(`Reservation ${reservation.id} was not persisted`)
+        }
+      } else {
+        const updated = await this.#repo.update({ id: reservation.id }, reservation)
+        if (isPostgres && !updated) {
+          throw new Error(`Reservation ${reservation.id} update failed - not found or not authorized`)
+        }
+        if (!isPostgres && !updated) {
+          const created = await this.#repo.create(reservation)
+          if (isPostgres && !created) {
+            throw new Error(`Reservation ${reservation.id} was not persisted`)
+          }
+        }
+      }
+    } else if (isPostgres) {
+      throw new Error(`Reservation repository is unavailable for ${reservation.id}`)
+    }
+
+    this.#cacheReservation(reservation)
   }
 
   /**
@@ -847,3 +894,8 @@ export class ReservationManager {
 }
 
 export default ReservationManager
+
+
+
+
+

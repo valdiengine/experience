@@ -53,7 +53,9 @@ export class Router {
    * @param {Function} handler
    * @param  {...Function} middleware
    */
-  get(path, handler, ...middleware) {
+  get(path, ...handlers) {
+    const handler = handlers.at(-1);
+    const middleware = handlers.slice(0, -1);
     this.addRoute('GET', path, handler, ...middleware);
   }
 
@@ -63,7 +65,9 @@ export class Router {
    * @param {Function} handler
    * @param  {...Function} middleware
    */
-  post(path, handler, ...middleware) {
+  post(path, ...handlers) {
+    const handler = handlers.at(-1);
+    const middleware = handlers.slice(0, -1);
     this.addRoute('POST', path, handler, ...middleware);
   }
 
@@ -73,7 +77,9 @@ export class Router {
    * @param {Function} handler
    * @param  {...Function} middleware
    */
-  put(path, handler, ...middleware) {
+  put(path, ...handlers) {
+    const handler = handlers.at(-1);
+    const middleware = handlers.slice(0, -1);
     this.addRoute('PUT', path, handler, ...middleware);
   }
 
@@ -83,7 +89,9 @@ export class Router {
    * @param {Function} handler
    * @param  {...Function} middleware
    */
-  patch(path, handler, ...middleware) {
+  patch(path, ...handlers) {
+    const handler = handlers.at(-1);
+    const middleware = handlers.slice(0, -1);
     this.addRoute('PATCH', path, handler, ...middleware);
   }
 
@@ -93,7 +101,9 @@ export class Router {
    * @param {Function} handler
    * @param  {...Function} middleware
    */
-  delete(path, handler, ...middleware) {
+  delete(path, ...handlers) {
+    const handler = handlers.at(-1);
+    const middleware = handlers.slice(0, -1);
     this.addRoute('DELETE', path, handler, ...middleware);
   }
 
@@ -211,7 +221,7 @@ export class Router {
     req.params = match.params;
 
     const globalMiddleware = this.#middleware.get('*') || [];
-    const routeMiddleware = match.route.middleware;
+    const routeMiddleware = match.route.middleware || [];
 
     const allMiddleware = [...globalMiddleware, ...routeMiddleware];
 
@@ -222,7 +232,10 @@ export class Router {
         return;
       }
       const middleware = allMiddleware[index++];
-      await middleware(req, res, middlewareNext);
+      try {
+        await middleware(req, res, middlewareNext);
+      } catch (err) {
+      }
     };
 
     await middlewareNext();

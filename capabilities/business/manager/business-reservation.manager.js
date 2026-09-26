@@ -6,9 +6,11 @@ import { isArchivableStatus } from '../../reservation/reservation.status.js'
 
 export class BusinessReservationManager {
   #context
+  #scopedReservationManager
 
-  constructor(context) {
+  constructor(context, scopedReservationManager = null) {
     this.#context = context
+    this.#scopedReservationManager = scopedReservationManager
   }
 
   get #eventBus() {
@@ -16,10 +18,13 @@ export class BusinessReservationManager {
   }
 
   get #auth() {
-    return this.#context?.runtime?.auth || null
+    return this.#context?.runtime?.auth?.context || this.#context?.runtime?.auth || null
   }
 
   get #reservation() {
+    if (this.#scopedReservationManager) {
+      return this.#scopedReservationManager
+    }
     return this.#context?.capabilities?.get?.('reservation')
   }
 
@@ -74,9 +79,7 @@ export class BusinessReservationManager {
   }
 
   async #assertReservationBelongsToBusiness(reservationId, businessId) {
-    const cap = this.#reservation
-    if (!cap?.service) throw new BusinessOrchestrationError('Reservation capability not available')
-    const reservation = await cap.service.findReservation(reservationId, null)
+    const reservation = await this.#reservationRepo?.findById(reservationId)
     if (!reservation) throw new BusinessOrchestrationError(`Reservation not found: ${reservationId}`)
     if (reservation.businessId !== businessId) {
       throw new BusinessOrchestrationError('Reservation does not belong to this business')
@@ -89,8 +92,30 @@ export class BusinessReservationManager {
     return accommodations.map((a) => a.id)
   }
 
+  static #SERVICE_METHOD_MAP = {
+    createReservation: { managerMethod: 'createRequest', argCount: 2 },
+    findReservation: { managerMethod: 'getById', argCount: 1 },
+    findReservations: { managerMethod: 'getAll', argCount: 1 },
+    findByVisitor: { managerMethod: 'getByVisitor', argCount: 1 },
+    findByAccommodation: { managerMethod: 'getByAccommodation', argCount: 1 },
+    findByBusiness: { managerMethod: 'getByBusiness', argCount: 1 },
+    updateReservation: { managerMethod: 'updateReservation', argCount: 3 },
+    cancelReservation: { managerMethod: 'cancelReservation', argCount: 3 },
+    confirmReservation: { managerMethod: 'confirmReservation', argCount: 2 },
+    rejectReservation: { managerMethod: 'rejectReservation', argCount: 3 },
+  }
+
   #delegateService(method, ...args) {
     const cap = this.#reservation
+    if (!cap) throw new BusinessOrchestrationError('Reservation capability not available')
+    if (typeof cap[method] === 'function') {
+      return cap[method].call(cap, ...args)
+    }
+    const mapping = BusinessReservationManager.#SERVICE_METHOD_MAP[method]
+    if (mapping && typeof cap[mapping.managerMethod] === 'function') {
+      const managerArgs = args.slice(0, mapping.argCount)
+      return cap[mapping.managerMethod].call(cap, ...managerArgs)
+    }
     if (!cap?.service) throw new BusinessOrchestrationError('Reservation capability not available')
     const fn = cap.service[method]
     if (!fn) throw new BusinessOrchestrationError(`Reservation service method not found: ${method}`)
@@ -99,6 +124,10 @@ export class BusinessReservationManager {
 
   #delegateManager(method, ...args) {
     const cap = this.#reservation
+    if (!cap) throw new BusinessOrchestrationError('Reservation capability not available')
+    if (typeof cap[method] === 'function') {
+      return cap[method].call(cap, ...args)
+    }
     if (!cap?.manager) throw new BusinessOrchestrationError('Reservation capability not available')
     const fn = cap.manager[method]
     if (!fn) throw new BusinessOrchestrationError(`Reservation manager method not found: ${method}`)
@@ -117,7 +146,10 @@ export class BusinessReservationManager {
     if (data.accommodationId) {
       await this.#assertAccommodationBelongsToBusiness(data.accommodationId, businessId)
     }
-    const result = await this.#delegateService('createReservation', { ...data, businessId }, identity)
+    const scopedManager = this.#scopedReservationManager
+    const result = scopedManager
+      ? await scopedManager.createRequest({ ...data, businessId }, identity)
+      : await this.#delegateService('createReservation', { ...data, businessId }, identity)
     if (result?.success) {
       this.#emit(BUSINESS_RESERVATION_EVENTS.RESERVATION_CREATED, { businessId, reservationId: result.reservationId, data: result.data || result, identity })
     }
