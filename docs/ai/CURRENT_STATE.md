@@ -1,7 +1,7 @@
 # CURRENT_STATE.md
 
 > Exact snapshot of project state. Update after each completed phase.
-> Last updated: **APP-ZONE-PRESENT-1 — FIRST LEVEL-2 APPLICATION-SCOPED VISUAL IDENTITY** (2026-09-25)
+> Last updated: **BOOKING-4.4 — PHYSICAL POSTGRESQL CERTIFIED** (2026-09-26)
 
 ## Platform Status
 
@@ -19,7 +19,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Phases completed | 100+ (P0 through P15.11, BOOKING-4.3, RUNTIME-PERSISTENCE-1) |
+| Phases completed | 100+ (P0 through P15.11, BOOKING-4.3, RUNTIME-PERSISTENCE-1, BOOKING-4.4) |
 | Capabilities registered | 35 (Business sub-managers: 12) |
 | Architecture specs | 35 + 12 audit reports |
 | SDK specifications | 9 |
@@ -149,6 +149,7 @@
 | 110 | APP-ZONE-TABS-1 | Zone Navigation Content Contract + Presentation Tabs Strategy | Product |
 | 111 | APP-ZONE-TABS-2 | Real Visual Integration: Isla Teja (structured screen content + styling) | Product |
 | 112 | APP-ZONE-PRESENT-1 | First Level-2 Application-Scoped Visual Identity (declarative zonePresentation) | Product |
+| 113 | BOOKING-4.4 | Generic PostgreSQL Booking Write Lifecycle Physical Certification (A–J Gate) | Product |
 
 ## Registered Capabilities (32)
 
@@ -2182,6 +2183,87 @@ The immediate objective is a visible, usable, mobile-first Turistic OS vertical 
 
 ---
 
+## BOOKING-4.4 - Generic PostgreSQL Booking Write Lifecycle — PHYSICAL POSTGRESQL CERTIFIED
+
+**Status:** `BOOKING-4.4 — PHYSICAL POSTGRESQL CERTIFIED`
+**Certification Date:** 2026-09-26
+**Certified Commit:** `96c53cae5cc759f794a2d02d47939ea6ccbb41af`
+**Physical Database:** Neon PostgreSQL — database `valdi_test` (no connection details, credentials, or URLs recorded)
+**Isolation Method:** executed from a temporary clean Git worktree pinned exactly to the certified commit; the certification harness remains only as an untracked artifact `tests/physical/booking44.physical.gate.mjs` in that temporary worktree
+
+### Certified Contract
+
+This certification demonstrates that generic **Product Booking → ReservationManager → ReservationRepository → PostgreSQL transactional persistence** physically enforces the certified write/lifecycle contract:
+
+- capacity authority lives in a physical PostgreSQL conditional `UPDATE availability ... WHERE ... reserved_count + $1 <= inventory`;
+- reservation and reservation-line persistence plus capacity commitment share one PostgreSQL transaction;
+- sequential and concurrent attempts beyond `inventory` fail closed with `AvailabilityConflictError` carrying `No capacity for <date>`;
+- missing authoritative availability fails closed without partial writes;
+- multi-night stays hold every required inventory night atomically;
+- multi-night failure rolls back the entire stay (no partial `reserved_count` consumption);
+- cancellation sets `released_at` and restores `reserved_count` exactly once;
+- repeated release is an idempotent no-op;
+- a released stay can be rebooked;
+- cross-tenant capacity access is rejected.
+
+### Pre-Write Guards
+
+- `BOOKING44_DATABASE_GUARD_PASS` — connected_database=valdi_test
+- `BOOKING44_SCHEMA_NOTE_NO_BUSINESSES_TABLE` — committed schema uses `companies`
+- `BOOKING44_SCHEMA_GUARD_PASS` — tables=6, migration_rows=10
+- `BOOKING44_PROVIDER_PROOF_PASS` — adapter_provider=postgres, persistence_provider=postgres
+
+### Physical Scenario Matrix (A–J) — ALL PASS
+
+| Scenario | Result |
+|----------|--------|
+| A — Seeded Success | PASS |
+| B — Sequential Exhaustion | PASS |
+| C — Concurrent Exhaustion | PASS |
+| D — Missing Authoritative Row | PASS |
+| E — Multi-Night Success | PASS |
+| F — Multi-Night Rollback | PASS |
+| G — Cancellation / Release | PASS |
+| H — Idempotent Release | PASS |
+| I — Rebook After Release | PASS |
+| J — Tenant Isolation | PASS |
+
+### Cleanup / Closure
+
+- `BOOKING44_FIXTURE_CLEANUP_DONE` — zero certification residue
+- `BOOKING44_POOL_CLOSED`
+- Final physical marker: `BOOKING44_PHYSICAL_POSTGRESQL_GATE_PASS`
+
+### Post-Run Source Integrity
+
+- temporary worktree tracked modifications: **0** (only the untracked harness remains)
+- primary worktree staged: **0**
+- primary worktree preserved (HEAD `96c53cae5cc759f794a2d02d47939ea6ccbb41af`, porcelain 252 unchanged)
+
+### Explicitly NOT Claimed
+
+- this does not claim that every application UI or every future destination is certified;
+- this does not claim Ensueño Curiñanco is physically certified yet — Ensueño remains downstream **C4**;
+- read-side availability parity is not certified by BOOKING-4.4.
+
+### Deferred Debt
+
+`READ_SIDE_AVAILABILITY_PARITY_DEBT_DEFERRED`
+
+### Next Milestone
+
+**C4 — Ensueño Curiñanco Booking Application Integration** may now proceed because the generic Booking foundation it depends on is:
+
+- committed
+- pushed
+- synced
+- regression-tested
+- physically PostgreSQL-certified
+
+C4 is **NOT implemented in this task**.
+
+---
+
 ## Product Booking Checkpoints — MVP-AVAILABILITY-RESERVATION-1
 
 ### Phase A — Published checkpoint
@@ -2252,7 +2334,7 @@ The following are **NOT** claimed by these product checkpoints and remain pendin
 
 ### Next milestone
 
-**`PHYSICAL-BOOKING-1`** — physical traveler booking certification (traveler company page → select dates → real availability → submit reservation → certified PostgreSQL reservation path → repository-generated confirmation → confirmation UI; plus, where the domain supports capacity competition, last-available-capacity 409 conflict certification). Documented here as the next milestone; **not executed during this checkpoint**.
+**C4 — Ensueño Curiñanco Booking Application Integration** is the immediate next milestone and may now proceed because the generic Booking foundation it depends on is committed, pushed, synced, regression-tested, and physically PostgreSQL-certified (BOOKING-4.4). C4 is **not executed during this checkpoint**.
 
 ---
 
