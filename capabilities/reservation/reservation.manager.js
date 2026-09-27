@@ -121,6 +121,7 @@ constructor(context) {
       customer: data.customer,
       dates: data.dates,
       guests: data.guests || 1,
+      currency: data.currency || null,
       source: data.source || 'direct',
       notes: data.notes || '',
       metadata: data.metadata || {},
