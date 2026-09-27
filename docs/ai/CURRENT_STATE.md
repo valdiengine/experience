@@ -2780,3 +2780,130 @@ Verified independent of these changes (involved files clean vs HEAD; identical r
 - Focused re-certification (all framework-free `node <file>` runners): ZonePresentation contract **17/17**, web zone-presentation **11/11**, ZoneNavigation contract **17/17**, ZoneContent **14/14**, tabs strategy **9/9**, web zone-navigation **12/12**, web zone-navigation.tabs-2 **13/13** = **93/93 core**, plus Presentation core **12/12** and Components **14/14**.
 - Pre-existing failures re-verified UNCHANGED: `presentation.integration` **36/37** (`testInternalFieldsNotExposed` vs `quoteAPIConfig`), `p15.8.3` **55/56** (capabilities freeze), `p15.10.2` **46/50** (4 known), `experience.test` **13/14** (config navigation), `showcase-1` **5/20** (albasie company config). `p15.8.4` **47/47** still green after the adapter/renderer additions.
 - Unrelated dirty working tree (277 lines historical) remains untouched; no staging/commit/push performed — staging control stays with the user/GitHub after this report.
+
+## PUBLIC STAGE RESERVATION-WRITE CERTIFICATION — Ensueño Curiñanco
+
+**Status:** CERTIFIED (2026-09-27)
+**Verdict:** PUBLIC_STAGE_RESERVATION_WRITE_CERTIFIED
+**Baseline:** `p15.3-development` @ `20f08626a47d50ab236151e68d47d70a328b20a6`
+**Target:** `https://stage.valdi.app/api/v1/booking/companies/ensueno-curinanco/reservations`
+
+### Stage parity gate
+
+- The public Stage write dependency manifest was traced from Passenger through the public booking route, traveler context, ReservationManager/BusinessManager, PostgreSQL repositories, runtime bootstrap and PostgreSQL connection/configuration.
+- Minimum write-path manifest: **39 files**.
+- Local authoritative source was derived from Git HEAD blobs (`git show 20f08626:<path>`), not from the dirty working tree.
+- Stage comparison result: **39/39 functionally equivalent**.
+  - 31 files were byte-identical by SHA-256.
+  - 7 apparent SHA differences were proven to be CRLF/LF-only differences.
+  - `api/routes/api.router.js` contained one Stage-only diagnostic `RUNTIME-PERSISTENCE-1 TRACE` console log after route registration; no routing/write behavior difference.
+- No Stage deployment was required for this certification.
+
+### Gate A — Stage physical persistence health
+
+Public `/health` returned:
+
+- `status = ok`
+- `environment = staging`
+- `persistence.status = up`
+- `persistence.provider = postgres`
+- `persistence.physical = true`
+
+### Gate B — Pre-write public availability
+
+Read-only public availability for `2026-11-10` through `2026-11-12` returned:
+
+- `2026-11-10`: available 4 / capacity 4
+- `2026-11-11`: available 4 / capacity 4
+- `2026-11-12`: available 4 / capacity 4
+
+The availability GET currently includes checkout in its returned range and reported `nights: 3`; this differs from the reservation write's checkout-exclusive capacity semantics and is recorded as follow-up debt.
+
+### Gate C — Exactly one intentional public POST
+
+Exactly **one** synthetic POST was issued. No retry occurred.
+
+Synthetic identity:
+
+- guest: `SYNTHETIC STAGE WRITE CERT USER`
+- email: `stage-write-cert@unreachable.invalid`
+- phone: `+56999999999`
+- dates: `2026-11-10` -> `2026-11-12`
+- guests: 1
+- marker: `[PUBLIC-STAGE-WRITE-CERT]`
+
+HTTP result:
+
+- HTTP `201`
+- `success = true`
+- reservation ID: `7f820bae-870f-460d-a14f-96894c97db34`
+- confirmation code: `CONF-1790524053770-MC2GCD`
+- status: `requested`
+- `totalPrice = null`
+- response currency: `USD`
+
+### Gate D — Physical PostgreSQL verification
+
+A temporary SELECT-only verifier was executed against the Stage PostgreSQL environment and removed afterward.
+
+Physical reservation evidence:
+
+- exactly one reservation exists for `7f820bae-870f-460d-a14f-96894c97db34`
+- tenant: `36d84fc9-33db-44f4-ac1d-7400902eb756`
+- accommodation: `83e42591-3402-441f-beae-d35ed1ba58fc`
+- confirmation code matches HTTP response
+- status `requested`
+- dates `2026-11-10` -> `2026-11-12`
+- `guest_count = 1`
+- synthetic customer identity and marker persisted
+- `channel = traveler-booking`
+- `total_price = null`
+- persisted currency = `USD`
+
+Physical reservation-line evidence:
+
+- exactly **1** `reservation_lines` row
+- line ID: `cdfc4372-3b1f-4755-9015-219fc34c7b22`
+- target type: `accommodation`
+- target ID matches reservation accommodation
+- temporal mode: `DATE_RANGE`
+- start `2026-11-10`
+- end `2026-11-12`
+- quantity 1
+- `released_at = null`
+
+Physical capacity evidence:
+
+- `2026-11-10`: inventory 4, `reserved_count = 1`
+- `2026-11-11`: inventory 4, `reserved_count = 1`
+- `2026-11-12`: inventory 4, `reserved_count = 0`
+
+This physically certifies checkout-exclusive reservation capacity consumption: Nov 10 and Nov 11 were consumed; checkout Nov 12 was not.
+
+### Gate E — Public read-back
+
+The public availability endpoint after the write returned:
+
+- `2026-11-10`: available **3** / capacity 4
+- `2026-11-11`: available **3** / capacity 4
+- `2026-11-12`: available **4** / capacity 4
+
+Therefore the complete public Stage path is physically certified:
+
+`public HTTPS POST -> booking route -> reservation/business managers -> PostgreSQL transaction -> reservations + reservation_lines + atomic availability mutation -> Neon -> public availability read-back`
+
+### Follow-up debt discovered — NOT remediated in this certification
+
+1. **Ensueño reservation currency:** the public write response and physical PostgreSQL row both use `USD`; the expected Ensueño commercial currency is `CLP`. This is a real persisted configuration/product discrepancy, not merely an HTTP serialization issue.
+2. **Availability read/write date semantics:** public availability GET includes the checkout date and reports three nights for `2026-11-10` -> `2026-11-12`, while reservation capacity mutation correctly uses checkout-exclusive semantics and consumes only Nov 10 and Nov 11.
+3. These discrepancies were deliberately **not fixed during certification** to preserve milestone scope and evidence.
+
+### Safety / cleanup
+
+- No POST retry occurred.
+- No reservation cleanup/cancellation/DELETE was performed.
+- The synthetic reservation intentionally remains in PostgreSQL as certification evidence.
+- No production customer data was used.
+- No Stage runtime/dependency files were changed.
+- Temporary `valdi-stage-write-verify.mjs` was removed after SELECT-only verification.
+- Existing unrelated dirty working-tree files remain foreign ownership and must not be reset/restored/stashed or broadly staged.
