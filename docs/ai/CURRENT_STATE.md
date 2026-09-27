@@ -2907,3 +2907,121 @@ Therefore the complete public Stage path is physically certified:
 - No Stage runtime/dependency files were changed.
 - Temporary `valdi-stage-write-verify.mjs` was removed after SELECT-only verification.
 - Existing unrelated dirty working-tree files remain foreign ownership and must not be reset/restored/stashed or broadly staged.
+
+## ENSUENO-BOOKING-CURRENCY-1 — Public Stage CLP Persistence Certification
+
+**Status:** CERTIFIED (2026-09-27)
+**Verdict:** ENSUENO_BOOKING_CURRENCY_1_CERTIFIED
+**Repository baseline:** `p15.3-development` @ `46f809950126c0a747711202ed0cd260ec0c31bc`
+**Repository fix:** `fix(booking): preserve reservation currency`
+**Target:** `https://stage.valdi.app/api/v1/booking/companies/ensueno-curinanco/reservations`
+
+### Root cause and remediation
+
+Discovery proved that Ensueño declares `CLP` through its booking configuration/resolution path and that the BookingAdapter supplies the resolved target currency to the reservation request.
+
+The currency was lost inside `ReservationManager.createRequest`, whose normalized reservation object omitted the incoming `currency` field. The PostgreSQL repository then correctly applied its existing generic fallback `r.currency || 'USD'`.
+
+The remediation was deliberately minimal:
+
+- `capabilities/reservation/reservation.manager.js` now preserves `currency: data.currency || null`.
+- The repository fallback was not changed.
+- No generic CLP default was introduced.
+- Availability/date semantics were not modified.
+- `tests/capability/reservation-currency.test.js` certifies explicit `CLP`, omitted currency -> `null`, and explicit `null` -> `null`.
+
+Focused certification: **12/12 PASS**.
+
+The broader booking/runtime regression suites executed during remediation also remained green.
+
+### Stage deployment gate
+
+The active Stage `reservation.manager.js` was backed up before modification.
+
+Original/backup SHA-256:
+
+`715fe85c89975d82dde4fa135c65179ddfb21b9798a280e6ca059a57273652a0`
+
+The Stage remediation was a surgical one-line addition:
+
+`currency: data.currency || null,`
+
+Post-patch active SHA-256:
+
+`338a5d975fe1664ae5c0dd850180b4c623720d6d365262f864c7c51d6ec257e1`
+
+Passenger was restarted through the normal `tmp/restart.txt` mechanism.
+
+Post-restart public `/health` returned HTTP `200` with:
+
+- `status = ok`
+- `environment = staging`
+- `persistence.status = up`
+- `persistence.provider = postgres`
+- `persistence.physical = true`
+
+### Pre-write read-only gate
+
+Public availability for `2026-11-20` through `2026-11-22` returned HTTP `200` and capacity `4/4` for all three returned calendar dates.
+
+The GET continues to report `nights: 3` and includes the checkout date. No date-semantics change was made in this milestone.
+
+Reservation capacity semantics remain checkout-exclusive: for a `2026-11-20` -> `2026-11-22` stay, Nov 20 and Nov 21 are the occupied nights and Nov 22 is checkout.
+
+### Exactly one Stage currency-certification POST
+
+After explicit operator authorization, exactly **one** new synthetic reservation POST was issued. No retry occurred.
+
+Synthetic identity:
+
+- guest: `SYNTHETIC STAGE CURRENCY CERT USER`
+- email: `stage-currency-cert@unreachable.invalid`
+- phone: `+56999999999`
+- dates: `2026-11-20` -> `2026-11-22`
+- guests: 1
+- marker: `[STAGE-CURRENCY-CERT]`
+
+HTTP result:
+
+- HTTP `201`
+- `success = true`
+- reservation ID: `1f6de1dc-7279-4439-b73b-5c5c6b83f562`
+- confirmation code: `CONF-1790528107223-YSDZKW`
+- status: `requested`
+- `totalPrice = null`
+- response currency: **`CLP`**
+
+### Physical PostgreSQL / Neon verification
+
+A SELECT-only verification against the physical Stage PostgreSQL database returned exactly the certification reservation:
+
+- ID: `1f6de1dc-7279-4439-b73b-5c5c6b83f562`
+- confirmation code: `CONF-1790528107223-YSDZKW`
+- status: `requested`
+- check-in: `2026-11-20`
+- check-out: `2026-11-22`
+- guest count: 1
+- `total_price = null`
+- persisted currency: **`CLP`**
+- channel: `traveler-booking`
+
+This physically certifies the complete currency propagation path:
+
+`Ensueño CLP config -> booking resolver/adapter -> ReservationManager -> PostgreSQL repository -> reservations.currency = CLP -> Neon -> HTTP response currency = CLP`
+
+The original `USD` finding from PUBLIC STAGE RESERVATION-WRITE CERTIFICATION remains valid historical evidence of the pre-fix defect; this milestone closes that specific currency discrepancy.
+
+### Remaining separate follow-up
+
+`total_price = null` remains unchanged and is outside ENSUENO-BOOKING-CURRENCY-1.
+
+Availability GET date/night semantics also remain outside this milestone. The reservation write/capacity path already follows checkout-exclusive occupancy semantics; the remaining question is the public GET/UI contract for returned calendar dates versus the `nights` value.
+
+### Safety / evidence retention
+
+- Exactly one currency-certification POST was issued; no retry occurred.
+- No cleanup, cancellation, DELETE, or direct SQL mutation was performed.
+- Reservation `1f6de1dc-7279-4439-b73b-5c5c6b83f562` intentionally remains in PostgreSQL as certification evidence.
+- The previous public-write certification reservation also remains untouched.
+- No production customer data was used.
+- Existing unrelated dirty working-tree files remain foreign ownership and must not be reset/restored/stashed or broadly staged.
