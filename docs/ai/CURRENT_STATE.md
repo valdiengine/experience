@@ -1,7 +1,7 @@
 # CURRENT_STATE.md
 
 > Exact snapshot of project state. Update after each completed phase.
-> Last updated: **ENSUEÑO POSTGRES M1–M5 — CERTIFIED** (2026-09-27)
+> Last updated: **ENSUEÑO POSTGRES M1–M5 — CERTIFIED + STAGE-DEPLOYED (ENSUENO-M5-STAGE-DEPLOY-1 — CERTIFIED)** (2026-09-27)
 
 ## Platform Status
 
@@ -19,7 +19,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Phases completed | 100+ (P0 through P15.11, BOOKING-4.3, RUNTIME-PERSISTENCE-1, BOOKING-4.4, C4, ENSUENO-POSTGRES-M1-M5) |
+| Phases completed | 100+ (P0 through P15.11, BOOKING-4.3, RUNTIME-PERSISTENCE-1, BOOKING-4.4, C4, ENSUENO-POSTGRES-M1-M5, ENSUENO-M5-STAGE-DEPLOY-1) |
 | Capabilities registered | 35 (Business sub-managers: 12) |
 | Architecture specs | 35 + 12 audit reports |
 | SDK specifications | 9 |
@@ -152,6 +152,7 @@
 | 113 | BOOKING-4.4 | Generic PostgreSQL Booking Write Lifecycle Physical Certification (A–J Gate) | Product |
 | 114 | C4 | Ensueño Curiñanco Booking Application Integration (source committed, pushed, regression-certified) | Product |
 | 115 | ENSUENO-POSTGRES-M1-M5 | Ensueño Curiñanco PostgreSQL Persistence Certification (physical + read-side, M1–M5) | Product |
+| 116 | ENSUENO-M5-STAGE-DEPLOY-1 | Ensueño M5 Stage Deployment & Read-Side Certification (provider=postgres, physical=true, availability read from Neon) | Product |
 
 ## Registered Capabilities (32)
 
@@ -2346,7 +2347,7 @@ The deferred debt `READ_SIDE_AVAILABILITY_PARITY_DEBT_DEFERRED` remains open and
 **Synchronization:** committed, pushed, synchronized (`LOCAL == REMOTE == f185151598f24ae52f40c840e324192daa683fd9`)
 **Branch:** `p15.3-development`
 **Regression-certified:** Yes (310/310 + smoke/health/bootstrap)
-**Stage-deployed:** **NO** — Stage M5 deployment and Passenger restart are NOT yet performed.
+**Stage-deployed:** **YES** — certified under **ENSUENO-M5-STAGE-DEPLOY-1** (2026-09-27): provider `postgres`; physical `true`; public Ensueño availability read through physical PostgreSQL is certified.
 
 ### Purpose
 
@@ -2410,30 +2411,132 @@ Persist Ensueño Curiñanco's booking identities and availability into physical 
 - Temporary physical certification tooling `tests/runtime/ensueno-postgres-m5-physical-verify.mjs` intentionally excluded.
 - 245+ unrelated working-tree entries remain untouched; explicit staging only.
 
-### Stage Status (explicit — NOT DEPLOYED)
+### Stage Status (explicit — CERTIFIED 2026-09-27)
 
 - M1–M5 source: COMMITTED / PUSHED / GIT-CERTIFIED. Neon physical persistence: CERTIFIED. M5 physical read resolver: CERTIFIED.
-- Stage M5 deployment: **NOT PERFORMED**. Passenger restart with M5: **NOT PERFORMED**. Public availability endpoint after M5: **NOT CERTIFIED**. Public reservation write: **NOT CERTIFIED**.
-- M5 fixes the `UNKNOWN_COMPANY` symptom at the source level, but the public fix MUST NOT be marked closed until Stage deployment proves it.
+- Stage M5 deployment: **PERFORMED** under `ENSUENO-M5-STAGE-DEPLOY-1` about 3 files only. Passenger restart with M5: **PERFORMED**. Public availability endpoint after M5: **CERTIFIED** (Gate B PASS). Public reservation write: **NOT CERTIFIED** (out of scope).
+- The `UNKNOWN_COMPANY` symptom is **CLOSED** on the public Stage read-side path (2026-09-27). Reservation-write certification remains a separate controlled gate.
 
 ### Explicitly NOT Claimed
 
 - no claim that configured 4-guest (`CLP 100,000`) or additional-guest (`CLP 8,000`) pricing is active;
 - no claim that destructive availability adapter writes are physically certified;
-- no claim that Stage serves the Ensueño availability endpoint yet;
-- no claim that public reservation writes are physically certified;
-- no claim of a completed `ENSUENO-M5-STAGE-DEPLOY-1`.
+- no claim that public reservation writes are physically certified (Stage reservation-write certification is a later controlled gate);
+- `ENSUENO-M5-STAGE-DEPLOY-1` (read-side Stage certification) — **CERTIFIED** (2026-09-27); see its section below.
 
 ### Remaining Debt
 
 - Mixed-file reconciliation pending a controlled gate: `package.json` (`db:seed` hunk) and `database/index.js` (`runSeeds` export hunk) are not yet committed.
 - Temporary physical verification script `tests/runtime/ensueno-postgres-m5-physical-verify.mjs` remains untracked tooling.
+- `jsonwebtoken` Stage runtime debt: `jsonwebtoken@9.0.3` installed extraneous on Stage (`npm install jsonwebtoken@9.0.3 --no-save --ignore-scripts`); Stage `package.json`/`package-lock.json` intentionally untouched; durable fix deferred to the package-manifest reconciliation gate (repo `package.json` already declares `jsonwebtoken@^9.0.3`).
 - Destructive availability adapter write certification is DEFERRED.
 - Reservation write certification is a later, separate controlled gate — do NOT combine it with the 4+1 reservation capacity test.
 
+### Completion
+
+`ENSUENO-M5-STAGE-DEPLOY-1` is **CERTIFIED** — see the section below:
+
+`## ENSUENO-M5-STAGE-DEPLOY-1 — Stage Deployment & Read-Side Certification`
+
+---
+
+## ENSUENO-M5-STAGE-DEPLOY-1 — Stage Deployment & Read-Side Certification
+
+**Status:** `ENSUENO-M5-STAGE-DEPLOY-1 — CERTIFIED`
+**Certification Date:** 2026-09-27
+**Baseline HEAD:** `40b8dbce60c769f2f0e99f9f263c8f64cd3d11e6` (branch `p15.3-development`)
+**Stage:** `/home/rodrigo/turistic-stage` · `https://stage.valdi.app`
+**Source manifest:** derived exactly from `f185151` (minimum 3 runtime files; SHA256 certified local/remote). Transitive dependencies were previously hash-verified against Stage. Seeds/tests were NOT deployed (Passenger must NEVER run seeds).
+
+### Deployment Manifest (3 files — SHA256 certified on Stage)
+
+| Path | SHA256 |
+|------|--------|
+| `runtime/startup/application.start.js` | `84e488f40a7b1fbc8de04cbd8a74eb36d9a266eb486780107833026a5a7a2d84` |
+| `experience/booking/ensueno.booking.resolver.js` | `1850c3b790d38740b0799ca79aa78d5cb17f6ea16efe0a489479dba84cc2787e` |
+| `capabilities/persistence/adapters/postgres/postgres.availability.adapter.js` | `c9fa867f0ffa891e52bebfbf005b85fee9c0b4b5cd78cfd93c5aa1c4048ba673` |
+
+### Deployment Incidents (pre-existing / environment — fixed during activation)
+
+1. **jsonwebtoken runtime dependency (deploy debt):** Stage Node environment lacked `jsonwebtoken`; temporary remediation `npm install jsonwebtoken@9.0.3 --no-save --ignore-scripts` (result `jsonwebtoken@9.0.3 extraneous`). Stage `package.json`/`package-lock.json` intentionally NOT modified. Repo `package.json` already declares `jsonwebtoken@^9.0.3`; durable fix deferred to the package-manifest reconciliation gate.
+2. **Auth runtime parity:** Stage exposed `this[#factory].registerProvider is not a function`. The correct fix existed at `f681a27` (`fix(auth): propagate provider config through authentication factory`); exact auth files from `40b8dbc` were deployed — `runtime/auth/engine/authentication.engine.js` + `runtime/auth/engine/auth.engine.factory.js` — with operator-verified SHA1 parity `57deb670a12215d770ae66fda3e4e5b0358f7136` / `bc1736e6599bd89a92e57081f0d07d26bf30e541`. Resolved the Auth startup failure. (Repository-HEAD raw SHA1 for reference: `authentication.engine.js` = `1444e08ddc05b8c6065f98d78ef5613eab8e53a8` (LF blob; Windows CRLF checkout differs), `auth.engine.factory.js` = `17cd1bb2dccfa1237abd5a92dc9dbc05de9f713d`.)
+3. **PERSISTENCE_PROVIDER absent → mock:** Stage initially ran mock because `PERSISTENCE_PROVIDER` was absent from the CloudLinux application environment (stored at `/home/rodrigo/.cl.selector/node-selector.json`). Operator added `PERSISTENCE_PROVIDER=postgres`, preserving the existing variables and `JWT_SECRET`.
+4. **Wrong catalog (42P01 / 3D000):** after the provider flip, M5 bootstrap failed with `relation "tenants" does not exist` (42P01) — Stage was connected to the wrong database via the `POSTGRES_*` fallback (`POSTGRES_DB=neondb` present, `DATABASE_URL` absent). Testing the same endpoint/credentials against `valdi_test` returned `3D000 invalid_catalog_name`, proving `POSTGRES_DB=valdi_test` alone would be incorrect. No host/user/password values recorded.
+
+### Physical DATABASE_URL Finding (no secrets)
+
+The M5 physical verifier (`tests/runtime/ensueno-postgres-m5-physical-verify.mjs`) explicitly requires `DATABASE_URL` — the prior M1–M5 certification ran on `DATABASE_URL`, not the `POSTGRES_*` fallback. Before environment activation the operator re-ran the verifier against the certified shell `DATABASE_URL`:
+
+`[M5-PHYSICAL] TENANT_RESOLVED / COMPANY_RESOLVED / ACCOMMODATION_RESOLVED / OWNERSHIP_VALIDATED (3/3 true) / REGISTRY_TARGET state=registered ok=true requiredFieldsPresent=true / RESULT: CERTIFIED`
+
+Full UUIDs and the `DATABASE_URL` value were never printed or recorded. Code precedence (`postgres.connection.js`, `database/config/database.config.js:110`): when `DATABASE_URL` is present it is authoritative (`connectionString`); the `POSTGRES_*` components apply only as fallback.
+
+### Final CloudLinux Environment (presence only — no secrets)
+
+- `DATABASE_URL_PRESENT=True` · `PERSISTENCE_PROVIDER=postgres` · `JWT_SECRET_PRESENT=True`; complete environment = 13 variables.
+- Precedence note: `web/start.web.js` loads `.env.staging → .env.local → .env` with override; CloudLinux env is the base layer. No conflicting `.env*` keys were present on Stage.
+
+### GATE A — Public Stage physical health: PASS
+
+`GET https://stage.valdi.app/health` → HTTP 200
+
+```json
+{
+  "status": "ok",
+  "environment": "staging",
+  "persistence": {
+    "status": "up",
+    "provider": "postgres",
+    "physical": true,
+    "entityName": "unknown",
+    "latency": 60
+  }
+}
+```
+
+`entityName: "unknown"` is the adapter default and is NOT a Gate A failure.
+
+### GATE B — Public Ensueño physical availability: PASS
+
+`GET https://stage.valdi.app/api/v1/booking/companies/ensueno-curinanco/availability?checkIn=2026-10-10&checkOut=2026-10-12` → HTTP 200
+
+```json
+{
+  "success": true,
+  "data": {
+    "company": "ensueno-curinanco",
+    "checkIn": "2026-10-10",
+    "checkOut": "2026-10-12",
+    "nights": 3,
+    "dates": [
+      { "date": "2026-10-10", "status": "available", "available": 4, "capacity": 4, "price": 90000, "notes": null },
+      { "date": "2026-10-11", "status": "available", "available": 4, "capacity": 4, "price": 90000, "notes": null },
+      { "date": "2026-10-12", "status": "available", "available": 4, "capacity": 4, "price": 90000, "notes": null }
+    ]
+  }
+}
+```
+
+`UNKNOWN_COMPANY` is gone; Ensueño registry reconstruction succeeded; availability was read from physical PostgreSQL/Neon.
+
+Recorded observation (no behavior changed): the API reports `nights=3` for the inclusive range `2026-10-10 .. 2026-10-12`. This is preserved as observed — it is a candidate follow-up, NOT a correction. Booking behavior was NOT modified in this closure.
+
+### Scope Boundary
+
+Certified: Stage Passenger → Valdi Engine → PostgreSQL provider → `DATABASE_URL` → Neon physical persistence → Ensueño registry reconstruction → public availability READ.
+
+**RESERVATION_WRITE = OUT OF SCOPE.** `POST /api/v1/booking/companies/:slug/reservations` was NOT exercised and is NOT claimed. Physical write-lifecycle was previously certified ONLY by the BOOKING-4.4 harness (`96c53cae`) — that is NOT the public Stage write path.
+
+### Remaining Debt
+
+- `jsonwebtoken` Stage runtime debt (extraneous install) — durable fix at the package-manifest reconciliation gate.
+- Mixed-file reconciliation pending a controlled gate: `package.json` (`db:seed` hunk), `package-lock.json`, and `database/index.js` (`runSeeds` export hunk) are not yet committed.
+- Temporary physical verification script `tests/runtime/ensueno-postgres-m5-physical-verify.mjs` remains untracked tooling.
+- Destructive availability adapter write certification is DEFERRED.
+
 ### Next Milestone
 
-**ENSUENO-M5-STAGE-DEPLOY-1** — derive a minimum Stage deployment manifest from `f185151`; backup overwritten remote files; upload only required runtime files; verify SHA256 local/remote; restart Passenger; certify `/health`; certify runtime environment `staging`, provider `postgres`, physical `true`; call the public Ensueño availability endpoint; prove `UNKNOWN_COMPANY` is gone; prove availability is read from physical PostgreSQL.
+**PUBLIC STAGE RESERVATION-WRITE CERTIFICATION** — a separate controlled gate to certify the public `POST /api/v1/booking/companies/:slug/reservations` path on Stage (the read-side milestone did NOT exercise writes). This is NOT equivalent to the BOOKING-4.4 harness write-lifecycle certification, and MUST NOT be combined with the 4+1 reservation capacity test. The existing roadmap pointer `MVP2-ENSUENO-STAGE-1` (visible Ensueño Booking application on Stage) remains as previously defined for the UI deploy.
 
 ---
 
