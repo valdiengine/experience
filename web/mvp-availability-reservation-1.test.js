@@ -16,7 +16,7 @@ import { ApiRouter } from '../api/routes/api.router.js'
 import { BookingRegistry, createBookingRegistry } from '../experience/booking/booking.registry.js'
 import { setBookingRegistry, getBookingRegistry } from '../api/routes/booking.routes.js'
 import { createTravelerAuthFacade } from '../experience/booking/traveler-context.js'
-import { resolveBusinessError } from '../experience/booking/booking.adapter.js'
+import { resolveBusinessError, serializeAvailabilityPayload } from '../experience/booking/booking.adapter.js'
 import { renderBookingSection } from './templates/component.templates.js'
 
 const SYNTHETIC_TENANT = { id: 'tenant-booking-1', name: 'Tenant Sintetico de Booking', slug: 'booking-synthetic' }
@@ -167,7 +167,7 @@ async function main() {
   record('availability', 'availability-1-ok-200',
     availability.status === 200 && data.company === REGISTRY_SLUG &&
       data.checkIn === '2026-10-10' && data.checkOut === '2026-10-12' &&
-      data.nights === 3 &&
+      data.nights === 2 &&
       Array.isArray(data.dates) && data.dates.length === 3 &&
       dateMap['2026-10-10']?.price === 120000 &&
       dateMap['2026-10-11']?.price === 125000 &&
@@ -188,6 +188,79 @@ async function main() {
   record('availability', 'availability-4-legacy-availability-route-untouched',
     legacy.status === 200 && legacy.payload?.code !== 'UNKNOWN_COMPANY',
     `status=${legacy.status} (booking adapter must not hijack /api/v1/availability)`)
+
+  console.log('\n[SERIALIZER] Checkout-exclusive nights vs inclusive dates[]...\n')
+
+  const buildCalendar = (dateList) => dateList.map((date) => ({
+    date,
+    status: 'available',
+    available: 2,
+    capacity: 2,
+    price: 120000,
+    notes: null,
+  }))
+
+  // dates[] stays inclusive of checkOut; nights is the exclusive stay length.
+  const SERIALIZER_CASES = [
+    { id: 'two-night', checkIn: '2026-10-10', checkOut: '2026-10-12', dates: ['2026-10-10', '2026-10-11', '2026-10-12'], nights: 2 },
+    { id: 'one-night', checkIn: '2026-10-10', checkOut: '2026-10-11', dates: ['2026-10-10', '2026-10-11'], nights: 1 },
+    { id: 'equal-dates', checkIn: '2026-10-10', checkOut: '2026-10-10', dates: ['2026-10-10'], nights: 0 },
+    { id: 'reversed-dates', checkIn: '2026-10-12', checkOut: '2026-10-10', dates: ['2026-10-12', '2026-10-11', '2026-10-10'], nights: 0 },
+    { id: 'month-boundary', checkIn: '2026-03-30', checkOut: '2026-04-02', dates: ['2026-03-30', '2026-03-31', '2026-04-01', '2026-04-02'], nights: 3 },
+    { id: 'leap-boundary', checkIn: '2024-02-27', checkOut: '2024-03-01', dates: ['2024-02-27', '2024-02-28', '2024-02-29', '2024-03-01'], nights: 3 },
+    { id: 'year-boundary', checkIn: '2025-12-31', checkOut: '2026-01-02', dates: ['2025-12-31', '2026-01-01', '2026-01-02'], nights: 2 },
+    { id: 'non-leap-feb-29-rejected', checkIn: '2026-02-29', checkOut: '2026-03-02', dates: ['2026-02-28', '2026-03-01', '2026-03-02'], nights: 0 },
+    { id: 'impossible-checkin', checkIn: '2026-04-31', checkOut: '2026-05-02', dates: ['2026-04-30', '2026-05-01'], nights: 0 },
+    { id: 'impossible-zero-day', checkIn: '2026-10-00', checkOut: '2026-10-02', dates: [], nights: 0 },
+    { id: 'year-0099-no-remap', checkIn: '0099-12-29', checkOut: '0099-12-31', dates: ['0099-12-29', '0099-12-30', '0099-12-31'], nights: 2 },
+    { id: 'non-string-checkout', checkIn: '2026-10-10', checkOut: undefined, dates: [], nights: 0 },
+    { id: 'non-iso-slash', checkIn: '2026/10/10', checkOut: '2026-10-12', dates: [], nights: 0 },
+  ]
+
+  for (const testCase of SERIALIZER_CASES) {
+    const payload = serializeAvailabilityPayload(
+      REGISTRY_SLUG,
+      { checkIn: testCase.checkIn, checkOut: testCase.checkOut },
+      buildCalendar(testCase.dates),
+    )
+    record('serializer', `serializer-nights-${testCase.id}`,
+      payload.nights === testCase.nights && payload.dates.length === testCase.dates.length,
+      `nights=${payload.nights} (expected ${testCase.nights}) dates=${payload.dates.length} (expected ${testCase.dates.length})`)
+  }
+
+  // Timezone independence: the same stay must count identically regardless of the
+  // host offset, because the arithmetic is UTC date-only.
+  const TZ_OFFSETS = ['UTC', 'America/Santiago', 'Asia/Tokyo', 'Pacific/Kiritimati']
+  const nightsPerOffset = TZ_OFFSETS.map((timeZone) => {
+    const previous = process.env.TZ
+    process.env.TZ = timeZone
+    const value = serializeAvailabilityPayload(REGISTRY_SLUG, { checkIn: '2026-10-10', checkOut: '2026-10-12' }, buildCalendar([])).nights
+    if (previous === undefined) delete process.env.TZ
+    else process.env.TZ = previous
+    return value
+  })
+  record('serializer', 'serializer-nights-timezone-independent',
+    nightsPerOffset.every((value) => value === 2),
+    `TZ=${TZ_OFFSETS.join(',')} nights=${nightsPerOffset.join(',')}`)
+
+  // Everything except nights must survive serialization untouched.
+  const preserved = serializeAvailabilityPayload(
+    REGISTRY_SLUG,
+    { checkIn: '2026-10-10', checkOut: '2026-10-12' },
+    [{ date: '2026-10-11', status: 'occupied', available: null, capacity: null, price: 0, notes: 'sin inventario' }],
+  )
+  record('serializer', 'serializer-nights-other-fields-preserved',
+    preserved.company === REGISTRY_SLUG &&
+      preserved.checkIn === '2026-10-10' && preserved.checkOut === '2026-10-12' &&
+      preserved.dates.length === 1 &&
+      preserved.dates[0].date === '2026-10-11' &&
+      preserved.dates[0].status === 'occupied' &&
+      preserved.dates[0].available === null &&
+      preserved.dates[0].capacity === null &&
+      preserved.dates[0].price === 0 &&
+      preserved.dates[0].notes === 'sin inventario' &&
+      preserved.nights === 2,
+    `company=${preserved.company} dates=${JSON.stringify(preserved.dates)} nights=${preserved.nights}`)
 
   console.log('\n[RESERVATION] Certified create path with repository confirmationCode...\n')
 

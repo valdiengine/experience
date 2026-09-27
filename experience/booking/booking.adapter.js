@@ -18,6 +18,44 @@ function assertString(value, label) {
   return value.trim()
 }
 
+// The public availability calendar (dates[]) is an inclusive display range: it
+// lists the checkout day so the traveler sees every day of the stay. Persisted
+// reservation occupancy is checkout-exclusive, so the night count is derived
+// from the bounds instead of the array length. These helpers are module-local
+// and pure.
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+const MILLISECONDS_PER_DAY = 86400000
+
+// UTC midnight timestamp for a strict YYYY-MM-DD string, or null.
+// `new Date('YYYY-MM-DD')` is deliberately avoided because it silently
+// normalizes impossible dates (2026-02-30 -> 2026-03-02). The year is applied
+// through setUTCFullYear rather than Date.UTC or a numeric-component
+// constructor, both of which remap years 0000-0099 onto 1900-1999.
+// Round-trip equality rejects every normalized value.
+function parseIsoDateOnly(value) {
+  if (typeof value !== 'string' || !ISO_DATE_PATTERN.test(value)) return null
+  const year = Number(value.slice(0, 4))
+  const month = Number(value.slice(5, 7))
+  const day = Number(value.slice(8, 10))
+  const date = new Date(0)
+  date.setUTCHours(0, 0, 0, 0)
+  date.setUTCFullYear(year, month - 1, day)
+  const timestamp = date.getTime()
+  if (!Number.isFinite(timestamp)) return null
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null
+  return timestamp
+}
+
+// Checkout-exclusive night count. Invalid, equal and reversed ranges all yield
+// 0 rather than a negative or NaN value.
+function countExclusiveNights(checkIn, checkOut) {
+  const from = parseIsoDateOnly(checkIn)
+  const to = parseIsoDateOnly(checkOut)
+  if (from === null || to === null) return 0
+  const nights = Math.round((to - from) / MILLISECONDS_PER_DAY)
+  return Number.isFinite(nights) && nights > 0 ? nights : 0
+}
+
 function serializeTraveler(data) {
   return {
     checkIn: typeof data.checkIn === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.checkIn) ? data.checkIn : null,
@@ -167,7 +205,7 @@ export function serializeAvailabilityPayload(companySlug, { checkIn, checkOut },
     company: companySlug,
     checkIn,
     checkOut,
-    nights: Array.isArray(calendar) ? calendar.length : 0,
+    nights: countExclusiveNights(checkIn, checkOut),
     dates: Array.isArray(calendar)
       ? calendar.map((day) => ({
           date: day?.date || null,

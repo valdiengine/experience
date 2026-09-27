@@ -2251,6 +2251,81 @@ ${declarations}
     return input ? input.value : '';
   }
 
+  // ── Availability gate ──
+  // The public calendar (dates[]) is inclusive of checkOut, but only the nights
+  // in [checkIn, checkOut) are actually occupied and bookable. checkOut and any
+  // out-of-range entry are therefore excluded from occupancy evaluation.
+  // \d is double-escaped for the surrounding template literal: a single
+  // backslash would be swallowed and emit a literal "d" instead.
+  var ISO_DATE_PATTERN = /^\\d{4}-\\d{2}-\\d{2}$/;
+  var MILLISECONDS_PER_DAY = 86400000;
+
+  // UTC midnight timestamp for a strict YYYY-MM-DD string, or null.
+  // new Date('YYYY-MM-DD') is avoided because it normalizes impossible dates
+  // (2026-02-30 -> 2026-03-02). The year is applied through setUTCFullYear
+  // rather than Date.UTC or a numeric-component constructor, both of which
+  // remap years 0000-0099 onto 1900-1999.
+  function parseIsoDateOnly(value) {
+    if (typeof value !== 'string' || !ISO_DATE_PATTERN.test(value)) return null;
+    var year = Number(value.slice(0, 4));
+    var month = Number(value.slice(5, 7));
+    var day = Number(value.slice(8, 10));
+    var date = new Date(0);
+    date.setUTCHours(0, 0, 0, 0);
+    date.setUTCFullYear(year, month - 1, day);
+    var timestamp = date.getTime();
+    if (!Number.isFinite(timestamp)) return null;
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+    return timestamp;
+  }
+
+  // Occupied night count, or null when the range is invalid, equal or reversed.
+  function occupiedRange(checkIn, checkOut) {
+    var from = parseIsoDateOnly(checkIn);
+    var to = parseIsoDateOnly(checkOut);
+    if (from === null || to === null) return null;
+    var nights = Math.round((to - from) / MILLISECONDS_PER_DAY);
+    if (!Number.isFinite(nights) || nights <= 0) return null;
+    return { from: from, to: to, count: nights };
+  }
+
+  // Eligibility is decided only from the occupied nights, never from
+  // payload.nights or the raw array length. Every expected occupied date must be
+  // present exactly once, and each one must report status 'available' with a
+  // finite numeric available >= 1. capacity is not a gate: null only means
+  // unknown metadata.
+  function hasBookableNights(checkIn, checkOut, data) {
+    var range = occupiedRange(checkIn, checkOut);
+    if (!range) return false;
+    if (!data || !Array.isArray(data.dates)) return false;
+
+    var occupied = {};
+    var occupiedCount = 0;
+    for (var i = 0; i < data.dates.length; i++) {
+      var day = data.dates[i];
+      if (!day || typeof day.date !== 'string') return false;
+      var at = parseIsoDateOnly(day.date);
+      if (at === null) return false;
+      if (at < range.from || at >= range.to) continue;
+      if (Object.prototype.hasOwnProperty.call(occupied, day.date)) return false;
+      occupied[day.date] = day;
+      occupiedCount++;
+    }
+
+    // Every night in [checkIn, checkOut) must be present exactly once: duplicates
+    // were rejected above, so a count shortfall means a night is missing entirely.
+    if (occupiedCount !== range.count) return false;
+
+    for (var date in occupied) {
+      if (!Object.prototype.hasOwnProperty.call(occupied, date)) continue;
+      var entry = occupied[date];
+      if (entry.status !== 'available') return false;
+      if (typeof entry.available !== 'number') return false;
+      if (!Number.isFinite(entry.available) || entry.available < 1) return false;
+    }
+    return true;
+  }
+
   dateForm.addEventListener('submit', async function(e) {
     e.preventDefault();
     hideState();
@@ -2280,11 +2355,8 @@ ${declarations}
         return;
       }
 
-      var dates = (result.data && Array.isArray(result.data.dates)) ? result.data.dates : [];
-      var allNightsAvailable = dates.length > 0 &&
-        dates.every(function(day) { return day && day.status === 'available'; });
-
-      if (!result.success || !result.data || !allNightsAvailable) {
+      if (!result.success || !result.data || !hasBookableNights(checkIn, checkOut, result.data)) {
+        travelerForm.hidden = true;
         showState(result.error || 'No hay disponibilidad para esas fechas.', 'error');
         return;
       }
