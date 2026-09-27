@@ -21,6 +21,15 @@ export const TENANTS_SEED = [
     plan: 'enterprise',
     isActive: true,
   },
+  {
+    name: 'Complejo Ensueño Curiñanco',
+    slug: 'ensueno-curinanco',
+    type: 'company',
+    status: 'active',
+    isActive: true,
+  },
 ]
+
+export const ENSUENO_TENANT = TENANTS_SEED.find((tenant) => tenant.slug === 'ensueno-curinanco')
 
 export default TENANTS_SEED

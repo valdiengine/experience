@@ -93,12 +93,27 @@ export const SEED_REGISTRY = {
       description: 'Company settings',
       dependencies: ['companies'],
     },
+    {
+      name: 'accommodations',
+      layer: 'business',
+      file: './accommodation/accommodations.seed.js',
+      description: 'Accommodations per company',
+      dependencies: ['companies'],
+    },
+    {
+      name: 'availability',
+      layer: 'business',
+      file: './availability/availability.seed.js',
+      description: 'Availability calendar per accommodation',
+      dependencies: ['accommodations'],
+    },
   ],
 
   layers: {
     platform: ['tenants', 'countries', 'regions', 'languages', 'themes'],
     ecosystem: ['destinations', 'ecosystems', 'categories', 'modules', 'experiences'],
     company: ['companies', 'companySettings'],
+    business: ['accommodations', 'availability'],
   },
 
   entities: {
@@ -114,6 +129,8 @@ export const SEED_REGISTRY = {
     themes: { table: 'themes', count: 3 },
     companies: { table: 'companies', count: 6 },
     companySettings: { table: 'company_settings', count: 3 },
+    accommodations: { table: 'accommodations', count: 1 },
+    availability: { table: 'availability', count: 90 },
   },
 }
 

@@ -183,6 +183,36 @@ export const COMPANIES_SEED = [
     },
     modules: ['reservations', 'reviews'],
   },
+  {
+    tenantSlug: 'ensueno-curinanco',
+    destinationSlug: 'valdi',
+    name: 'Complejo Ensueño Curiñanco',
+    slug: 'ensueno-curinanco',
+    type: 'business',
+    status: 'active',
+    description: 'Complejo de cabañas frente al mar en Curiñanco, comuna de Valdivia, Región de Los Ríos. Cabañas con tinaja, piscina de temporada y sauna entre el bosque costero.',
+    shortDescription: 'Cabañas costeras en Curiñanco',
+    contact: {
+      email: 'contacto@ensuennocurinanco.example.com',
+      phone: '+56 9 2222 1111',
+      address: 'Playa Curiñanco s/n, Valdivia',
+    },
+    location: {
+      address: 'Playa Curiñanco s/n',
+      city: 'Curiñanco',
+      region: 'Los Ríos',
+      country: 'CL',
+      coordinates: { lat: -39.8772, lng: -73.4097 },
+    },
+    website: 'https://ensueno-curinanco.example.com',
+    taxId: '77.888.999-0',
+    employeeCount: '1-10',
+    branding: {
+      primaryColor: '#2E7D32',
+      secondaryColor: '#1B5E20',
+    },
+    modules: ['reservations', 'availability', 'payments', 'reviews'],
+  },
 ]
 
 export default COMPANIES_SEED

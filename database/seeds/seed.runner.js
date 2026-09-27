@@ -7,7 +7,7 @@
  */
 
 import { SEED_REGISTRY, validateSeedOrder } from './registry/seed.registry.js'
-import { bootstrap as bootstrapDatabase } from '../bootstrap/database.bootstrap.js'
+import { getClient, getSchemaRegistry } from '../client.js'
 import { eq, and, or } from 'drizzle-orm'
 
 export class SeedRunner {
@@ -129,6 +129,10 @@ export class SeedRunner {
         return await this.processCompany(record, { force })
       } else if (seed.name === 'companySettings') {
         return await this.processCompanySettings(record, { force })
+      } else if (seed.name === 'accommodations') {
+        return await this.processAccommodation(record, { force })
+      } else if (seed.name === 'availability') {
+        return await this.processAvailability(record, { force })
       }
 
       return { processed: false, reason: 'Unknown seed type' }
@@ -790,6 +794,154 @@ export class SeedRunner {
     return { processed: true, action: 'inserted' }
   }
 
+  async processAccommodation(record, options = {}) {
+    const { force } = options
+    const { accommodations, tenants, companies } = this.db
+
+    const tenant = await this.db
+      .select()
+      .from(tenants)
+      .where(eq(tenants.slug, record.tenantSlug))
+      .limit(1)
+
+    if (tenant.length === 0) {
+      throw new Error(`Tenant ${record.tenantSlug} not found`)
+    }
+
+    const company = await this.db
+      .select()
+      .from(companies)
+      .where(eq(companies.slug, record.companySlug))
+      .limit(1)
+
+    if (company.length === 0) {
+      throw new Error(`Company ${record.companySlug} not found`)
+    }
+
+    const existing = await this.db
+      .select()
+      .from(accommodations)
+      .where(eq(accommodations.slug, record.slug))
+      .limit(1)
+
+    if (existing.length > 0) {
+      if (force) {
+        await this.db
+          .update(accommodations)
+          .set({
+            name: record.name,
+            type: record.type,
+            status: record.status,
+            description: record.description,
+            shortDescription: record.shortDescription,
+            images: record.images,
+            location: record.location,
+            contact: record.contact,
+            amenities: record.amenities,
+            policies: record.policies,
+            pricing: record.pricing,
+            inventory: record.inventory,
+            metadata: record.metadata,
+            updatedAt: new Date(),
+          })
+          .where(eq(accommodations.slug, record.slug))
+        return { processed: true, action: 'updated' }
+      }
+      return { processed: false, reason: 'already exists' }
+    }
+
+    const accommodationResult = await this.db
+      .insert(accommodations)
+      .values({
+        tenantId: tenant[0].id,
+        companyId: company[0].id,
+        slug: record.slug,
+        name: record.name,
+        type: record.type,
+        status: record.status,
+        description: record.description,
+        shortDescription: record.shortDescription,
+        images: record.images,
+        location: record.location,
+        contact: record.contact,
+        amenities: record.amenities,
+        policies: record.policies,
+        pricing: record.pricing,
+        inventory: record.inventory,
+        metadata: record.metadata,
+      })
+      .returning()
+
+    return { processed: true, action: 'inserted', id: accommodationResult[0]?.id }
+  }
+
+  async processAvailability(record, options = {}) {
+    const { force } = options
+    const { availability, tenants, accommodations } = this.db
+
+    const tenant = await this.db
+      .select()
+      .from(tenants)
+      .where(eq(tenants.slug, record.tenantSlug))
+      .limit(1)
+
+    if (tenant.length === 0) {
+      throw new Error(`Tenant ${record.tenantSlug} not found`)
+    }
+
+    const accommodation = await this.db
+      .select()
+      .from(accommodations)
+      .where(eq(accommodations.slug, record.accommodationSlug))
+      .limit(1)
+
+    if (accommodation.length === 0) {
+      throw new Error(`Accommodation ${record.accommodationSlug} not found`)
+    }
+
+    const existing = await this.db
+      .select()
+      .from(availability)
+      .where(
+        and(
+          eq(availability.accommodationId, accommodation[0].id),
+          eq(availability.date, record.date),
+        ),
+      )
+      .limit(1)
+
+    if (existing.length > 0) {
+      // Availability rows are operational state once created: reserved_count,
+      // status and is_blocked are owned by the reservation transaction path.
+      // A rerun must NEVER overwrite or reset them, regardless of `force`.
+      return { processed: false, reason: 'already exists (availability is immutable on reseed)' }
+    }
+
+    const availabilityResult = await this.db
+      .insert(availability)
+      .values({
+        tenantId: tenant[0].id,
+        accommodationId: accommodation[0].id,
+        date: record.date,
+        status: record.status || 'available',
+        isBlocked: record.isBlocked ?? false,
+        isReserved: record.isReserved ?? false,
+        minStay: record.minStay,
+        maxStay: record.maxStay,
+        arrivalDays: record.arrivalDays,
+        departureDays: record.departureDays,
+        price: record.price,
+        inventory: record.inventory ?? 1,
+        reservedCount: record.reservedCount ?? 0,
+        metadata: record.metadata,
+        targetType: record.targetType || 'accommodation',
+        targetId: record.targetId || accommodation[0].id,
+      })
+      .returning()
+
+    return { processed: true, action: 'inserted', id: availabilityResult[0]?.id }
+  }
+
   printSummary() {
     const duration = this.results.endTime - this.results.startTime
 
@@ -820,10 +972,47 @@ export class SeedRunner {
   }
 }
 
+/**
+ * Bind schema tables onto the Drizzle client as properties.
+ *
+ * Newer drizzle-orm versions expose schema tables through `db.query`
+ * instead of flat `db.<table>` properties, while SeedRunner reads tables
+ * by destructuring (`const { tenants } = this.db`). This binds the existing
+ * schema registry tables onto the real client so SeedRunner can resolve them.
+ */
+function bindSchemaTables(client) {
+  const schema = getSchemaRegistry()
+
+  for (const [name, table] of Object.entries(schema)) {
+    if (client[name] === undefined) {
+      client[name] = table
+    }
+  }
+
+  return client
+}
+
+/**
+ * Create the seed execution client: the real Drizzle client with schema
+ * tables bound as properties.
+ */
+export function createSeedClient() {
+  return bindSchemaTables(getClient())
+}
+
 export async function runSeeds(options = {}) {
-  const db = await bootstrapDatabase()
-  const runner = new SeedRunner(db)
-  return runner.run(options)
+  const { bootstrap: bootstrapDatabase, shutdown } = await import('../bootstrap/database.bootstrap.js')
+
+  try {
+    await bootstrapDatabase()
+
+    const db = createSeedClient()
+    const runner = new SeedRunner(db)
+
+    return await runner.run(options)
+  } finally {
+    await shutdown()
+  }
 }
 
 export default SeedRunner

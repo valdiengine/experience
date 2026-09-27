@@ -25,8 +25,10 @@ import { registerRepositories } from './repository.bootstrap.js'
 import { PostgresReservationAdapter } from '../../capabilities/persistence/adapters/postgres/postgres.reservation.adapter.js'
 import { PostgresBusinessAdapter } from '../../capabilities/persistence/adapters/postgres/postgres.business.adapter.js'
 import { PostgresAccommodationAdapter } from '../../capabilities/persistence/adapters/postgres/postgres.accommodation.adapter.js'
+import { PostgresAvailabilityAdapter } from '../../capabilities/persistence/adapters/postgres/postgres.availability.adapter.js'
 import { registerCapabilities } from './capability.bootstrap.js'
 import { validateRuntime } from './runtime.validation.js'
+import { bootstrapEnsueñoBookingRegistry } from '../../experience/booking/ensueno.booking.resolver.js'
 import { StartupError, RuntimeBootstrapError, ValidationBootstrapError } from './startup.errors.js'
 import { STARTUP_EVENTS, createStartupEvent } from './startup.events.js'
 
@@ -115,6 +117,7 @@ export async function start(options = {}) {
       runtime.repositoryRuntime.registerAdapter('postgres', PostgresReservationAdapter, 'reservation')
       runtime.repositoryRuntime.registerAdapter('postgres', PostgresBusinessAdapter, 'business')
       runtime.repositoryRuntime.registerAdapter('postgres', PostgresAccommodationAdapter, 'accommodation')
+      runtime.repositoryRuntime.registerAdapter('postgres', PostgresAvailabilityAdapter, 'availability')
     }
 
     const repositoryListing = registerRepositories(runtime.repositoryRuntime, {
@@ -123,12 +126,21 @@ export async function start(options = {}) {
             reservation: 'postgres',
             business: 'postgres',
             accommodation: 'postgres',
+            availability: 'postgres',
           }
         : {},
     })
     eventBus.emit(STARTUP_EVENTS.REPOSITORIES_READY, createStartupEvent(STARTUP_EVENTS.REPOSITORIES_READY, {
       repositories: repositoryListing.length,
     }))
+
+    // 3b. M5 — Reconstruct the process-local BookingRegistry from persisted
+    // PostgreSQL identities (READ-ONLY). Only for the PostgreSQL runtime; mock/
+    // in-memory runtimes keep their explicit provisionEnsueñoBooking() path.
+    // Fails closed when a persisted identity is missing or ownership is broken.
+    if (persistenceProvider === 'postgres') {
+      await bootstrapEnsueñoBookingRegistry()
+    }
 
     // 4. Capabilities — register, initialize, activate the nine commercial capabilities
     const capabilities = await registerCapabilities(runtime, {
