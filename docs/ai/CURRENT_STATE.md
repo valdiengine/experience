@@ -1,7 +1,7 @@
 # CURRENT_STATE.md
 
 > Exact snapshot of project state. Update after each completed phase.
-> Last updated: **C4 — ENSUEÑO CURIÑANCO BOOKING APPLICATION INTEGRATED** (2026-09-26)
+> Last updated: **ENSUEÑO POSTGRES M1–M5 — CERTIFIED** (2026-09-27)
 
 ## Platform Status
 
@@ -19,7 +19,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Phases completed | 100+ (P0 through P15.11, BOOKING-4.3, RUNTIME-PERSISTENCE-1, BOOKING-4.4, C4) |
+| Phases completed | 100+ (P0 through P15.11, BOOKING-4.3, RUNTIME-PERSISTENCE-1, BOOKING-4.4, C4, ENSUENO-POSTGRES-M1-M5) |
 | Capabilities registered | 35 (Business sub-managers: 12) |
 | Architecture specs | 35 + 12 audit reports |
 | SDK specifications | 9 |
@@ -151,6 +151,7 @@
 | 112 | APP-ZONE-PRESENT-1 | First Level-2 Application-Scoped Visual Identity (declarative zonePresentation) | Product |
 | 113 | BOOKING-4.4 | Generic PostgreSQL Booking Write Lifecycle Physical Certification (A–J Gate) | Product |
 | 114 | C4 | Ensueño Curiñanco Booking Application Integration (source committed, pushed, regression-certified) | Product |
+| 115 | ENSUENO-POSTGRES-M1-M5 | Ensueño Curiñanco PostgreSQL Persistence Certification (physical + read-side, M1–M5) | Product |
 
 ## Registered Capabilities (32)
 
@@ -2334,6 +2335,105 @@ The deferred debt `READ_SIDE_AVAILABILITY_PARITY_DEBT_DEFERRED` remains open and
 ### Next Milestone
 
 **MVP2-ENSUENO-STAGE-1** — deploy and certify the visible Ensueño Booking Application through the real `stage.valdi.app` Passenger/runtime path.
+
+---
+
+## ENSUEÑO POSTGRES M1–M5 — Physical Persistence & Read-Side Certification
+
+**Status:** `ENSUEÑO POSTGRES M1–M5 — CERTIFIED`
+**Certification Date:** 2026-09-27
+**Source Commit:** `f185151598f24ae52f40c840e324192daa683fd9` — `feat(persistence): certify ensueno postgres M1-M5 (seeds, seed runner, availability adapter, persisted booking registry)`
+**Synchronization:** committed, pushed, synchronized (`LOCAL == REMOTE == f185151598f24ae52f40c840e324192daa683fd9`)
+**Branch:** `p15.3-development`
+**Regression-certified:** Yes (310/310 + smoke/health/bootstrap)
+**Stage-deployed:** **NO** — Stage M5 deployment and Passenger restart are NOT yet performed.
+
+### Purpose
+
+Persist Ensueño Curiñanco's booking identities and availability into physical PostgreSQL (managed Neon, database `valdi_test`), provide deterministic operator seed tooling, a physical availability read adapter, and a read-only persisted BookingRegistry resolver. M1–M5 address the source of the previously observed Stage symptom `GET /api/v1/booking/companies/ensueno-curinanco/availability` → `UNKNOWN_COMPANY` (empty process-local BookingRegistry).
+
+### Scope & Contract (unchanged from C4)
+
+- Application: Ensueño Curiñanco · Route: `/ensueno-curinanco` · Company/Tenant slug: `ensueno-curinanco` · Destination: `valdi` · Experience type: `accommodation` · Product ID: `cabina-ensueno` · Category: `cabins`
+- Inventory contract: `inventory = 4` cabin units per night; one reservation consumes exactly one cabin unit per night; `guestCount` is occupancy metadata only and MUST NOT multiply inventory consumption.
+- Base price `CLP 90,000` is implemented. `CLP 100,000` (four guests) and `CLP 8,000` additional guest/night are **configured but NOT implemented** as active Booking pricing.
+- The generic `ReservationRepository` atomic capacity remains the authoritative no-overbooking guard; capacity enforcement is NOT duplicated in the availability adapter.
+
+### M1 — Tenant & Company Persistence
+
+- Tenant and company `ensueno-curinanco` are persisted with real PostgreSQL UUIDs (physical cert, truncated): tenant `36d84fc9…`, company `57bcacbf…`.
+- Legacy aliases (`ensueno`, `biz-ensueno-cabina`, `acc-ensueno-cabina`) remain lookup aliases — they are NOT PostgreSQL identities.
+
+### M2 — Accommodation Persistence
+
+- Accommodation `cabina-ensueno` persisted (truncated UUID `83e42591…`): base price `CLP 90,000`, inventory `4`, `maxGuests: 4` metadata, category `cabins`, experience type `accommodation`.
+
+### M3 — Physical Availability Certification (Neon `valdi_test`)
+
+- Materialized day availability rows for the window `2026-10-01 … 2026-12-29` inclusive (**90 rows**).
+- Per row: `inventory = 4`, `reserved_count = 0`, `status = available`, `is_blocked = false`, `target_type = accommodation`, `price.raw = 90000`, `currency = CLP`, `metadata.capacity = 4`.
+- Physical certification counts: TENANT = 1, COMPANY = 1, ACCOMMODATION = 1, AVAILABILITY = 90, DISTINCT_DATES = 90, DUPLICATES = 0, OUTSIDE_WINDOW = 0, FK_BROKEN = 0.
+- Seed idempotency: second run processed 0 / skipped 90, Errors = 0.
+
+### Seed Runtime (committed in `f185151`)
+
+- Canonical operator command: `node database/seeds/run-seeds.js`. Committed seed sources: tenants/companies/registry/runner/run-seeds/accommodation/availability seeds.
+- `npm run db:seed` exists LOCALLY in `package.json` but is **NOT committed** (package.json has mixed-ownership hunks; this checkpoint excludes it from `f185151`).
+- The `runSeeds` export hunk in `database/index.js` is likewise **NOT committed** (mixed ownership with migrations 0006/0007 from another session).
+- Seeds are operator/deployment tooling. **Passenger/startup MUST NEVER execute seeds.**
+
+### M4 — PostgresAvailabilityAdapter (read-side certified)
+
+- Product file: `capabilities/persistence/adapters/postgres/postgres.availability.adapter.js`.
+- Physical READ certification passed against `valdi_test`: projection `price = 90000`, `currency = CLP`, `inventory = 4`, `reservedCount = 0`, `available = 4`, `capacity = 4`, `status = available`; range/filter/count/exists/health reads all passed physically.
+- **Destructive adapter write certification is DEFERRED** (no rollback/disposable-fixture harness for auto-commit writes). Destructive writes are NOT marked physically certified.
+
+### M5 — Ensueño Booking Resolver (read-only, fail-closed)
+
+- Product file: `experience/booking/ensueno.booking.resolver.js`, bootstrapped in `runtime/startup/application.start.js` (postgres branch only, after `REPOSITORIES_READY`).
+- Runtime flow: persisted identities → read-only slug→UUID resolution → ownership validation (`company.tenant_id == tenant.id`, `accommodation.tenant_id == tenant.id`, `accommodation.company_id == company.id`; physical cert 3/3 true) → process-local BookingRegistry reconstruction.
+- Fail-closed errors: `ENSUENO_TENANT_NOT_FOUND`, `ENSUENO_COMPANY_NOT_FOUND`, `ENSUENO_ACCOMMODATION_NOT_FOUND`, `ENSUENO_OWNERSHIP_MISMATCH`.
+- Read-only: no mock fallback, no auto-create, no seed invocation, no filesystem state. Each Passenger worker reconstructs its own registry through shared PostgreSQL reads during startup.
+- Physical M5 read cert passed vs `valdi_test` (truncated UUID chain matches physical-1: tenant `36d84fc9…`, company `57bcacbf…`, accommodation `83e42591…`).
+
+### Regression Evidence
+
+- M5 resolver: `tests/runtime/ensueno-booking-resolver.test.js` → **46/46**
+- Ensueno + Booking regressions → **310/310**: runtime-seed-execution 52/52, runtime-persistence-1-availability 97/97, runtime-persistence-1-adapters 41/41, booking44 30/30, ensueno-booking-1 21/21, mvp-availability-reservation-1 23/23.
+- Smoke 79/79, runtime.health 15/15, runtime.bootstrap 8/8.
+- Known pre-existing (NOT an M5 regression): `runtime/startup/api.integration.test.js` can linger after cleanup due to a real HTTP socket.
+
+### Source Integrity / Commit Manifest
+
+- `f185151` contains **13 authorized paths only** (seeds, seed runner, environment-availability test suites, availability adapter, resolver, startup wiring).
+- Mixed-ownership files excluded: `database/index.js`, `package.json`, `package-lock.json` (foreign/other-session hunks).
+- Temporary physical certification tooling `tests/runtime/ensueno-postgres-m5-physical-verify.mjs` intentionally excluded.
+- 245+ unrelated working-tree entries remain untouched; explicit staging only.
+
+### Stage Status (explicit — NOT DEPLOYED)
+
+- M1–M5 source: COMMITTED / PUSHED / GIT-CERTIFIED. Neon physical persistence: CERTIFIED. M5 physical read resolver: CERTIFIED.
+- Stage M5 deployment: **NOT PERFORMED**. Passenger restart with M5: **NOT PERFORMED**. Public availability endpoint after M5: **NOT CERTIFIED**. Public reservation write: **NOT CERTIFIED**.
+- M5 fixes the `UNKNOWN_COMPANY` symptom at the source level, but the public fix MUST NOT be marked closed until Stage deployment proves it.
+
+### Explicitly NOT Claimed
+
+- no claim that configured 4-guest (`CLP 100,000`) or additional-guest (`CLP 8,000`) pricing is active;
+- no claim that destructive availability adapter writes are physically certified;
+- no claim that Stage serves the Ensueño availability endpoint yet;
+- no claim that public reservation writes are physically certified;
+- no claim of a completed `ENSUENO-M5-STAGE-DEPLOY-1`.
+
+### Remaining Debt
+
+- Mixed-file reconciliation pending a controlled gate: `package.json` (`db:seed` hunk) and `database/index.js` (`runSeeds` export hunk) are not yet committed.
+- Temporary physical verification script `tests/runtime/ensueno-postgres-m5-physical-verify.mjs` remains untracked tooling.
+- Destructive availability adapter write certification is DEFERRED.
+- Reservation write certification is a later, separate controlled gate — do NOT combine it with the 4+1 reservation capacity test.
+
+### Next Milestone
+
+**ENSUENO-M5-STAGE-DEPLOY-1** — derive a minimum Stage deployment manifest from `f185151`; backup overwritten remote files; upload only required runtime files; verify SHA256 local/remote; restart Passenger; certify `/health`; certify runtime environment `staging`, provider `postgres`, physical `true`; call the public Ensueño availability endpoint; prove `UNKNOWN_COMPANY` is gone; prove availability is read from physical PostgreSQL.
 
 ---
 
