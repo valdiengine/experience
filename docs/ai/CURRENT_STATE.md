@@ -3025,3 +3025,100 @@ Availability GET date/night semantics also remain outside this milestone. The re
 - The previous public-write certification reservation also remains untouched.
 - No production customer data was used.
 - Existing unrelated dirty working-tree files remain foreign ownership and must not be reset/restored/stashed or broadly staged.
+
+---
+
+## BOOKING-DATE-SEMANTICS-1 — Stay Nights and Traveler-Widget Availability Eligibility
+
+**Status:** `IMPLEMENTED / LOCALLY VERIFIED / COMMITTED / PUSHED`
+**Implementation Commit:** `ff36cdb2770ac0bb7b3c207f22c4d6bf058b05a9` — `fix(booking): align stay nights and availability eligibility`
+**Synchronization:** committed and pushed; operator-confirmed `LOCAL == REMOTE == ff36cdb…`, `SYNCED=True`
+**Branch:** `p15.3-development` (staging area empty at documentation time)
+**Stage deployment:** **PENDING** — not deployed
+**Stage certification:** **PENDING** — no Stage request, restart, or database access performed
+**Source manifest:** 5 files (2 production, 3 test) — exactly the paths in `ff36cdb`
+
+This closes the open question recorded under ENSUENO-BOOKING-CURRENCY-1 → "Remaining separate follow-up": the public GET/UI contract for returned calendar dates versus the `nights` value.
+
+### Source manifest (5 files, `ff36cdb`)
+
+| Path | Role |
+|------|------|
+| `experience/booking/booking.adapter.js` | strict UTC checkout-exclusive `nights` |
+| `web/rendering/html.renderer.js` | served traveler-widget occupied-night eligibility gate |
+| `web/ensueno-booking-1.test.js` | public booking contract + serializer boundary matrix |
+| `web/mvp-availability-reservation-1.test.js` | availability/reservation contract + serializer boundary matrix |
+| `web/booking-widget-availability.test.js` | new — executes the actually emitted inline widget script |
+
+### `nights` semantics
+
+- `nights` is now the **checkout-exclusive** stay length computed from the two bounds in strict UTC date-only arithmetic; it is no longer the length of the returned calendar array.
+- Both bounds must be a `string` matching `^\d{4}-\d{2}-\d{2}$`, yield a finite timestamp, and round-trip exactly to the same UTC year/month/day, so normalized impossible dates (`2026-02-30`, `2026-11-31`, `2026-00-10`) produce `nights: 0`.
+- The year is applied through `setUTCFullYear` rather than `Date.UTC` or a numeric-component constructor, both of which remap years `0000–0099` onto `1900–1999`.
+- Invalid, equal (`checkIn == checkOut`), and reversed ranges yield `0` rather than a negative or `NaN` value.
+- The arithmetic is UTC date-only and therefore timezone-independent.
+
+### `dates[]` semantics (unchanged)
+
+- `dates[]` remains an **inclusive display/calendar range** that lists the checkout day, so a traveler still sees every day of the stay. For a `2026-11-20` → `2026-11-22` stay it returns three calendar dates while `nights` is `2`.
+- The `date`, `status`, `available`, `capacity`, `price`, and `notes` projections are unchanged.
+- Persisted reservation occupancy remains checkout-exclusive: Nov 20 and Nov 21 are the occupied nights and Nov 22 is checkout.
+
+### Served traveler-widget eligibility gate
+
+The gate is inline in `web/rendering/html.renderer.js` (no new frontend module, no `Function.prototype.toString()`), and `web/booking-widget-availability.test.js` renders the real document, extracts the actually emitted inline script, executes it against a stubbed DOM/fetch, and asserts the real traveler-form state.
+
+Eligibility is decided **only** from the occupied nights `[checkIn, checkOut)`:
+
+- every expected occupied date must be present **exactly once** — duplicates are rejected, so a duplicate can no longer mask a missing night, and a missing night is rejected;
+- each occupied date must report `status = 'available'`, `typeof available === 'number'`, `Number.isFinite(available)`, and `available >= 1`, with no implicit coercion, so `0`, negatives, sub-unit fractions, numeric strings, booleans, `NaN`, `Infinity`, and `available: null` (a missing persistence row) are all rejected;
+- **checkout does not gate** — the checkout day is excluded from occupancy evaluation, so a sold-out checkout night no longer hides the traveler form for an otherwise free stay;
+- **capacity metadata does not gate** — `capacity: null` only means unknown metadata, so a positive `available` with `capacity: null` remains bookable;
+- `payload.nights` and the raw array length are never trusted as a substitute for per-date validation.
+
+This closes the pre-existing checkout-overcheck defect, where the gate scanned every returned date — checkout included — for `status === 'available'`.
+
+### Unchanged authority
+
+- Atomic write and capacity semantics are unchanged. The authoritative no-overbooking guard remains `capabilities/persistence/repositories/reservation/reservation.repository.js` (exclusive occupancy, transactional capacity check, `409 AVAILABILITY_CONFLICT` on conflict). Nothing here touches the reservation write path, the PostgreSQL availability adapter, the Booking registry resolver, validation, or HTTP status classification.
+- The client gate is a precondition for revealing the traveler form only; it adds no new write path and does not replace the server-authoritative `409`.
+- A failed availability re-check now re-hides a previously revealed traveler form.
+- Messages, request construction, and GET/POST `409` handling are unchanged.
+
+### Test evidence
+
+Final focused rerun (all exit code 0):
+
+- `web/ensueno-booking-1.test.js` → **37/37**
+- `web/mvp-availability-reservation-1.test.js` → **38/38**
+- `web/booking-widget-availability.test.js` → **42/42**
+- **Total: 117/117**
+
+The earlier implementation regression run additionally reported `tests/capability/reservation-currency.test.js` 12/12, `web/mvp-booking-ui-1.test.js` 52/52, and `web/zone-navigation.test.js` 12/12. Those three are recorded as earlier-run regression evidence and were **not** freshly rerun in the final focused pass.
+
+The widget suite asserts shipped code rather than a copy of it. It covers the emitted script compiling, SSR markup presence, two-night and one-night free stays, checkout-only unavailability, out-of-range entries, occupied-night unavailability, missing and duplicated occupied dates, the full `available` value contract, strict/invalid/equal/reversed/impossible/leap/year-`0099` date handling, GET `409`, POST `409`, successful reservation, and a failed re-check re-hiding the form.
+
+### Stage deployment manifest — PREPARED, NOT EXECUTED
+
+Derived from the committed Git blobs at `ff36cdb` (not from working-tree copies). Both blobs are LF-only; see the line-ending caveat in the deployment plan.
+
+| Path | Git blob SHA-1 | Bytes | SHA-256 |
+|------|----------------|-------|---------|
+| `experience/booking/booking.adapter.js` | `1fd7854df2c11c2d630e0a9866056c7089660116` | 9461 | `bb78ee6e96cad5e1d17e0c2f9690d5506d6244555df5299bb51bc74efd393327` |
+| `web/rendering/html.renderer.js` | `9fdd9342f9441e0006d3831ad32cf34fc0c19fe7` | 68175 | `f92abbcd9741f1463cc247e3b4616cfe8ab3e9f3ce66769523876814636c2f76` |
+
+No additional dependency is required. Neither file adds an import, a package, a migration, a seed, or a build step; the widget change lives inside an already-emitted inline script, so no separate asset is deployed. Tests are **not** deployed.
+
+### Explicitly NOT claimed
+
+- **No claim that impossible dates were persisted in PostgreSQL.** The normalization analysis was JavaScript-level only; no physical Stage/Neon reproduction or persistence was performed. The `nights: 0` behavior is verified locally against the serializer and the served script only.
+- No claim of Stage deployment or Stage certification — both remain **PENDING**.
+- No claim that a `GET` alone certifies widget behavior. An HTTP read verifies the server payload only; the checkout-only unavailability scenario is a **locally executed** widget scenario driven by a stubbed `fetch`. Reproducing it against Stage requires a real browser running the served script, which has not been done.
+- No database access, no reservation created, modified, or retried, no cleanup, and no production customer data.
+
+### Remaining separate debts (unchanged, explicitly out of scope)
+
+- `total_price = null` — still open, outside this milestone.
+- Inbound date validation and HTTP error classification — `capabilities/availability/availability.validation.js` still accepts equal dates (HTTP `200` with a one-date calendar), still surfaces reversed dates as an unclassified `500` rather than `400`, and still normalizes impossible dates server-side. The new `nights` and widget guards are defense at the serialization and gate boundary, **not** a fix to that inbound contract; hardening it is a separate milestone.
+- The `jsonwebtoken` Stage runtime debt and the mixed-file reconciliation gate recorded under ENSUENO-M5-STAGE-DEPLOY-1 remain open and untouched.
+- Certification reservations `7f820bae-870f-460d-a14f-96894c97db34` and `1f6de1dc-7279-4439-b73b-5c5c6b83f562` remain untouched as evidence.
