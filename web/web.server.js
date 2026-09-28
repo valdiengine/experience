@@ -11,7 +11,7 @@ import { join, resolve } from 'path'
 import { URL } from 'url'
 import { createDomainMiddleware, sendHtmlResponse } from './middleware/domain.middleware.js'
 import { createRouteOwnershipMiddleware } from './middleware/route.ownership.middleware.js'
-import { createStaticMiddleware, createFaviconMiddleware, createManifestMiddleware } from './middleware/static.middleware.js'
+import { createStaticMiddleware, createFaviconMiddleware, createOfflineMiddleware, createManifestMiddleware } from './middleware/static.middleware.js'
 import { createPWAMiddleware } from './middleware/pwa.middleware.js'
 import { createEcosystemSimulationMiddleware } from './middleware/ecosystem.simulation.middleware.js'
 import { createHtmlRenderer } from './rendering/html.renderer.js'
@@ -258,6 +258,13 @@ export class PublicWebServer {
       createFaviconMiddleware({
         root: this.#config.publicRoot,
         maxAge: 86400
+      }),
+      // APP-ZONE-PWA-1: serves only the platform resource /offline.html so a
+      // generated Service Worker OFFLINE_URL is actually retrievable. This is
+      // NOT a generic public/ static root.
+      createOfflineMiddleware({
+        root: this.#config.publicRoot,
+        maxAge: 3600
       }),
       createManifestMiddleware({
         root: this.#config.publicRoot,

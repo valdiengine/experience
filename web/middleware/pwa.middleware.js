@@ -51,11 +51,20 @@ var APP_SCOPE = '{scope}';
 self.addEventListener('install', function(event) {
   event.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
-      return cache.addAll([
+      // APP-ZONE-PWA-1: precache tolerates individual misses. A single
+      // non-existent Application URL must not reject the whole install,
+      // otherwise the worker never activates and the Application is not
+      // installable. No other Application's URLs are ever requested.
+      var precacheUrls = [
         APP_SCOPE,
         APP_SCOPE + 'index.html',
         OFFLINE_URL
-      ]);
+      ];
+      return Promise.allSettled(
+        precacheUrls.map(function(url) {
+          return cache.add(new Request(url, { cache: 'reload' }));
+        })
+      );
     })
   );
   self.skipWaiting();
@@ -194,6 +203,40 @@ export function createPWAMiddleware(options = {}) {
   }
 }
 
+/**
+ * APP-ZONE-PWA-1: resolve the declared installableApp configuration for the
+ * Application that owns a route slug. Engine-controlled: identity and
+ * configuration come from the resolved Application, never from the URL alone.
+ *
+ * Returns null when the Application cannot be resolved or does not declare the
+ * installableApp capability (fail closed).
+ */
+async function resolveInstallableConfig(domain, route) {
+  if (!domain || !route) {
+    return null
+  }
+
+  const resolver = await getResolver()
+  const result = resolver.resolve({ domain, path: route })
+
+  if (!result.success || !result.resolved) {
+    return null
+  }
+
+  const resolved = result.resolved
+  const declared = resolved.configuration?.capabilities?.installableApp
+
+  if (!declared || typeof declared !== 'object' || declared.enabled !== true) {
+    return null
+  }
+
+  return {
+    resolved,
+    config: declared,
+    route
+  }
+}
+
 async function handleManifest(req, res, maxAge) {
   const pathname = req.pathname || req.url
   const match = pathname.match(/^\/pwa\/([^/]+)\/manifest\.json$/)
@@ -207,81 +250,70 @@ async function handleManifest(req, res, maxAge) {
   const slug = match[1]
   const domain = req.domain || 'valdi.app'
 
+  let appIdDecoded
+  let route
+
   try {
-    const appIdDecoded = slug.replace(/__SLASH__/g, '/').replace(/__DOT__/g, '.')
+    appIdDecoded = slug.replace(/__SLASH__/g, '/').replace(/__DOT__/g, '.')
     if (!appIdDecoded.startsWith(domain)) {
       throw new Error('Application ID does not match domain')
     }
 
-    const route = '/' + appIdDecoded.slice(domain.length).replace(/^\/|\/$/g, '') + '/'
-
-    const resolver = await getResolver()
-    const result = resolver.resolve({ domain, path: route })
-
-    if (!result.success) {
-      throw new Error(result.error || 'Application resolution failed')
-    }
-
-    const resolved = result.resolved
-    const company = resolved.configuration?.company || {}
-    const identity = resolved.identity || {}
-
-    // Load installableApp config directly from company config
-    // The composition code stores company capabilities without the { configuration: ... } wrapper
-    // so we access them directly from the company config's capabilities
-    const companyCapabilities = resolved.configuration?.capabilities || {}
-    const capConfig = companyCapabilities.installableApp || {}
-
-    const tenant = {
-      slug: company.slug || slug.replace(/__DOT__/g, '.').replace(/__SLASH__/g, '/'),
-      domain: identity.domain || domain,
-      name: company.name || 'Valdi App',
-      description: company.description || '',
-      pwa: {
-        name: capConfig.name || company.name || 'Valdi App',
-        shortName: capConfig.shortName || company.shortName || 'Valdi',
-        description: capConfig.description || company.description || '',
-        startUrl: capConfig.startUrl || route,
-        display: capConfig.display || 'standalone',
-        themeColor: capConfig.themeColor || company.branding?.colors?.primary || '#c8956c',
-        backgroundColor: capConfig.backgroundColor || company.branding?.colors?.background || '#0a0a0a',
-        icons: capConfig.icons || DEFAULT_ICONS,
-        scope: capConfig.scope || route,
-        offlineFallback: capConfig.offlineFallback || `${route}offline.html`,
-        lang: capConfig.lang || 'es',
-        categories: capConfig.categories || ['business']
-      }
-    }
-
-    const manifest = generateManifest(tenant, tenant.pwa)
-
-    res.statusCode = 200
-    res.setHeader('Content-Type', 'application/manifest+json')
-    res.setHeader('Cache-Control', `public, max-age=${maxAge}`)
-    res.end(JSON.stringify(manifest, null, 2))
+    route = '/' + appIdDecoded.slice(domain.length).replace(/^\/|\/$/g, '') + '/'
   } catch (error) {
-    console.warn(`[PWA Middleware] Manifest generation failed for ${slug}: ${error.message}`)
-
-    const manifest = {
-      name: 'Valdi App',
-      short_name: 'Valdi',
-      description: 'Experience application',
-      start_url: `/${slug}/`,
-      display: 'standalone',
-      background_color: '#0a0a0a',
-      theme_color: '#c8956c',
-      icons: DEFAULT_ICONS,
-      scope: `/${slug}/`,
-      lang: 'es',
-      categories: ['business'],
-      id: `/tenant/${domain}/${slug}`
-    }
-
-    res.statusCode = 200
-    res.setHeader('Content-Type', 'application/manifest+json')
-    res.setHeader('Cache-Control', `public, max-age=${maxAge}`)
-    res.end(JSON.stringify(manifest, null, 2))
+    console.warn(`[PWA Middleware] Rejected manifest request for ${slug}: ${error.message}`)
+    res.statusCode = 404
+    res.setHeader('Content-Type', 'text/plain')
+    res.setHeader('Cache-Control', 'no-store')
+    res.end('Not Found')
+    return
   }
+
+  // APP-ZONE-PWA-1: the manifest is served only for an Application that
+  // declares installableApp. Fail closed instead of serving a fabricated
+  // cross-Application manifest.
+  const resolvedInstallable = await resolveInstallableConfig(domain, route)
+
+  if (!resolvedInstallable) {
+    console.warn(`[PWA Middleware] No installableApp capability for ${appIdDecoded}`)
+    res.statusCode = 404
+    res.setHeader('Content-Type', 'text/plain')
+    res.setHeader('Cache-Control', 'no-store')
+    res.end('Not Found')
+    return
+  }
+
+  const { resolved, config: capConfig } = resolvedInstallable
+  const company = resolved.configuration?.company || {}
+  const identity = resolved.identity || {}
+
+  const tenant = {
+    slug: company.slug || slug.replace(/__DOT__/g, '.').replace(/__SLASH__/g, '/'),
+    domain: identity.domain || domain,
+    name: capConfig.name || company.name || 'Valdi App',
+    description: capConfig.description || company.description || '',
+    pwa: {
+      name: capConfig.name || company.name || 'Valdi App',
+      shortName: capConfig.shortName || company.shortName || 'Valdi',
+      description: capConfig.description || company.description || '',
+      startUrl: capConfig.startUrl || route,
+      display: capConfig.display || 'standalone',
+      themeColor: capConfig.themeColor || company.branding?.colors?.primary || '#c8956c',
+      backgroundColor: capConfig.backgroundColor || company.branding?.colors?.background || '#0a0a0a',
+      icons: capConfig.icons || DEFAULT_ICONS,
+      scope: capConfig.scope || route,
+      offlineFallback: capConfig.offlineFallback || `${route}offline.html`,
+      lang: capConfig.lang || 'es',
+      categories: capConfig.categories || ['business']
+    }
+  }
+
+  const manifest = generateManifest(tenant, tenant.pwa)
+
+  res.statusCode = 200
+  res.setHeader('Content-Type', 'application/manifest+json')
+  res.setHeader('Cache-Control', `public, max-age=${maxAge}`)
+  res.end(JSON.stringify(manifest, null, 2))
 }
 
 async function handleServiceWorker(req, res, pathname, maxAge) {
@@ -295,16 +327,26 @@ async function handleServiceWorker(req, res, pathname, maxAge) {
 
   const slug = match[1]
   const domain = req.domain || 'valdi.app'
-  const scope = `/${slug}/`
+
+  // APP-ZONE-PWA-1: the Service Worker is Application-scoped and must be
+  // authorized by the same declared capability that produced its URL.
+  const resolvedInstallable = await resolveInstallableConfig(domain, `/${slug}`)
+
+  if (!resolvedInstallable) {
+    res.statusCode = 404
+    res.setHeader('Content-Type', 'text/plain')
+    res.setHeader('Cache-Control', 'no-store')
+    res.end('Not Found')
+    return
+  }
+
+  const { config } = resolvedInstallable
   const appId = `${domain}/${slug}`
   const appIdNorm = appId.replace(/[^a-zA-Z0-9]/g, '_')
+  const scope = config.scope || `/${slug}/`
+  const offlineFallback = config.offlineFallback || `/${slug}/offline.html`
 
-  const swCode = SW_TEMPLATE
-    .replace(/\{appId\}/g, appId)
-    .replace(/\{appIdNorm\}/g, appIdNorm)
-    .replace(/\{slug\}/g, slug)
-    .replace(/\{scope\}/g, scope)
-    .replace(/\{offlineFallback\}/g, `/${slug}/offline.html`)
+  const swCode = generateServiceWorker(slug, domain, { scope, offlineFallback })
 
   res.statusCode = 200
   res.setHeader('Content-Type', 'application/javascript')

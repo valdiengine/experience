@@ -10,6 +10,8 @@ import { join, resolve, normalize, extname, sep } from 'path'
 import { mimeTypes } from './mime.types.js'
 
 const STATIC_ROOT = resolve(process.cwd(), 'public', 'static')
+const OFFLINE_ROUTE = '/offline.html'
+const OFFLINE_FILENAME = 'offline.html'
 const FORBIDDEN_PATTERNS = [
   /\.\./,
   /\.\./
@@ -137,6 +139,74 @@ export function createFaviconMiddleware(options = {}) {
   }
 }
 
+/**
+ * Platform offline fallback middleware.
+ *
+ * Serves the single platform resource `public/offline.html` at `/offline.html`
+ * so a generated Service Worker `OFFLINE_URL` is actually retrievable over HTTP.
+ *
+ * This is deliberately NOT a generic static directory server:
+ *   - exactly one route is handled: `/offline.html`
+ *   - the resolved filename is a module constant with no path separators,
+ *     so no user-controlled value ever reaches the filesystem
+ *   - every other path falls through to `next()`
+ *
+ * Cache policy is intentionally short-lived and NOT `immutable`: this document
+ * is a runtime fallback, not a fingerprinted build artifact.
+ */
+export function createOfflineMiddleware(options = {}) {
+  const root = options.root || resolve(process.cwd(), 'public')
+  const maxAge = options.maxAge || 3600
+  const normalizedRoot = normalize(root)
+
+  return async function offlineMiddleware(req, res, next) {
+    const rawPath = req.pathname || req.url || ''
+    // Only ever compared against the fixed route below; never used as a path.
+    const pathname = rawPath.split('?')[0].split('#')[0]
+
+    if (pathname !== OFFLINE_ROUTE) {
+      return next()
+    }
+
+    // Constant segment: contains no separators and no traversal sequence.
+    const filepath = join(normalizedRoot, OFFLINE_FILENAME)
+    const normalizedFilepath = normalize(filepath)
+    if (!normalizedFilepath.startsWith(normalizedRoot)) {
+      return next()
+    }
+
+    if (!existsSync(filepath)) {
+      return next()
+    }
+
+    try {
+      const stat = statSync(filepath)
+      if (!stat.isFile()) {
+        return next()
+      }
+
+      res.statusCode = 200
+      res.setHeader('Content-Type', mimeTypes['.html'])
+      res.setHeader('Content-Length', stat.size)
+      res.setHeader('Cache-Control', `public, max-age=${maxAge}`)
+      res.setHeader('X-Content-Type-Options', 'nosniff')
+
+      const stream = createReadStream(filepath)
+      stream.on('error', () => {
+        // Never surface filesystem detail to the client.
+        if (!res.headersSent) {
+          sendInternalError(res)
+        } else {
+          res.end()
+        }
+      })
+      stream.pipe(res)
+    } catch {
+      return next()
+    }
+  }
+}
+
 export function createManifestMiddleware(options = {}) {
   const root = options.root || resolve(process.cwd(), 'public')
   const maxAge = options.maxAge || 86400
@@ -174,5 +244,6 @@ export function createManifestMiddleware(options = {}) {
 export default {
   createStaticMiddleware,
   createFaviconMiddleware,
+  createOfflineMiddleware,
   createManifestMiddleware
 }

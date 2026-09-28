@@ -6,7 +6,7 @@
 
 export { PublicWebServer, createPublicWebServer } from './web.server.js'
 export { createDomainMiddleware, createDomainResolver, CANONICAL_DOMAINS } from './middleware/domain.middleware.js'
-export { createStaticMiddleware, createFaviconMiddleware, createManifestMiddleware } from './middleware/static.middleware.js'
+export { createStaticMiddleware, createFaviconMiddleware, createOfflineMiddleware, createManifestMiddleware } from './middleware/static.middleware.js'
 export { createHtmlRenderer, HtmlRenderer } from './rendering/html.renderer.js'
 export { renderDocument } from './templates/document.template.js'
 export * from './templates/component.templates.js'

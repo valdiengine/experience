@@ -412,10 +412,31 @@ export class ApplicationPresentationAdapter {
     const identity = ctx.identity || {}
     const metadata = ctx.metadata || {}
 
-    const slug = company.slug || 'albasie'
+    // APP-ZONE-PWA-1: derive the PWA identity from the resolved Application.
+    // Previously a Zone (no company config) fell back to the hardcoded slug
+    // 'albasie', which produced a foreign Service Worker URL and scope.
     const domain = identity.domain || 'valdi.app'
-    const route = identity.route || `/${slug}`
-    const applicationId = (metadata.applicationId || `${domain}${route}`).replace(/\/$/, '')
+    const route = identity.route || ''
+    const resolvedApplicationId = metadata.applicationId || identity.applicationId || null
+    const routeSlug = route
+      ? route.replace(/^\/+|\/+$/g, '')
+      : (resolvedApplicationId || '').replace(/^[^/]+/, '').replace(/^\/+|\/+$/g, '')
+
+    const slug = company.slug || routeSlug || null
+
+    if (!slug) {
+      return {
+        enabled: false,
+        canInstall: false,
+        isInstalled: false,
+        manifestUrl: null,
+        serviceWorkerUrl: null,
+        serviceWorkerScope: null,
+        appId: null
+      }
+    }
+
+    const applicationId = (resolvedApplicationId || `${domain}${route || `/${slug}`}`).replace(/\/$/, '')
 
     const scope = config.scope || `/${slug}/`
     const isRootScope = scope === '/'

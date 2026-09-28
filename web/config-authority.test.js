@@ -185,9 +185,15 @@ test('Domain mismatch in encoded slug safely fails', async () => {
   }
 
   await middleware(mockReq, mockRes, () => {})
-  const manifest = JSON.parse(body)
-  // Should return fallback manifest with wrong domain, not crash
-  assert(manifest.name === 'Valdi App' || manifest.name === 'Albasie', 'Should return some manifest')
+
+  // APP-ZONE-PWA-1: Application identity, scope and start URL are
+  // Engine-controlled. A slug whose domain does not match the request host is
+  // untrusted input, so the middleware fails closed instead of serving a
+  // fabricated manifest built from that slug. It must not crash, and it must
+  // not leak a manifest for another Application.
+  assertEqual(mockRes.statusCode, 404, 'Domain mismatch must fail closed')
+  assert(!body.includes('Albasie'), 'Must not serve another Application manifest')
+  assert(!body.includes('Valdi App'), 'Must not serve a fabricated manifest')
 })
 
 // ============================================================================

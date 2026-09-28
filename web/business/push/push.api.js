@@ -8,14 +8,31 @@
  * - GET /api/v1/push/public-key - Get VAPID public key
  */
 
-import { createPushSubscriptionService, resolveDeploymentEnvironment } from './push.subscription.service.js'
+import { createPushSubscriptionService, resolveDeploymentEnvironment, PUSH_VALIDATION_ERRORS } from './push.subscription.service.js'
 import { createPushSubscriptionPersistence } from './persistence/push.subscription.persistence.js'
 import { ApplicationResolver } from '../../application/application.resolver.js'
+import { ConfigurationLoader } from '../../../experience/loader/configuration.loader.js'
 import { DomainResolver } from '../../middleware/domain.resolver.js'
 
 const persistence = createPushSubscriptionPersistence()
 const pushService = createPushSubscriptionService({ persistence })
 const domainResolver = new DomainResolver()
+
+let _capabilityResolver = null
+
+/**
+ * APP-ZONE-PWA-1: the push endpoints must be able to read the declared
+ * capabilities of the resolved Application, which requires the configuration
+ * loader. Cached because initialization is expensive.
+ */
+async function getCapabilityResolver() {
+  if (!_capabilityResolver) {
+    const configurationLoader = new ConfigurationLoader()
+    await configurationLoader.initialize()
+    _capabilityResolver = new ApplicationResolver({ configurationLoader })
+  }
+  return _capabilityResolver
+}
 
 function getVapidPublicKey() {
   return process.env.WEB_PUSH_VAPID_PUBLIC_KEY || null
@@ -36,10 +53,11 @@ export const pushAPI = {
         return this.sendJson(res, 400, { error: 'Bad Request', message: 'Invalid JSON' })
       }
 
-      const applicationId = this.resolveApplicationId(req)
-      if (!applicationId) {
-        return this.sendJson(res, 400, { error: 'Bad Request', message: 'Could not resolve application' })
+      const resolved = await this.requirePushApplication(req, res)
+      if (!resolved) {
+        return
       }
+      const applicationId = resolved.identity.applicationId
 
       const environment = resolveDeploymentEnvironment()
       const result = await pushService.register(environment, applicationId, data)
@@ -62,10 +80,11 @@ export const pushAPI = {
 
   async handleUnsubscribe(req, res) {
     try {
-      const applicationId = this.resolveApplicationId(req)
-      if (!applicationId) {
-        return this.sendJson(res, 400, { error: 'Bad Request', message: 'Could not resolve application' })
+      const resolvedApp = await this.requirePushApplication(req, res)
+      if (!resolvedApp) {
+        return
       }
+      const applicationId = resolvedApp.identity.applicationId
 
       let body = ''
       for await (const chunk of req) {
@@ -97,10 +116,11 @@ export const pushAPI = {
 
   async handleGetStatus(req, res) {
     try {
-      const applicationId = this.resolveApplicationId(req)
-      if (!applicationId) {
-        return this.sendJson(res, 400, { error: 'Bad Request', message: 'Could not resolve application' })
+      const resolvedStatus = await this.requirePushApplication(req, res)
+      if (!resolvedStatus) {
+        return
       }
+      const applicationId = resolvedStatus.identity.applicationId
 
       const environment = resolveDeploymentEnvironment()
       const status = await pushService.getStatus(environment, applicationId)
@@ -139,7 +159,58 @@ export const pushAPI = {
     }
   },
 
-  resolveApplicationId(req) {
+  /**
+   * APP-ZONE-PWA-1: resolve the Application and confirm it declares the
+   * pushNotifications capability. Fail closed: an Application that does not
+   * declare the capability is treated as unresolvable for push.
+   */
+  async resolvePushApplication(req) {
+    const target = this.resolveApplicationTarget(req)
+    if (!target) {
+      return null
+    }
+
+    let resolver
+    try {
+      resolver = await getCapabilityResolver()
+    } catch {
+      return null
+    }
+
+    const result = resolver.resolve({
+      domain: target.domain,
+      path: target.route
+    })
+
+    if (!result.success || !result.resolved) {
+      return null
+    }
+
+    const declared = result.resolved.configuration?.capabilities?.pushNotifications
+    if (!declared || typeof declared !== 'object' || declared.enabled !== true) {
+      return null
+    }
+
+    return result.resolved
+  },
+
+  async requirePushApplication(req, res) {
+    const resolved = await this.resolvePushApplication(req)
+    if (!resolved) {
+      this.sendJson(res, 403, {
+        error: 'Forbidden',
+        message: PUSH_VALIDATION_ERRORS.PUSH_NOT_ENABLED
+      })
+      return null
+    }
+    return resolved
+  },
+
+  /**
+   * Derives the Application identity target (domain + route) from the request.
+   * Identity is never taken from the request body.
+   */
+  resolveApplicationTarget(req) {
     const url = new URL(req.url, 'http://localhost')
     const pathname = url.pathname
 
@@ -177,17 +248,11 @@ export const pushAPI = {
       }
     }
 
-    const resolver = new ApplicationResolver()
-
-    const result = resolver.resolve({
-      domain: canonicalDomain,
-      path: route
-    })
-    if (result.success && result.resolved) {
-      return result.resolved.identity.applicationId
+    if (!canonicalDomain || !route) {
+      return null
     }
 
-    return null
+    return { domain: canonicalDomain, route }
   },
 
   sendJson(res, statusCode, data) {

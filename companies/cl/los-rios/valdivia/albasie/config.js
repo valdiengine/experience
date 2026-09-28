@@ -119,6 +119,12 @@ export default {
       ],
       favicon: '/apps/valdi/albasie/icons/favicon.ico',
       appleTouchIcon: '/apps/valdi/albasie/icons/apple-touch-icon.png'
+    },
+    // APP-ZONE-PWA-1: Albasie already served the push activation UI, but only
+    // because it was installable. Declared explicitly so the push UI is gated
+    // by this capability like every other Application.
+    pushNotifications: {
+      enabled: true
     }
   },
 

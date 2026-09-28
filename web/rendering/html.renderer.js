@@ -175,6 +175,7 @@ export class HtmlRenderer {
     const vm = {
       identity: presentation.identity || {},
       company,
+      capabilities: Array.isArray(presentation.capabilities) ? presentation.capabilities : [],
       destinationName: destination.name || presentation.metadata?.destinationName || '',
       destinationSlug: destination.slug || presentation.metadata?.destination || '',
       language: presentation.metadata?.language || 'es',
@@ -1621,6 +1622,20 @@ ${declarations}
     var bookingConfig = viewModel.booking || {};
     var pwa = viewModel.pwa || {};
 
+    // APP-ZONE-PWA-1: push UI is authorized by the pushNotifications
+    // capability, not by installability. Previously any installable
+    // Application received a push activation button.
+    var capabilities = Array.isArray(viewModel.capabilities) ? viewModel.capabilities : [];
+    var pushCapability = null;
+    for (var iCap = 0; iCap < capabilities.length; iCap++) {
+      var capCandidate = capabilities[iCap];
+      if (capCandidate && capCandidate.name === 'pushNotifications') {
+        pushCapability = capCandidate;
+        break;
+      }
+    }
+    var pushEnabled = !!(pushCapability && pwa.enabled && pwa.serviceWorkerUrl);
+
     var zoneNavScript = '';
     if (viewModel.zoneNavigation) {
       zoneNavScript = `<script>
@@ -1772,7 +1787,7 @@ ${declarations}
     }
 
     var pushInitScript = '';
-    if (pwa.enabled) {
+    if (pushEnabled) {
       pushInitScript = `<script>
 (function() {
   var pushState = 'unknown';
@@ -1821,8 +1836,8 @@ ${declarations}
     }
 
     try {
-      var registration = await navigator.serviceWorker.register('${pwa.serviceWorkerUrl || '/sw-albasie.js'}', {
-        scope: '${pwa.serviceWorkerScope || '/albasie/'}'
+      var registration = await navigator.serviceWorker.register('${pwa.serviceWorkerUrl}', {
+        scope: '${pwa.serviceWorkerScope || '/'}'
       });
 
       var sub = await registration.pushManager.subscribe({

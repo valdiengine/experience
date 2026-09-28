@@ -264,12 +264,58 @@ export class ApplicationResolver {
     }
   }
 
+  /**
+   * Application-level capability declaration from the authoritative route config.
+   *
+   * Mirrors the existing zone declarative contract (zoneNavigation / zoneContent /
+   * zonePresentation) so any Application — including Zones, which have no company
+   * config — can declare existing Engine capabilities without Engine hardcoding.
+   *
+   * Declarative only. The returned map is not interpreted here: the existing
+   * ApplicationConfigLoader + CapabilityComposer + CapabilityValidator decide which
+   * capabilities are enabled and fail closed on invalid declarations.
+   */
+  #loadRouteCapabilities(domain, path) {
+    if (!domain || !path) {
+      return {}
+    }
+
+    const routes = ROUTE_CONFIG?.routes || []
+    const normalizedPath = path.endsWith('/') && path !== '/' ? path.replace(/\/$/, '') : path
+
+    const routeEntry = routes.find(route => {
+      if (route.domain !== domain) {
+        return false
+      }
+      // Tolerate a trailing-slash variant of the request path.
+      return route.path === path || route.path === normalizedPath
+    })
+
+    const declared = routeEntry?.capabilities
+    if (!declared || typeof declared !== 'object' || Array.isArray(declared)) {
+      return {}
+    }
+
+    return declared
+  }
+
   #buildRouteData(request, ownershipResult, migrationResult, companyData = { capabilities: {}, experienceType: null, company: null }) {
+    const routeCapabilities = this.#loadRouteCapabilities(request?.domain, request?.path)
+
+    let capabilities = {}
+    if (Object.keys(companyData.capabilities).length > 0) {
+      capabilities = { ...routeCapabilities, ...companyData.capabilities }
+    } else if (request?.capabilities && typeof request.capabilities === 'object') {
+      capabilities = { ...routeCapabilities, ...request.capabilities }
+    } else {
+      capabilities = routeCapabilities
+    }
+
     return {
       company: companyData.company || request.company || ownershipResult.company || null,
       destination: request.destination || ownershipResult.destination || null,
       experienceType: request.experienceType || companyData.experienceType || null,
-      capabilities: Object.keys(companyData.capabilities).length > 0 ? companyData.capabilities : (request.capabilities || {}),
+      capabilities,
       theme: request.theme || {},
       contentSource: request.contentSource || 'wordpress',
       migrationState: migrationResult.migrationState,

@@ -210,6 +210,53 @@ export const ROUTE_CONFIG = {
           }
         ]
       },
+      // APP-ZONE-PWA-1: Zone Application installability + push.
+      // Declarative only. Both capabilities already exist in the Engine registry;
+      // the Application composition pipeline (loader -> composer -> validator)
+      // consumes this block exactly as it consumes a company config's
+      // `capabilities`. No Engine branch is specific to Isla Teja.
+      capabilities: {
+        installableApp: {
+          enabled: true,
+          name: 'Isla Teja',
+          shortName: 'Isla Teja',
+          description: 'Isla Teja — isla fluvial de Valdivia, Región de Los Ríos, Chile',
+          startUrl: '/isla-teja/',
+          scope: '/isla-teja/',
+          display: 'standalone',
+          // Reuses the existing zonePresentation token for this zone; no new
+          // visual identity is introduced.
+          themeColor: '#3a7d66',
+          backgroundColor: '#0a0a0a',
+          // Generic static offline fallback served by the platform.
+          offlineFallback: '/offline.html',
+          icons: [
+            {
+              src: '/apps/valdi/albasie/icons/icon-192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'any'
+            },
+            {
+              src: '/apps/valdi/albasie/icons/icon-512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any'
+            },
+            {
+              src: '/apps/valdi/albasie/icons/icon-512-maskable.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable'
+            }
+          ],
+          favicon: '/apps/valdi/albasie/icons/favicon.ico',
+          appleTouchIcon: '/apps/valdi/albasie/icons/apple-touch-icon.png'
+        },
+        pushNotifications: {
+          enabled: true
+        }
+      },
       // APP-ZONE-PRESENT-1: first Level-2 Application-scoped visual identity.
       // Declarative only. Environment "nature" default tokens come from the
       // Engine; scope authority stays with generateZoneNavigationScope().
