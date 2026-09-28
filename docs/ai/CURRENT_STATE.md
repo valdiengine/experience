@@ -3030,12 +3030,18 @@ Availability GET date/night semantics also remain outside this milestone. The re
 
 ## BOOKING-DATE-SEMANTICS-1 — Stay Nights and Traveler-Widget Availability Eligibility
 
-**Status:** `IMPLEMENTED / LOCALLY VERIFIED / COMMITTED / PUSHED`
+**Status:** `IMPLEMENTED / LOCALLY VERIFIED / COMMITTED / PUSHED / STAGE DEPLOYED / PUBLIC AVAILABILITY READ VERIFIED / UPDATED WIDGET SOURCE VERIFIED IN SERVED HTML / OPERATOR-REPORTED LIVE BROWSER AVAILABILITY-TO-FORM FLOW VERIFIED`
 **Implementation Commit:** `ff36cdb2770ac0bb7b3c207f22c4d6bf058b05a9` — `fix(booking): align stay nights and availability eligibility`
+**Pre-deployment Stage baseline:** `912aadf91d1a2af795c721d1b0b0c14f4d430a03` — the **two deployed files** matched that commit's blobs exactly before replacement. This is a claim about those two files only; it is **not** a claim that the rest of the Stage tree matches `912aadf`.
+**Documentation baseline:** `4b2fc99ce9522d74aa8b6622fa856ac47544cd3d` (branch `p15.3-development`, operator-confirmed `SYNCED=True`, staging area empty at documentation time)
 **Synchronization:** committed and pushed; operator-confirmed `LOCAL == REMOTE == ff36cdb…`, `SYNCED=True`
-**Branch:** `p15.3-development` (staging area empty at documentation time)
-**Stage deployment:** **PENDING** — not deployed
-**Stage certification:** **PENDING** — no Stage request, restart, or database access performed
+**Branch:** `p15.3-development`
+**Stage deployment:** **STAGE DEPLOYED** — the two production blobs from `ff36cdb` were uploaded and activated (operator-executed)
+**Stage read verification:** **PUBLIC AVAILABILITY READ VERIFIED** — `/health` and the two-night availability read observed after the normal restart
+**Stage widget verification:** **UPDATED WIDGET SOURCE VERIFIED IN SERVED HTML** — the gate functions were confirmed present in the served page source
+**Stage browser flow (operator-reported):** **OPERATOR-REPORTED LIVE BROWSER AVAILABILITY-TO-FORM FLOW VERIFIED** — see "Live browser evidence" below
+**Browser submission (operator-reported):** **OPERATOR-REPORTED BROWSER SUBMISSION WITH MATCHING POSTGRESQL PERSISTENCE VERIFIED** — see "Completed browser reservation" below
+**Not certified:** live browser `409` behavior; checkout-only-unavailable behavior in a Stage browser
 **Source manifest:** 5 files (2 production, 3 test) — exactly the paths in `ff36cdb`
 
 This closes the open question recorded under ENSUENO-BOOKING-CURRENCY-1 → "Remaining separate follow-up": the public GET/UI contract for returned calendar dates versus the `nights` value.
@@ -3098,27 +3104,151 @@ The earlier implementation regression run additionally reported `tests/capabilit
 
 The widget suite asserts shipped code rather than a copy of it. It covers the emitted script compiling, SSR markup presence, two-night and one-night free stays, checkout-only unavailability, out-of-range entries, occupied-night unavailability, missing and duplicated occupied dates, the full `available` value contract, strict/invalid/equal/reversed/impossible/leap/year-`0099` date handling, GET `409`, POST `409`, successful reservation, and a failed re-check re-hiding the form.
 
-### Stage deployment manifest — PREPARED, NOT EXECUTED
+### Stage deployment manifest — EXECUTED by the operator
 
-Derived from the committed Git blobs at `ff36cdb` (not from working-tree copies). Both blobs are LF-only; see the line-ending caveat in the deployment plan.
+Derived from the committed Git blobs at `ff36cdb` (not from working-tree copies). Both blobs are LF-only; see the line-ending caveat in the deployment plan. This manifest was prepared before deployment and was then deployed as-is.
 
 | Path | Git blob SHA-1 | Bytes | SHA-256 |
 |------|----------------|-------|---------|
 | `experience/booking/booking.adapter.js` | `1fd7854df2c11c2d630e0a9866056c7089660116` | 9461 | `bb78ee6e96cad5e1d17e0c2f9690d5506d6244555df5299bb51bc74efd393327` |
 | `web/rendering/html.renderer.js` | `9fdd9342f9441e0006d3831ad32cf34fc0c19fe7` | 68175 | `f92abbcd9741f1463cc247e3b4616cfe8ab3e9f3ce66769523876814636c2f76` |
 
-No additional dependency is required. Neither file adds an import, a package, a migration, a seed, or a build step; the widget change lives inside an already-emitted inline script, so no separate asset is deployed. Tests are **not** deployed.
+No additional dependency is required. Neither file adds an import, a package, a migration, a seed, or a build step; the widget change lives inside an already-emitted inline script, so no separate asset is deployed. Tests were **not** deployed.
+
+### Stage deployment evidence (operator-executed)
+
+Every observation in this subsection is an operator-provided output from the executed deployment and its post-restart capture. None of it was produced by the documentation step, which performed no network, SSH, restart, or database access.
+
+**Deployment**
+
+- Deployed source: the two production blobs from implementation commit `ff36cdb2770ac0bb7b3c207f22c4d6bf058b05a9`.
+- The active pre-deployment files exactly matched commit `912aadf91d1a2af795c721d1b0b0c14f4d430a03`. This comparison covers **only the two files that were replaced** — `experience/booking/booking.adapter.js` and `web/rendering/html.renderer.js` — and implies nothing about the rest of the Stage tree, which was not compared to `912aadf` and retains whatever local state it had. For reference, the committed-blob SHA-256 values at that baseline are `d45cbc6824bd7a416f790796a20cc42bf1f2cd82c437c86bbaee2db8b6ec04f1` (7656 bytes) for `experience/booking/booking.adapter.js` and `e1e2d8bc1f7fc6e66619f05ef185d962242708bc93ed642d1c01bc8a5486f175` (64878 bytes) for `web/rendering/html.renderer.js`.
+- Verified backup: `/home/rodrigo/booking-date-semantics-1-backup.mLhkCh03`.
+- Uploaded and deployed SHA-256, matching the `ff36cdb` manifest above exactly:
+  - `experience/booking/booking.adapter.js` → `bb78ee6e96cad5e1d17e0c2f9690d5506d6244555df5299bb51bc74efd393327`
+  - `web/rendering/html.renderer.js` → `f92abbcd9741f1463cc247e3b4616cfe8ab3e9f3ce66769523876814636c2f76`
+- Syntax checks passed on Node v22.23.2.
+- A normal Passenger restart was requested through `tmp/restart.txt`.
+
+**Post-deployment capture — 2026-09-27T18:51:57.1399731Z**
+
+`GET /health` → HTTP `200`:
+
+- `status = ok`
+- `environment = staging`
+- `persistence.status = up` · `persistence.provider = postgres` · `persistence.physical = true`
+
+`GET /api/v1/booking/companies/ensueno-curinanco/availability?checkIn=2026-11-20&checkOut=2026-11-22` → HTTP `200`, `nights = 2`:
+
+| date | status | available | capacity | price | notes |
+|------|--------|-----------|----------|-------|-------|
+| `2026-11-20` | `available` | 3 | 4 | 90000 | null |
+| `2026-11-21` | `available` | 3 | 4 | 90000 | null |
+| `2026-11-22` | `available` | 4 | 4 | 90000 | null |
+
+This is the intended contract observed live: `nights = 2` for the two-night stay while `dates[]` still returns three calendar dates with the checkout day retained. Compared against the pre-deployment capture at `2026-09-27T18:44:13.6334461Z`, **only `nights` changed, from `3` to `2`**; all other payload fields were preserved.
+
+**No observed net inventory change between the two captures.** The pre-deployment capture at `2026-09-27T18:44:13.6334461Z` returned `available = 3, 3, 4` for `2026-11-20`, `2026-11-21`, and `2026-11-22` respectively — **identical** to the post-deployment capture, with `capacity`, `status`, `price`, and `notes` likewise unchanged. `nights` is the only field that differs between the two captures, and that difference is the intended effect of the fix under test.
+
+Precisely what these two snapshots establish is the **absence of an observed net difference**, not the absence of all intervening inventory activity. Two point-in-time reads cannot exclude a reservation created and released, or any sequence of writes that netted out, inside the seven-minute window. The narrower claim is the supported one, and it is the claim made here.
+
+**Do not compare these values against earlier certification snapshots.** The `ENSUENO-BOOKING-CURRENCY-1` record notes `capacity 4/4` with `available 4` across the same date range; that snapshot was taken at a different time and is **not** this deployment's baseline. The meaningful comparison for this deployment is `18:44:13.6334461Z` → `18:51:57.1399731Z`, and across that window the payload differs in exactly one field. The per-night numbers above are **observed live Stage state, not expectations**.
+
+**Served widget source — public `/ensueno-curinanco`**
+
+- `HEAD` returned HTTP `200` with `Content-Type: text/html`.
+- A subsequent `GET` HTML inspection found present:
+  - `data-booking-date-form`
+  - `function occupiedRange(checkIn, checkOut)`
+  - `function hasBookableNights(checkIn, checkOut, data)`
+  - `Number.isFinite(entry.available)` with `available >= 1` enforcement
+- The same search included `var allNightsAvailable` and returned no match, confirming the pre-fix status-only scan is absent from the served source.
+
+This certifies that the updated widget source is deployed and served. It is **source** verification; behavioral verification is recorded separately below.
+
+### Live browser evidence (operator-reported)
+
+Reported by the operator on 2026-09-28, America/Santiago. This is an operator-reported observation of a live Stage browser session — not produced by the documentation step, and not a scripted or automated check.
+
+| Item | Value |
+|------|-------|
+| Reported on | 2026-09-28 (America/Santiago) |
+| Page | `https://stage.valdi.app/ensueno-curinanco` |
+| Selected dates | `2026-10-01` → `2026-10-03` (two nights) |
+| Widget result | "Disponibilidad confirmada" |
+| Traveler form | rendered — name, email, phone, guests, notes, and the Reservar button |
+
+**Classification: `OPERATOR-REPORTED LIVE BROWSER AVAILABILITY-TO-FORM FLOW VERIFIED`.** The gate's positive branch was exercised end-to-end in a real browser against live Stage data: dates were selected, the availability check passed, the confirmation message rendered, and the traveler form was revealed with all of its fields and the submit button. This is precisely the flow the fix was written to protect, now confirmed on Stage and not only in locally mocked tests.
+
+**Scope of that confirmation.** The run covers the availability-to-form transition only. The selected dates were fully available, so it did not exercise the gate's blocking cases — occupied nights, missing or duplicated occupied dates, or invalid or non-finite `available` values. Note that **checkout-only unavailability is not one of those blocking cases**: it is an expected **ALLOW** case, because the checkout day is excluded from occupancy evaluation by design. It can therefore be exercised with ordinary existing inventory and does **not** require creating a new occupancy condition. That scenario was not run in the Stage browser, and its coverage remains the local suite `web/booking-widget-availability.test.js` (42/42, executing the actual emitted script).
+
+**This is a separate observation from the `18:51:57Z` availability read.** The browser run used `2026-10-01` → `2026-10-03`; the HTTP capture above used `2026-11-20` → `2026-11-22`. Different date range and different mechanism (interactive browser vs. HTTP read), and no browser-side capture of the `2026-11-20` → `2026-11-22` response exists. Both are recorded; neither substitutes for the other, and the `nights = 2` proof rests on the HTTP read.
+
+**Context, not a diagnosis — the earlier late-September attempt.** The operator reports having tried this flow in late September without success, while the successful run selected dates from October onward. That is **consistent with** the documented materialized availability window `2026-10-01 . 2026-12-29` (recorded under the seed/materialization milestone), since dates before the window are expected to be unavailable. It is recorded here as a **plausible explanation only**. The exact September dates selected and the actual response received were **not captured**, and this record does not prove, diagnose, or attribute any failure: a different cause is not excluded by the available evidence. If the September attempt is ever to be characterized, it requires a fresh reproduction with the dates and the response recorded.
+
+### Completed browser reservation (operator-reported)
+
+On 2026-09-28 (America/Santiago), the operator submitted the traveler form on `https://stage.valdi.app/ensueno-curinanco` with `checkIn=2026-10-01`, `checkOut=2026-10-03`, `guests=2`. The browser displayed:
+
+> Reserva confirmada. Tu codigo de confirmacion es conf-1790571876177-m254tt
+
+A subsequent operator-executed read-only PostgreSQL query found exactly one matching reservation:
+
+| Column | Value |
+|---|---|
+| `id` | `07933bcb-f125-4115-99d8-4f289f71aad7` |
+| `confirmation_code` | `CONF-1790571876177-M254TT` |
+| `status` | `requested` |
+| `check_in_date` | `2026-10-01` |
+| `check_out_date` | `2026-10-03` |
+| `guest_count` | `2` |
+| `total_price` | `null` |
+| `currency` | `CLP` |
+| `channel` | `traveler-booking` |
+
+Query method: `BEGIN READ ONLY`, parameterized `SELECT`, then `ROLLBACK`. **The query was executed by the operator, not by this documentation step**, which performed no database access. No personal customer fields were selected. The customer-identity columns were never inspected, so this record makes **no claim** about whether the entered details are real or synthetic, and does not assert that no personal data was entered — the form accepts it and it was submitted.
+
+**Classification: `OPERATOR-REPORTED BROWSER SUBMISSION WITH MATCHING POSTGRESQL PERSISTENCE VERIFIED`.** The confirmation reference shown in the browser (`conf-1790571876177-m254tt`) matches the persisted `confirmation_code` (`CONF-1790571876177-M254TT`) case-insensitively, and the persisted `check_in_date`, `check_out_date`, and `guest_count` match what the operator submitted. The write path, the server-authoritative capacity guard, and physical PostgreSQL persistence are therefore confirmed consistent for this reservation.
+
+**Relationship to the 2026-09-27 deployment evidence.** These are two distinct events and must not be conflated. The September 27 deployment was verified **read-only only** — health, availability, and served-source reads, with no write, no POST, and no SELECT against a reservation row. The September 28 browser action is a **subsequent write** that created this reservation, and it is the first write performed against this milestone. Nothing about the deployment's read-only evidence is retroactively changed by it.
+
+**Persisted status is `requested`.** The UI wording is "Reserva confirmada", but the stored status is `requested` — see the UX debt recorded below. No commercial confirmation, payment, or booking-finalization is claimed or implied.
+
+**Not claimed about the submission:** no captured HTTP status code or response body, no network trace, no retry count, no idempotency evidence, and no payment or card handling. The persisted status is `requested`; that is the whole of what is known about the outcome.
+
+**Availability read after the submission** — `GET /api/v1/booking/companies/ensueno-curinanco/availability?checkIn=2026-10-01&checkOut=2026-10-03` → `success=true`, `nights=2`:
+
+| date | status | available | capacity | price | notes |
+|------|--------|-----------|----------|-------|-------|
+| `2026-10-01` | `available` | 3 | 4 | 90000 | null |
+| `2026-10-02` | `available` | 3 | 4 | 90000 | null |
+| `2026-10-03` | `available` | 4 | 4 | 90000 | null |
+
+**No pre-submission snapshot exists for the October range.** The only pre/post pair in this milestone is the November capture described above. These values are therefore **consistent with** checkout-exclusive occupancy for the new reservation — the two occupied nights read `3` and the checkout night reads `4` — but they do **not** prove an isolated before/after capacity delta attributable to this reservation. Reservation lines and the physical capacity rows were **not** directly queried, so no row-level before-state exists to compare against, and the apparent decrement is not attributed here as a demonstrated arithmetic effect of the booking.
 
 ### Explicitly NOT claimed
 
 - **No claim that impossible dates were persisted in PostgreSQL.** The normalization analysis was JavaScript-level only; no physical Stage/Neon reproduction or persistence was performed. The `nights: 0` behavior is verified locally against the serializer and the served script only.
-- No claim of Stage deployment or Stage certification — both remain **PENDING**.
-- No claim that a `GET` alone certifies widget behavior. An HTTP read verifies the server payload only; the checkout-only unavailability scenario is a **locally executed** widget scenario driven by a stubbed `fetch`. Reproducing it against Stage requires a real browser running the served script, which has not been done.
-- No database access, no reservation created, modified, or retried, no cleanup, and no production customer data.
+- **No claim that checkout-only unavailability was exercised on Stage.** That scenario was tested locally with the actual emitted script and mocked responses, and was not run in the Stage browser. It is an expected **ALLOW** case rather than a blocking one, so it is exercisable with ordinary existing inventory; no new occupancy condition is inherently required to test it.
+- **No claim of live browser `409` behavior.** The 2026-09-28 submission succeeded, so a successful path demonstrates nothing about the conflict path. `409` handling remains covered by the local suites recorded above and by the server-authoritative guard described under "Unchanged authority"; it was not exercised in a Stage browser.
+- No claim of an isolated capacity delta for the 2026-09-28 reservation. No pre-submission snapshot exists for the October range, and reservation lines and physical capacity rows were not directly queried; see the explicit caveat in "Completed browser reservation".
+- `total_price` remains `null` in the new row — still unresolved, and the same debt as before this milestone. `CLP` **was** observed in the new row's `currency` column.
+- No claim of a captured HTTP status code, network trace, retry count, payment, or commercial confirmation for the submission. No POST was replayed, and no idempotency behavior was observed.
+- No cleanup of the new reservation is requested or performed. `07933bcb-f125-4115-99d8-4f289f71aad7` is **retained as evidence**, alongside the two earlier evidence reservations `7f820bae-870f-460d-a14f-96894c97db34` and `1f6de1dc-7279-4439-b73b-5c5c6b83f562`, which remain valid within their original scope and were not touched.
+- **Historical write and currency certifications remain valid within their original scope.** This milestone neither re-certified nor altered them, and no new currency *write* certification is claimed: `CLP` in the new row is an observation of a stored value, not a certification of the currency write path. `ENSUENO-BOOKING-CURRENCY-1` stands as recorded — not invalidated, and equally not extended. The local suites (`reservation-currency` 12/12, `mvp-booking-ui-1` 52/52, `zone-navigation` 12/12) likewise remain local evidence.
+- No production system was involved; this work targeted Stage only. What the operator entered into the traveler form was not inspected.
+
+### UX debt (new, separate — copy correction not started)
+
+The traveler widget announced **"Reserva confirmada"** while the persisted `status` is **`requested`**. The two statements are not equivalent: the UI asserts a completed booking, the database records a request awaiting whatever comes next.
+
+A future, separately scoped copy correction should change the confirmation wording to **"Solicitud de reserva recibida"** (or equivalent), while **retaining the confirmation/reference code** so the traveler can still quote it for support or lookup. Changing the code for this is out of scope here and **no code was edited** — this entry records the debt only.
+
+Scope note for whoever picks it up: the wording change belongs to the widget's success branch in `web/rendering/html.renderer.js`, and it should be coordinated with whatever the `requested`-status UX intends long-term, since the copy fix alone does not change the persisted status.
 
 ### Remaining separate debts (unchanged, explicitly out of scope)
 
-- `total_price = null` — still open, outside this milestone.
+- `total_price = null` — still open, outside this milestone. The 2026-09-28 reservation also persisted `total_price = null`, and `CLP` in `currency`.
 - Inbound date validation and HTTP error classification — `capabilities/availability/availability.validation.js` still accepts equal dates (HTTP `200` with a one-date calendar), still surfaces reversed dates as an unclassified `500` rather than `400`, and still normalizes impossible dates server-side. The new `nights` and widget guards are defense at the serialization and gate boundary, **not** a fix to that inbound contract; hardening it is a separate milestone.
 - The `jsonwebtoken` Stage runtime debt and the mixed-file reconciliation gate recorded under ENSUENO-M5-STAGE-DEPLOY-1 remain open and untouched.
 - Certification reservations `7f820bae-870f-460d-a14f-96894c97db34` and `1f6de1dc-7279-4439-b73b-5c5c6b83f562` remain untouched as evidence.
