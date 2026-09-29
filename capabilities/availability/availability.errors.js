@@ -58,6 +58,14 @@ export class AvailabilityCalendarError extends AvailabilityError {
   }
 }
 
+export class AvailabilityDateRangeError extends AvailabilityError {
+  constructor(message, details = {}) {
+    super(message, { code: 'INVALID_DATE_RANGE', statusCode: 422 })
+    this.name = 'AvailabilityDateRangeError'
+    this.details = details
+  }
+}
+
 export class AvailabilityOrphanError extends AvailabilityError {
   constructor(message) {
     super(message, { code: 'ORPHAN_AVAILABILITY', statusCode: 422 })

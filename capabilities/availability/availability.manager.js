@@ -10,6 +10,7 @@ import { AvailabilityWorkflow } from './availability.workflow.js'
 import { validateCreateData, validateUpdateData, validateWindowData, validateRuleData, validateSeasonData, validateBlockData, validateDateRange } from './availability.validation.js'
 import { AVAILABILITY_PERMISSIONS } from './availability.permissions.js'
 import { AvailabilityCalendar } from './availability.calendar.js'
+import { expandOccupiedNights } from './availability.occupied-nights.js'
 import { AvailabilitySearch } from './availability.search.js'
 
 export class AvailabilityManager {
@@ -392,9 +393,7 @@ export class AvailabilityManager {
     await this.#checkPermission(identity, AVAILABILITY_PERMISSIONS.READ)
     validateDateRange(checkIn, checkOut)
 
-    const endDate = new Date(checkOut)
-    endDate.setDate(endDate.getDate() - 1)
-    const dates = AvailabilityCalendar.expandRange(checkIn, endDate.toISOString().split('T')[0])
+    const dates = expandOccupiedNights({ startDate: checkIn, endDate: checkOut })
 
     const records = await this.#repo?.findMany({ accommodationId, date: { gte: checkIn, lte: checkOut } }) || []
     const recordMap = {}
