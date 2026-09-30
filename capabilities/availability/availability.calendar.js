@@ -59,6 +59,31 @@ export class AvailabilityCalendar {
     return merged
   }
 
+  /**
+   * Split an INCLUSIVE [start, end] civil date range at the given split dates.
+   *
+   * Each split date begins its own segment and the preceding segment ends the
+   * day before it, so the segments tile the original inclusive range exactly,
+   * with no gap and no overlap between them. A split equal to `start` or beyond
+   * `end` is ignored, and the argument list is sorted before use, so the caller
+   * need not pre-sort it.
+   *
+   * UTC-only arithmetic, for the same reason as expandRange: a `YYYY-MM-DD`
+   * string parses as UTC midnight and is formatted with `toISOString()`, so the
+   * "day before the split" has to be stepped in UTC too. Stepping with the
+   * local-time `setDate()` put the segment end a day early whenever the range
+   * crossed a daylight-saving transition, so the segment silently lost its last
+   * day and the segments no longer tiled the range.
+   *
+   * Unchanged behaviour, deliberately preserved: a valid range with no usable
+   * split comes back as that whole range in one segment, a split at `start` or
+   * beyond `end` is ignored, and the `{start, end}` output shape. A reversed
+   * range returns `[]`, and so does a range with an unparseable bound: nothing
+   * here is validated, so unsupported inputs are outside the certified contract
+   * rather than guaranteed to behave as the reversed-range case does.
+   *
+   * See docs/ai/BOOKING_CALENDAR_GAPS_1_REPORT.md.
+   */
   static splitRange(start, end, splitDates) {
     const segments = []
     let currentStart = new Date(start)
@@ -69,7 +94,7 @@ export class AvailabilityCalendar {
     for (const split of splits) {
       if (split > currentStart && split <= rangeEnd) {
         const segEnd = new Date(split)
-        segEnd.setDate(segEnd.getDate() - 1)
+        segEnd.setUTCDate(segEnd.getUTCDate() - 1)
         if (segEnd >= currentStart) {
           segments.push({
             start: currentStart.toISOString().split('T')[0],
@@ -98,6 +123,35 @@ export class AvailabilityCalendar {
     return aStart < bEnd && aEnd > bStart
   }
 
+  /**
+   * Find the gaps between consecutive INCLUSIVE civil date ranges.
+   *
+   * `sortedRanges` must be sorted by start date and must not overlap; each gap is
+   * the run of days strictly between one range's `end` and the next range's
+   * `start`, reported as an INCLUSIVE `{start, end, days}` span.
+   *
+   * `days` is the number of days in that inclusive span, so it always equals
+   * `expandRange(start, end).length` and a one-day gap reports
+   * `{start: d, end: d, days: 1}`.
+   *
+   * UTC-only arithmetic, for the same reason as expandRange: a `YYYY-MM-DD`
+   * string parses as UTC midnight and is formatted with `toISOString()`, so the
+   * day after `prev.end` and the day before `curr.start` must be stepped in UTC.
+   *
+   * The previous version stepped both bounds with the local-time `setDate()` and
+   * counted `days` with a fixed 24-hour division. Across a daylight-saving
+   * transition the local step drifted, so the returned bounds did not match the
+   * reported `days` and the object contradicted itself: in Australia/Lord_Howe a
+   * one-day gap at the October transition was reported as
+   * `{start: '2026-10-03', end: '2026-10-04', days: 1}`, a span containing two
+   * days, where the correct gap is `2026-10-04` alone.
+   *
+   * Unchanged behaviour, deliberately preserved: an empty array for fewer than
+   * two ranges, no gap emitted for adjacent or overlapping ranges, and the
+   * `{start, end, days}` output shape.
+   *
+   * See docs/ai/BOOKING_CALENDAR_GAPS_1_REPORT.md.
+   */
   static detectGaps(sortedRanges) {
     const gaps = []
     for (let i = 1; i < sortedRanges.length; i++) {
@@ -105,12 +159,19 @@ export class AvailabilityCalendar {
       const curr = sortedRanges[i]
       const prevEnd = new Date(prev.end)
       const currStart = new Date(curr.start)
+      // The gap length is the whole-day distance between the two bounds, minus
+      // the day shared by neither. This is the original calculation, kept
+      // unchanged: the method does not validate that its inputs are UTC-midnight
+      // civil dates, so for a timestamp carrying a time of day `floor` and `round`
+      // can disagree. Which one is intended for such input is a separate,
+      // pre-existing question and is out of scope here. Only the setDate() calls
+      // below are part of the timezone fix.
       const gapDays = Math.floor((currStart - prevEnd) / (1000 * 60 * 60 * 24)) - 1
       if (gapDays > 0) {
         const gapStart = new Date(prevEnd)
-        gapStart.setDate(gapStart.getDate() + 1)
+        gapStart.setUTCDate(gapStart.getUTCDate() + 1)
         const gapEnd = new Date(currStart)
-        gapEnd.setDate(gapEnd.getDate() - 1)
+        gapEnd.setUTCDate(gapEnd.getUTCDate() - 1)
         gaps.push({
           start: gapStart.toISOString().split('T')[0],
           end: gapEnd.toISOString().split('T')[0],
