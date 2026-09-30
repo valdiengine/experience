@@ -1551,10 +1551,19 @@ ${zoneContentStyles}
 }
 
 @media (max-width: 767px) {
-  .${s} .zone-nav-rail {
-    margin-left: calc(var(--spacing-md) * -2);
-    margin-right: calc(var(--spacing-md) * -2);
-  }
+  /* APP-ZONE-TABS-MOBILE-1B: .zone-nav-rail deliberately has no rule here
+     anymore. It used to add margin-left/-right: calc(var(--spacing-md) * -2)
+     on top of the base max-width: 100%, and those two cannot both hold. The
+     negative margins ask for 422px of width inside a 358px content box;
+     max-width then clamps the rail back to 358px, and because the block is
+     over-constrained CSS resolves it by dropping margin-right to +32px. The
+     rail's left edge therefore landed 16px OUTSIDE the viewport (x = -16) with
+     a 48px dead gutter at the right.
+     With no override, the base rule alone applies: an ordinary in-flow block
+     that exactly fills the container, and the rail remains the single scroll
+     container (overflow-x: auto). Horizontal overflow stays inside the rail,
+     the first tab always starts inside the viewport, and the rail introduces
+     no page-level horizontal scrolling. */
 
   .${s} .zone-nav-tabs {
     padding-left: var(--spacing-lg);
