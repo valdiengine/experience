@@ -66,6 +66,14 @@ export class AvailabilityDateRangeError extends AvailabilityError {
   }
 }
 
+export class AvailabilityConsumptionRecordError extends AvailabilityError {
+  constructor(message, details = {}) {
+    super(message, { code: 'INVALID_CONSUMPTION_RECORD', statusCode: 422 })
+    this.name = 'AvailabilityConsumptionRecordError'
+    this.details = details
+  }
+}
+
 export class AvailabilityOrphanError extends AvailabilityError {
   constructor(message) {
     super(message, { code: 'ORPHAN_AVAILABILITY', statusCode: 422 })

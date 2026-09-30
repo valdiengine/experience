@@ -3,6 +3,7 @@ import { AvailabilityManager } from './availability.manager.js'
 import { AvailabilityService } from './availability.service.js'
 import { AVAILABILITY_EVENTS } from './availability.events.js'
 import { AvailabilitySearch } from './availability.search.js'
+import { expandOccupiedNights, OCCUPIED_NIGHTS_EXPANSION_VERSION, OCCUPIED_NIGHTS_MAX_NIGHTS_DEFAULT } from './availability.occupied-nights.js'
 
 export class AvailabilityCapability extends BaseCapability {
   static id = 'availability'
@@ -48,6 +49,48 @@ export class AvailabilityCapability extends BaseCapability {
 
   get service() {
     return this.#service
+  }
+
+  /**
+   * Public occupied-night contract for cross-capability callers.
+   *
+   * Other capabilities reach this through context.capabilities.get('availability')
+   * and never import the module directly (agent.md 2.5 / 2.6). This is the only
+   * surface exposing the derivation, so a caller cannot reimplement it and drift.
+   *
+   * Read-only by construction: it derives a date list from bounds and touches no
+   * repository, so it is safe for a caller to invoke before opening a
+   * transaction. It performs no mutation and no capacity check; the caller still
+   * owns the conditional capacity UPDATE and its concurrency guards.
+   *
+   * @param {{ startDate: string, endDate: string, maxNights?: number }} input
+   *   check-in (inclusive) and check-out (exclusive) bounds, strict 'YYYY-MM-DD'.
+   * @returns {string[]} ascending, unique, consecutive occupied dates, check-out excluded
+   * @throws {AvailabilityDateRangeError} for missing, malformed, impossible,
+   *   equal, reversed or over-bound ranges
+   */
+  expandOccupiedNights(input) {
+    return expandOccupiedNights(input)
+  }
+
+  /**
+   * Version of the occupied-night derivation this capability currently serves.
+   * Consumers persist this alongside consumed dates so a later revision is
+   * detectable rather than silently re-deriving a different set.
+   * @returns {number}
+   */
+  get occupiedNightsExpansionVersion() {
+    return OCCUPIED_NIGHTS_EXPANSION_VERSION
+  }
+
+  /**
+   * Default ceiling on nights per expansion. A technical bound for unvalidated
+   * input, not a commercial stay policy and not a certified SQL transaction
+   * budget.
+   * @returns {number}
+   */
+  get occupiedNightsMaxNightsDefault() {
+    return OCCUPIED_NIGHTS_MAX_NIGHTS_DEFAULT
   }
 
   #handleCreated = async (data) => {
