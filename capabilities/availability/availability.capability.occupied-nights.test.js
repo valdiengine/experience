@@ -311,14 +311,291 @@ await test('[static text] repository does not directly import the occupied-night
   )
 })
 
-await test('[static text] repository keeps the availability calendar import for the legacy branch', () => {
-  assert(
-    repositorySource.includes('AvailabilityCalendar'),
-    'the legacy compatibility branch still needs AvailabilityCalendar'
+// ---------------------------------------------------------------------------
+// STRUCTURAL IMPORT INSPECTION — the repository no longer imports the calendar.
+//
+// The legacy branch used to call the shared availability calendar.
+// BOOKING-CALENDAR-UTC-1 gave the repository its own private copy of that
+// arithmetic, so the import edge no longer exists. This section therefore
+// asserts the ABSENCE of that dependency, by parsing real import declarations.
+//
+// WHY NOT A SUBSTRING: `source.includes('AvailabilityCalendar')` cannot tell an
+// import declaration from a comment or from a string, so a commented-out import
+// satisfies it and re-wording a comment invalidates it — exactly the false
+// positive it produced in practice. Here comments are stripped first, so a
+// comment can neither manufacture nor hide an import.
+//
+// EVIDENTIARY VALUE IS DELIBERATELY LIMITED. This proves one thing only: the
+// repository holds no static ESM import edge to the calendar module. It does NOT
+// prove that the legacy branch still behaves as it did before, that the calendar
+// is timezone-correct, or that releasing historical reservations is safe. Those
+// are established by executing the real repository in
+// reservation.repository.occupied-nights.test.js, whose five pre-slice legacy
+// assertions and timezone-equivalence checks are unchanged. No assertion here
+// requires a private method name to appear, because that would reintroduce the
+// same substring weakness under a different label.
+// ---------------------------------------------------------------------------
+
+/**
+ * Remove line and block comments while preserving string and template contents
+ * (the module specifiers we need to read live inside quotes) and preserving
+ * newline positions so declarations stay line-anchored. Comment bodies become
+ * spaces, so a comment can never be mistaken for code.
+ *
+ * String, template and regex literals are tracked so that a `//` or `/*`
+ * appearing *inside* a literal is not mistaken for the start of a comment.
+ * Regex literals are recognised by the usual previous-token heuristic, since
+ * `/` is otherwise ambiguous with division.
+ */
+function stripComments(source) {
+  const out = []
+  const n = source.length
+  let i = 0
+  let prevSignificant = ''
+
+  const regexCanStartHere = () =>
+    prevSignificant === '' || '(,=:[!&|?{};+-*%~^<>'.includes(prevSignificant)
+
+  const blank = (text) => (text === '\n' ? '\n' : ' ')
+
+  while (i < n) {
+    const c = source[i]
+    const next = source[i + 1]
+
+    if (c === '/' && next === '/') {
+      while (i < n && source[i] !== '\n') { out.push(' '); i++ }
+      continue
+    }
+
+    if (c === '/' && next === '*') {
+      out.push('  ')
+      i += 2
+      while (i < n && !(source[i] === '*' && source[i + 1] === '/')) {
+        out.push(blank(source[i])); i++
+      }
+      out.push('  ')
+      i += 2
+      continue
+    }
+
+    if (c === "'" || c === '"') {
+      // Single- and double-quoted strings: contents PRESERVED verbatim, because
+      // the module specifiers we need to read live inside the quotes.
+      out.push(c)
+      i++
+      while (i < n) {
+        const d = source[i]
+        if (d === '\\') { out.push(d, source[i + 1] ?? ' '); i += 2; continue }
+        if (d === c) { out.push(d); i++; break }
+        if (d === '\n') { out.push(d); i++; break }
+        out.push(d)
+        i++
+      }
+      prevSignificant = 'x'
+      continue
+    }
+
+    if (c === '`') {
+      // Template literals are the one case where preserving contents verbatim is
+      // NOT safe: a template may span lines, and a line inside it can look
+      // exactly like an import declaration. So template contents are BLANKED
+      // (newlines kept, so line anchors are unaffected) rather than preserved.
+      // Module specifiers are never inside a template literal in this codebase,
+      // and the parser-recovery test below would fail loudly if that ever
+      // changed. Trade-off: a specifier written as a template literal
+      // (`from `+'`x'`+``) is not collected. Stated rather than hidden.
+      out.push('`')
+      i++
+      while (i < n) {
+        const d = source[i]
+        if (d === '\\') { out.push(' ', ' '); i += 2; continue }
+        if (d === '`') { out.push('`'); i++; break }
+        out.push(d === '\n' ? '\n' : ' ')
+        i++
+      }
+      prevSignificant = 'x'
+      continue
+    }
+
+    if (c === '/' && regexCanStartHere()) {
+      out.push(' ')
+      i++
+      let inClass = false
+      while (i < n) {
+        const d = source[i]
+        if (d === '\\') { out.push(' ', ' '); i += 2; continue }
+        if (d === '[') inClass = true
+        else if (d === ']') inClass = false
+        else if (d === '/' && !inClass) { out.push(' '); i++; break }
+        else if (d === '\n') break
+        out.push(blank(d))
+        i++
+      }
+      prevSignificant = 'x'
+      continue
+    }
+
+    out.push(c)
+    if (!/\s/.test(c)) prevSignificant = c
+    i++
+  }
+
+  return out.join('')
+}
+
+/**
+ * Collect the specifier of every static ESM import declaration, in source order.
+ *
+ * Each pattern is anchored at the start of a line and bounded by `[^;'"]*?`, so a
+ * match cannot run past a semicolon or a quote into unrelated code. Two forms are
+ * recognised: `import ... from 'spec'` and the side-effect `import 'spec'`.
+ * Results are sorted by the position of the declaration so that the two passes do
+ * not reorder imports relative to the file.
+ *
+ * SUPPORTED SCOPE, stated accurately. This is a deliberately small scanner, not a
+ * JavaScript parser, and it covers exactly the shapes this codebase uses:
+ *
+ *   - static ESM `import ... from 'spec'`, including multi-line named-import
+ *     lists with comments interleaved, and the side-effect `import 'spec'`;
+ *   - line and block comments, blanked so they can neither manufacture nor hide
+ *     a declaration;
+ *   - string, template and regex literals, so a `//` or `/*` inside a literal is
+ *     not read as a comment.
+ *
+ * NOT supported, and therefore not detected: CommonJS `require()`, dynamic
+ * `import()`, and an import specifier written as a template literal. Template
+ * CONTENTS are blanked rather than preserved, because a multiline template can
+ * contain a line that is textually identical to an import declaration; the
+ * specifier of a real import is always in a quoted string, never in a template.
+ */
+function extractImportSpecifiers(source) {
+  const code = stripComments(source)
+  const found = []
+  for (const match of code.matchAll(/^[ \t]*import\b[^;'"]*?\bfrom[ \t]*(['"])([^'"\n]+)\1/gm)) {
+    found.push({ at: match.index, specifier: match[2] })
+  }
+  for (const match of code.matchAll(/^[ \t]*import[ \t]+(['"])([^'"\n]+)\1/gm)) {
+    found.push({ at: match.index, specifier: match[2] })
+  }
+  found.sort((a, b) => a.at - b.at)
+  return found.map((entry) => entry.specifier)
+}
+
+await test('[structural imports] comments cannot manufacture or hide an import declaration', () => {
+  const fixtures = [
+    {
+      note: 'a commented-out import must NOT be collected',
+      source: [
+        "// import { AvailabilityCalendar } from '../../../availability/availability.calendar.js'",
+        "import { BaseRepository } from '../../contracts/base.repository.js'",
+      ].join('\n'),
+      expect: ['../../contracts/base.repository.js'],
+    },
+    {
+      note: 'a block-commented import must NOT be collected',
+      source: [
+        '/*',
+        " * import { AvailabilityCalendar } from '../../../availability/availability.calendar.js'",
+        ' */',
+        "import { BaseRepository } from '../../contracts/base.repository.js'",
+      ].join('\n'),
+      expect: ['../../contracts/base.repository.js'],
+    },
+    {
+      note: 'an import with interleaved comments MUST still be collected',
+      source: [
+        'import {',
+        "  AvailabilityConflictError, // trailing comment",
+        '  /* inline */ AvailabilityConsumptionRecordError',
+        "} from '../../../availability/availability.errors.js'",
+      ].join('\n'),
+      expect: ['../../../availability/availability.errors.js'],
+    },
+    {
+      note: 'an import whose specifier merely contains the calendar word must be collected',
+      source: [
+        "import { AvailabilityCalendar } from '../../../availability/availability.calendar.js'",
+      ].join('\n'),
+      expect: ['../../../availability/availability.calendar.js'],
+    },
+    {
+      note: 'a side-effect import must be collected, in source order',
+      source: [
+        "import './side-effect.js'",
+        "import x from './real.js'",
+      ].join('\n'),
+      expect: ['./side-effect.js', './real.js'],
+    },
+    {
+      note: 'an import inside a MULTILINE template literal is not a declaration',
+      source: [
+        'const template = `',
+        "  import x from '../../../availability/availability.calendar.js'",
+        '  and some prose mentioning import y from "./elsewhere.js"',
+        '`',
+        "import { BaseRepository } from './base.js'",
+      ].join('\n'),
+      expect: ['./base.js'],
+    },
+    {
+      note: 'a template literal using real substitution is not a declaration',
+      source: [
+        'const t = `path is ${base} and ends here`',
+        "import { BaseRepository } from './base.js'",
+      ].join('\n'),
+      expect: ['./base.js'],
+    },
+    {
+      note: 'a quoted "import" inside a string is not a declaration',
+      source: [
+        "const doc = 'import { AvailabilityCalendar } from \'./availability.calendar.js\''",
+        "import { BaseRepository } from './base.js'",
+      ].join('\n'),
+      expect: ['./base.js'],
+    },
+    {
+      note: 'a regex containing a slash and a comment-like run is not a comment',
+      source: [
+        'const re = /[/]\\/*a*b*/',
+        "import { BaseRepository } from './base.js'",
+      ].join('\n'),
+      expect: ['./base.js'],
+    },
+  ]
+
+  for (const fixture of fixtures) {
+    assertDeepEqual(
+      extractImportSpecifiers(fixture.source),
+      fixture.expect,
+      fixture.note
+    )
+  }
+})
+
+await test('[structural imports] the parser recovers the repository\'s real imports', () => {
+  // Guards the negative assertion below from passing vacuously: if the parser
+  // broke and returned nothing, "no calendar import" would be trivially true.
+  const specifiers = extractImportSpecifiers(repositorySource)
+  assert(specifiers.length >= 4, `expected at least 4 import declarations, found ${specifiers.length}`)
+  for (const expected of [
+    '../../contracts/base.repository.js',
+    '../../../../database/connection/postgres.connection.js',
+    '../../../availability/availability.errors.js',
+    '../../errors/repository.errors.js',
+  ]) {
+    assert(specifiers.includes(expected), `must recover the real import of ${expected}`)
+  }
+})
+
+await test('[structural imports] the repository no longer imports the shared availability calendar', () => {
+  const specifiers = extractImportSpecifiers(repositorySource)
+  const calendarImports = specifiers.filter((specifier) =>
+    new URL(specifier, REPOSITORY_PATH).pathname.endsWith('/availability/availability.calendar.js')
   )
-  assert(
-    repositorySource.includes('#legacyExpandDateRange'),
-    'the legacy branch must be explicitly named'
+  assertDeepEqual(
+    calendarImports,
+    [],
+    `the legacy path owns its own arithmetic and must not import the calendar, found: ${calendarImports.join(', ')}`
   )
 })
 

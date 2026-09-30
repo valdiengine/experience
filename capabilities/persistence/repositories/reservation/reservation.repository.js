@@ -1,6 +1,5 @@
 import { BaseRepository } from '../../contracts/base.repository.js'
 import { query, transaction } from '../../../../database/connection/postgres.connection.js'
-import { AvailabilityCalendar } from '../../../availability/availability.calendar.js'
 import { AvailabilityConflictError, AvailabilityConsumptionRecordError } from '../../../availability/availability.errors.js'
 import { RepositoryConfigurationError, RepositoryValidationError } from '../../errors/repository.errors.js'
 
@@ -42,6 +41,26 @@ export class ReservationRepository extends BaseRepository {
   /**
    * Expand date range from temporal.startDate (check-in, inclusive) to
    * temporal.endDate (check-out, exclusive).
+   *
+   * ISOLATED LEGACY ARITHMETIC — BOOKING-CALENDAR-UTC-1.
+   *
+   * This method intentionally preserves its pre-BOOKING-CALENDAR-UTC-1 behaviour,
+   * including the local-time checkout adjustment above and the local-time
+   * iteration below, and it no longer calls AvailabilityCalendar.expandRange.
+   * That dependency was removed deliberately. The shared calendar was corrected
+   * to use UTC arithmetic, and because this method delegated to it, correcting
+   * the calendar silently changed the output of this historical path.
+   *
+   * The original expandRange body is reproduced verbatim in
+   * #legacyLocalExpandRange for that reason alone. This is a compatibility
+   * freeze, NOT a claim that the arithmetic is correct, and NOT evidence that
+   * releasing historical reservations is safe or approved for deployment. The
+   * local-time iteration remains timezone-dependent and remains subject to the
+   * historical-release deployment gate in
+   * docs/ai/BOOKING_OCCUPIED_NIGHTS_1B_IMPLEMENTATION_REPORT.md. Resolving that
+   * gate needs a release-policy decision that is explicitly pending, and it may
+   * not be resolved by "improving" the arithmetic here.
+   *
    * @param {object} temporal - { mode, startDate, endDate }
    * @returns {string[]} Array of date strings 'YYYY-MM-DD'
    */
@@ -49,10 +68,31 @@ export class ReservationRepository extends BaseRepository {
     if (!temporal?.startDate || !temporal?.endDate) return []
     const endDate = new Date(temporal.endDate)
     endDate.setDate(endDate.getDate() - 1)
-    return AvailabilityCalendar.expandRange(
+    return this.#legacyLocalExpandRange(
       temporal.startDate,
       endDate.toISOString().split('T')[0]
     )
+  }
+
+  /**
+   * Verbatim copy of AvailabilityCalendar.expandRange as it stood before
+   * BOOKING-CALENDAR-UTC-1, kept private to this repository so the historical
+   * path can no longer drift when the shared calendar changes.
+   *
+   * Do not reuse it for anything new. Do not route versioned occupied-night
+   * records through it: a recorded line is validated and released by
+   * #validateConsumptionRecord, not by this arithmetic. Do not treat its output
+   * as correct.
+   */
+  #legacyLocalExpandRange(startDate, endDate) {
+    const dates = []
+    const current = new Date(startDate)
+    const end = new Date(endDate)
+    while (current <= end) {
+      dates.push(current.toISOString().split('T')[0])
+      current.setDate(current.getDate() + 1)
+    }
+    return dates
   }
 
   /**
@@ -71,6 +111,11 @@ export class ReservationRepository extends BaseRepository {
    *
    * Do not deduplicate, normalise or otherwise "improve" its output: any change
    * here alters existing behaviour rather than preserving it.
+   *
+   * As of BOOKING-CALENDAR-UTC-1 this branch no longer depends on
+   * AvailabilityCalendar. It calls the private #legacyLocalExpandRange, so a
+   * future change to the shared calendar can no longer move this output. That
+   * isolation is the whole point; the arithmetic is still the historical one.
    */
   #legacyExpandDateRange(temporal) {
     return this.#expandDateRange(temporal)

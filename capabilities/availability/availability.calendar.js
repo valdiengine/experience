@@ -1,11 +1,44 @@
 export class AvailabilityCalendar {
+  /**
+   * Expand an INCLUSIVE [startDate, endDate] civil date range.
+   *
+   * Both endpoints are inclusive, so a same-day range returns exactly that one
+   * day. The result is an ascending array of `YYYY-MM-DD` strings, and neither
+   * argument is mutated.
+   *
+   * The arithmetic is UTC-only, and that is the whole point. A `YYYY-MM-DD`
+   * string is parsed by `new Date()` as UTC midnight, and `toISOString()`
+   * formats in UTC, so the loop has to step in UTC too. Stepping with the
+   * local-time `getDate()`/`setDate()` pair mixed a local civil day into a UTC
+   * sequence: a local day is not always 24 hours, so across an offset
+   * transition the step landed on a UTC instant that was either 23 hours or 25
+   * hours later. A 23-hour step made `toISOString()` repeat a date that had
+   * already been emitted, and a 25-hour step pushed the instant past `end`
+   * (itself a UTC midnight) so the final inclusive day was silently dropped.
+   * The old result therefore depended on the process timezone, and disagreed
+   * with itself across zones for the same input.
+   *
+   * This is inclusive calendar arithmetic. It is deliberately a DIFFERENT
+   * contract from checkout-exclusive occupied-night derivation, which is
+   * reached through the availability capability and is not reused here. Nothing
+   * in this method is coupled to occupied-night limits or to reservation
+   * consumption.
+   *
+   * Unchanged behaviour, deliberately preserved: a reversed range and an
+   * unparseable bound both yield an empty array, exactly as before.
+   *
+   * See docs/ai/BOOKING_CALENDAR_UTC_1_REPORT.md.
+   */
   static expandRange(startDate, endDate) {
     const dates = []
     const current = new Date(startDate)
     const end = new Date(endDate)
-    while (current <= end) {
+
+    if (Number.isNaN(current.getTime()) || Number.isNaN(end.getTime())) return dates
+
+    while (current.getTime() <= end.getTime()) {
       dates.push(current.toISOString().split('T')[0])
-      current.setDate(current.getDate() + 1)
+      current.setUTCDate(current.getUTCDate() + 1)
     }
     return dates
   }
