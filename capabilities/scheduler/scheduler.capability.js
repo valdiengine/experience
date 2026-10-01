@@ -124,7 +124,41 @@ export class SchedulerCapability extends BaseCapability {
   }
 
   async cancel(jobId) {
-    return this.#executor?.cancel(jobId) || { success: false }
+    // BOOKING-EXPIRATION-TIMERS-1. Cancelling used to reach only the executor,
+    // which knows nothing about the job collection: it cleared in-flight state
+    // and returned `{ success: true }` while the stored job stayed `pending` and
+    // a later tick still ran it. The stored job is now cancelled too, so a
+    // "cancelled" cancellation is one the scheduler agrees with.
+    const stored = this.#manager?.cancel?.(jobId)
+    const execution = this.#executor?.cancel(jobId) || { success: false }
+
+    if (stored?.success === true) return stored
+    return execution
+  }
+
+  /**
+   * Register a handler for a job name. The last registration wins, so a name
+   * must identify exactly one owner — a shared fixed name lets a second
+   * registration silently replace the first.
+   * @param {string} name - Handler name
+   * @param {function} fn - Handler function
+   */
+  registerHandler(name, fn) {
+    this.#executor?.registerHandler(name, fn)
+    this.#manager?.registerHandler(name, fn)
+  }
+
+  /**
+   * Remove a handler registration from both registries, so a job left over from a
+   * destroyed capability resolves as "handler not found" instead of running
+   * against a detached instance.
+   * @param {string} name - Handler name
+   * @returns {{ success: boolean }}
+   */
+  unregisterHandler(name) {
+    this.#executor?.unregisterHandler(name)
+    this.#manager?.unregisterHandler(name)
+    return { success: true }
   }
 
   async run(jobId) {
@@ -150,14 +184,14 @@ export class SchedulerCapability extends BaseCapability {
     return this.#manager?.remove(jobId) || { success: false }
   }
 
-  registerHandler(name, fn) {
-    this.#executor?.registerHandler(name, fn)
-    this.#manager?.registerHandler(name, fn)
-  }
-
   runCleanup() {
     const result = this.#cleanupManager?.runAll() || { totalCleaned: 0 }
-    this.#context?.eventBus?.emit(SCHEDULER_EVENTS.CLEANUP_COMPLETED, result)
+    // Pre-existing defect found while wiring BOOKING-EXPIRATION-TIMERS-1: this
+    // referenced `this.#context`, a private field that only `BaseCapability`
+    // declares. It is a SyntaxError at module compile time, which made
+    // `capabilities/core/register.js` — and therefore the whole capability
+    // registry — unloadable. The public `context` getter is the intended accessor.
+    this.context?.eventBus?.emit(SCHEDULER_EVENTS.CLEANUP_COMPLETED, result)
     return result
   }
 

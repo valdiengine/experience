@@ -53,6 +53,7 @@ import { validateDateRange, validateStatusTransition, checkAvailability, checkRe
 export class ReservationManager {
   #context = null
   #reservations = new Map()
+  #timer = null
 
 constructor(context) {
     this.#context = context
@@ -60,6 +61,92 @@ constructor(context) {
 
   get #repo() {
     return this.#context?.repositories?.reservation || null
+  }
+
+  /**
+   * Attach the automatic-expiration timer.
+   *
+   * BOOKING-EXPIRATION-TIMERS-1. The wiring lives here, in the manager, rather
+   * than in the capability wrappers, because production does not go through
+   * those wrappers: the business manager and the service layer forward straight
+   * to this manager (with an identity), while the owner/admin paths reach the
+   * capability wrappers (without one). Centralising it here is what makes timer
+   * arming identical for every real entry path.
+   *
+   * @param {object|null} timer - ReservationTimer
+   * @returns {ReservationManager}
+   */
+  attachTimer(timer) {
+    this.#timer = timer || null
+    return this
+  }
+
+  get timer() {
+    return this.#timer
+  }
+
+  /**
+   * Bring the timers in line with a state the manager has just persisted.
+   *
+   * Never throws: a timer problem must not turn a completed state change into a
+   * reported failure, nor fake one. The outcome is returned so callers can
+   * report timer scheduling separately from the persistence result.
+   *
+   * @private
+   */
+  async #syncTimers(reservationId, current, options = {}) {
+    const timer = this.#timer
+    if (!timer || typeof timer.syncReservationState !== 'function') {
+      return { status: 'not_configured' }
+    }
+    try {
+      return await timer.syncReservationState(reservationId, current, options)
+    } catch (error) {
+      console.error(
+        `[ReservationManager] Timer synchronization failed for ${reservationId}:`,
+        error?.message || error
+      )
+      return { status: 'failed', reason: 'timer_threw', error: error?.message || String(error) }
+    }
+  }
+
+  /**
+   * Attach the timer outcome to a lifecycle result without implying that the
+   * state change itself failed.
+   * @private
+   */
+  #withTimer(result, timer) {
+    return timer && result ? { ...result, timer } : result
+  }
+
+  /**
+   * Validate the calling timer's live ownership immediately before a write.
+   *
+   * Returns `null` when the attempt may proceed (including when no ownership was
+   * supplied, which is the case for every non-timer caller), and a refusal
+   * otherwise. A refusal performs no write, no release, no event and no
+   * notification.
+   * @private
+   */
+  #validateTimerOwnership(ownership, reservationId, expectedStatus) {
+    if (!ownership) return null
+
+    if (
+      ownership.reservationId !== reservationId ||
+      ownership.expectedStatus !== expectedStatus ||
+      typeof ownership.isCurrent !== 'function' ||
+      !ownership.isCurrent()
+    ) {
+      return {
+        success: false,
+        reason: 'timer_invalidated',
+        errors: [
+          `Reservation ${reservationId} expiration attempt lost its timer before the write`,
+        ],
+      }
+    }
+
+    return null
   }
 
   get #auth() {
@@ -190,13 +277,24 @@ constructor(context) {
       await this.#persist(reservation, true)
     }
 
+    // BOOKING-EXPIRATION-TIMERS-1 (review, group 3). Timers are reconciled directly
+    // after the confirmed persistence/cache mutation and BEFORE the CREATED emit,
+    // which can throw. A committed `requested` reservation must never be left with
+    // no deadline because a subscriber failed. The `requested` deadline is
+    // anchored to `createdAt`, the timestamp of that successful state entry. The
+    // timer outcome is reported separately from `success`: a reservation that could
+    // not be scheduled for expiration is still created, and says so.
+    const timer = await this.#syncTimers(reservation.id, reservation, {
+      onStateChange: true,
+      anchor: reservation.createdAt,
+    })
     this.#emit(RESERVATION_EVENTS.CREATED, { reservation })
 
-    return {
+    return this.#withTimer({
       success: true,
       reservationId: reservation.id,
       status: reservation.status,
-    }
+    }, timer)
   }
 
   /**
@@ -243,6 +341,17 @@ constructor(context) {
     const updated = ReservationWorkflow.transition(reservation, RESERVATION_STATUS.OWNER_PENDING)
     await this.#persist(updated)
 
+    // BOOKING-EXPIRATION-TIMERS-1 (review, group 3). The timers are reconciled
+    // here, immediately after the confirmed write and BEFORE the communication
+    // call and the event emit below, both of which can throw. Syncing after them
+    // meant a committed `owner_pending` reservation could be left with no timer at
+    // all whenever a subscriber or the notification transport failed — the write
+    // stood, the deadline did not. The error still propagates unchanged.
+    const timer = await this.#syncTimers(reservationId, updated, {
+      onStateChange: true,
+      anchor: updated.updatedAt,
+    })
+
     const communication = this.#context?.capabilities?.get?.('communication')
     if (communication) {
       const channel = reservation.customer.channelPreference || 'whatsapp'
@@ -255,7 +364,7 @@ constructor(context) {
 
     this.#emit(RESERVATION_EVENTS.OWNER_REQUESTED, { reservationId, reservation: updated })
 
-    return { success: true }
+    return this.#withTimer({ success: true }, timer)
   }
 
   /**
@@ -273,6 +382,17 @@ constructor(context) {
 
     let updated = ReservationWorkflow.transition(reservation, RESERVATION_STATUS.OWNER_CONFIRMED)
     await this.#persist(updated)
+
+    // BOOKING-EXPIRATION-TIMERS-1 (review, group 3). Synced immediately after the
+    // write, not after the availability update, the notification and the emit
+    // below, every one of which can throw. `owner_confirmed` has no approved
+    // automatic expiration, so the `owner_pending` timer is dropped here: a
+    // reservation left in `owner_confirmed` by a failing side effect must not keep
+    // an `owner_pending` deadline armed.
+    await this.#syncTimers(reservationId, updated, {
+      onStateChange: true,
+      anchor: updated.updatedAt,
+    })
     this.#emit(RESERVATION_EVENTS.OWNER_CONFIRMED, { reservationId, reservation: updated })
 
     const availability = this.#context?.capabilities?.get?.('availability')
@@ -296,9 +416,18 @@ constructor(context) {
 
     updated = ReservationWorkflow.transition(updated, RESERVATION_STATUS.PAYMENT_PENDING)
     await this.#persist(updated)
+
+    // The 6h `payment_pending` deadline is anchored to this transition's
+    // `updatedAt`, not to the moment the timer was armed, and it is armed here —
+    // before the emit, which can throw — so a committed `payment_pending`
+    // reservation is never left without its deadline.
+    const timer = await this.#syncTimers(reservationId, updated, {
+      onStateChange: true,
+      anchor: updated.updatedAt,
+    })
     this.#emit(RESERVATION_EVENTS.PAYMENT_PENDING, { reservationId, reservation: updated })
 
-    return { success: true }
+    return this.#withTimer({ success: true }, timer)
   }
 
   /**
@@ -319,6 +448,14 @@ constructor(context) {
     updated.notes = reason ? `${updated.notes}\nRechazada: ${reason}` : updated.notes
     await this.#persist(updated)
 
+    // Synced right after the confirmed write and before the fallible side effects
+    // below, so a committed rejection cannot leave an armed deadline behind when a
+    // subscriber or the notification transport throws.
+    const timer = await this.#syncTimers(reservationId, updated, {
+      onStateChange: true,
+      anchor: updated.updatedAt,
+    })
+
     const notifications = this.#context?.capabilities?.get?.('notifications')
     if (notifications) {
       await notifications.send({
@@ -330,7 +467,7 @@ constructor(context) {
 
     this.#emit(RESERVATION_EVENTS.REJECTED, { reservationId, reservation: updated, reason })
 
-    return { success: true }
+    return this.#withTimer({ success: true }, timer)
   }
 
   /**
@@ -390,6 +527,15 @@ constructor(context) {
       await this.#persist(updated)
     }
 
+    // Stopping without naming a state covers `requested` too, which the
+    // capability wrapper used to omit. Synced right after the confirmed write and
+    // before the notification and the emit below, so a cancelled reservation is
+    // never left with a live deadline when a side effect throws.
+    const timer = await this.#syncTimers(reservationId, updated, {
+      onStateChange: true,
+      anchor: updated.updatedAt,
+    })
+
     const notifications = this.#context?.capabilities?.get?.('notifications')
     if (notifications) {
       await notifications.send({
@@ -401,7 +547,7 @@ constructor(context) {
 
     this.#emit(RESERVATION_EVENTS.CANCELLED, { reservationId, reservation: updated, reason })
 
-    return { success: true }
+    return this.#withTimer({ success: true }, timer)
   }
 
   /**
@@ -438,15 +584,58 @@ constructor(context) {
    * a missing method, a null result or a rejection produces no success, no terminal
    * cache entry, no success event and no notification.
    *
-   * @param {string} reservationId
- * @param {object|null} identity
- * @returns {{ success: boolean, status?: string, errors?: string[] }}
- */
+* @param {string} reservationId
+  * @param {object|null} identity
+  * @returns {{ success: boolean, status?: string, errors?: string[] }}
+  */
   async expireReservation(reservationId, identity) {
+    return this.#expireInternal(reservationId, { identity })
+  }
+
+  /**
+   * Expire a reservation from a scheduled timer.
+   *
+   * BOOKING-EXPIRATION-TIMERS-1. A timer carries the state it was armed for, and
+   * that expectation is checked HERE, against the reservation this call actually
+   * loads — not by a pre-read in the timer followed by an unconstrained expire.
+   * The validated state is then carried into the repository compare-and-set, so a
+   * reservation that moved on after the timer fired cannot be expired by it.
+   *
+   * This is the same single atomic path as `expireReservation`: same target
+   * selection, same status+release operation, same event and notification. There
+   * is no second expiration writer.
+   *
+   * @param {string} reservationId
+   * @param {string} expectedStatus - The state the timer was armed for
+   * @returns {{ success: boolean, status?: string, reason?: string, errors?: string[] }}
+   */
+async expireReservationFromTimer(reservationId, expectedStatus, options = {}) {
+    return this.#expireInternal(reservationId, {
+      expectedStatus,
+      ownership: options?.ownership || null,
+    })
+  }
+
+  /**
+   * @private
+   */
+  async #expireInternal(reservationId, { identity, expectedStatus, ownership = null } = {}) {
     await this.#checkPermission(identity, RESERVATION_PERMISSIONS.CANCEL)
     const reservation = await this.#loadReservation(reservationId)
     if (!reservation) {
-      return { success: false, errors: ['Reservation not found'] }
+      return { success: false, reason: 'not_found', errors: ['Reservation not found'] }
+    }
+
+    if (expectedStatus !== undefined && reservation.status !== expectedStatus) {
+      // The reservation is not in the state this timer was armed for. No target,
+      // no write, no release and no event.
+      return {
+        success: false,
+        reason: 'stale_state',
+        errors: [
+          `Reservation ${reservationId} is ${reservation.status}, not the expected ${expectedStatus}`,
+        ],
+      }
     }
 
     // The target is derived from the state the reservation is actually in, so
@@ -462,9 +651,25 @@ constructor(context) {
       ReservationWorkflow.transition(reservation, RESERVATION_STATUS.EXPIRED)
       return {
         success: false,
+        reason: 'not_expirable',
         errors: [`Reservation ${reservationId} cannot be expired from status ${reservation.status}`],
       }
     }
+
+    // BOOKING-EXPIRATION-TIMERS-1 (review, group 2). The ownership check that used
+    // to live in the timer, as a pre-read before this call, has moved to here —
+    // after this method's own asynchronous work and immediately before the atomic
+    // write. A timer that was stopped, destroyed or replaced by a newer timer for
+    // the SAME status while this call was loading cannot submit the write: without
+    // this, `expectedStatus` alone cannot distinguish two attempts for one state.
+    //
+    // The boundary is deliberate and narrow: this prevents an obsolete attempt
+    // from STARTING a write in this process. It cannot recall a write already
+    // submitted or committed, it is not a distributed cancellation, not a durable
+    // generation, and not a database-level generation check. Establishing that
+    // would need a repository/schema contract change, which is out of this slice.
+    const invalidation = this.#validateTimerOwnership(ownership, reservationId, expectedStatus)
+    if (invalidation) return invalidation
 
     const updated = ReservationWorkflow.transition(reservation, targetStatus)
 
@@ -487,9 +692,11 @@ constructor(context) {
       // cached value stays the domain object `updated`, so the cache read path is
       // never fed a wrapper. The source status is passed as the repository's
       // precondition, so a reservation that moved on between this read and the
-      // write cannot be expired by this call.
+      // write cannot be expired by this call. For a scheduled expiration the
+      // precondition is the state the timer was armed for, so the guarantee is
+      // made about the timer's expectation as well as the local read.
       const persisted = await this.#repo.expireReservationWithRelease(updated, reservation.tenantId, {
-        expectedStatus: reservation.status,
+        expectedStatus: expectedStatus ?? reservation.status,
       })
       if (!persisted) {
         throw new Error(
@@ -506,24 +713,76 @@ constructor(context) {
       await this.#persist(updated)
     }
 
-    // Emitted only after persistence succeeded. #emit is synchronous and
-    // subscriber-error behaviour is unchanged: a subscriber that throws still
-    // propagates after the write is committed.
+    // BOOKING-EXPIRATION-TIMERS-1 (review, group 3 + post-commit classification).
+    // Everything below this line is POST-COMMIT: the atomic transition AND the
+    // capacity release have already succeeded, and the committed terminal state is
+    // authoritative from here on.
+    //
+    // The timers are reconciled FIRST, still before the notification and the emit,
+    // so a committed terminal reservation is never left with a live timer or a
+    // queued job because a subscriber or a transport threw. Capacity release is
+    // not repeated by retrying anything here, and a post-commit failure is
+    // reported as exactly that — `post_commit`, non-retryable — instead of being
+    // allowed to escape as an exception that the timer would have to classify as a
+    // manager/release failure and retry.
+    const timer = await this.#syncTimers(reservationId, updated, {
+      onStateChange: true,
+      anchor: updated.updatedAt,
+    })
+
+    const postCommit = await this.#afterCommit(reservationId, targetStatus, updated, reservation)
+
+    return this.#withTimer(
+      { success: true, status: targetStatus, postCommit },
+      timer
+    )
+  }
+
+  /**
+   * The fallible work that happens after an expiration is already committed.
+   *
+   * Returns a descriptor rather than throwing. The transition and the release are
+   * done and are not undone: the only honest thing to report is that the
+   * COMMITTED state stands and that a post-commit step failed. The original error
+   * is carried through unchanged and stays observable to the caller — nothing is
+   * swallowed — but it can no longer be mistaken for a failed atomic transition or
+   * for a release that still needs retrying.
+   *
+   * @returns {Promise<{ status: string, phase?: string, error?: Error }>}
+   * @private
+   */
+  async #afterCommit(reservationId, targetStatus, updated, previous) {
     const successEvent = EXPIRATION_SUCCESS_EVENTS[targetStatus]
 
-    const notifications = this.#context?.capabilities?.get?.('notifications')
-    if (notifications) {
-      const body = EXPIRATION_NOTIFICATION_BODIES[targetStatus]
-      await notifications.send({
-        channel: reservation.customer.channelPreference || 'email',
-        recipient: reservation.customer.email || reservation.customer.phone,
-        body: typeof body === 'function' ? body(reservation) : body,
+    try {
+      const notifications = this.#context?.capabilities?.get?.('notifications')
+      if (notifications) {
+        const body = EXPIRATION_NOTIFICATION_BODIES[targetStatus]
+        await notifications.send({
+          channel: previous.customer.channelPreference || 'email',
+          recipient: previous.customer.email || previous.customer.phone,
+          body: typeof body === 'function' ? body(previous) : body,
+        })
+      }
+
+      this.#emit(successEvent, {
+        reservationId,
+        reservation: updated,
+        fromStatus: previous.status,
+        toStatus: targetStatus,
       })
+
+      return { status: 'completed' }
+    } catch (error) {
+      return {
+        status: 'failed',
+        phase: 'post_commit',
+        // Non-retryable by construction: the transition and the release are
+        // committed, so there is nothing here to retry.
+        retryable: false,
+        error,
+      }
     }
-
-    this.#emit(successEvent, { reservationId, reservation: updated, fromStatus: reservation.status, toStatus: targetStatus })
-
-    return { success: true, status: targetStatus }
   }
 
   /**
@@ -543,9 +802,17 @@ constructor(context) {
     updated.completedAt = new Date().toISOString()
     await this.#persist(updated)
 
+    // BOOKING-EXPIRATION-TIMERS-1 (review, group 3). `completed` has no approved
+    // automatic expiration, so any timer still armed for the previous state is
+    // dropped here — immediately after the confirmed write and before the emit,
+    // which can throw — rather than left to fire against a terminal reservation.
+    const timer = await this.#syncTimers(reservationId, updated, {
+      onStateChange: true,
+      anchor: updated.updatedAt,
+    })
     this.#emit(RESERVATION_EVENTS.COMPLETED, { reservationId, reservation: updated })
 
-    return { success: true }
+    return this.#withTimer({ success: true }, timer)
   }
 
   /**
@@ -571,8 +838,23 @@ constructor(context) {
 
     const updated = { ...reservation, ...patch, updatedAt: new Date().toISOString() }
     await this.#persist(updated)
+    // Synced before the emit, which can throw: a raw patch that moves the
+    // reservation between states must still reconcile its timers, or whatever was
+    // armed for the previous state would stay armed and later try to expire a
+    // reservation that has moved on. `patch.status` is carried through above, so
+    // this arming is anchored to this patch's own `updatedAt`, exactly as an
+    // approved transition's is. A patch that does not touch `status` leaves the
+    // deadline untouched, because nothing about the state entry changed.
+    let timer
+    if (patch.status && patch.status !== reservation.status) {
+      timer = await this.#syncTimers(id, updated, {
+        onStateChange: true,
+        anchor: updated.updatedAt,
+      })
+    }
     this.#emit(RESERVATION_EVENTS.UPDATED, { reservationId: id, reservation: updated, changes: data })
-    return { success: true, data: updated }
+
+    return this.#withTimer({ success: true, data: updated }, timer)
   }
 
   /**
@@ -589,6 +871,10 @@ constructor(context) {
     const updated = ReservationWorkflow.transition(reservation, RESERVATION_STATUS.CHECKED_IN)
     updated.checkedInAt = new Date().toISOString()
     await this.#persist(updated)
+    // Synced before the emit, which can throw: a committed `checked_in` reservation
+    // must not keep the previous state's deadline armed. `checked_in` has no
+    // approved automatic expiration, so the sync is what drops it.
+    await this.#syncTimers(reservationId, updated, { onStateChange: true, anchor: updated.updatedAt })
     this.#emit(RESERVATION_EVENTS.CHECKED_IN, { reservationId, reservation: updated })
     return { success: true }
   }
@@ -607,6 +893,7 @@ constructor(context) {
     const updated = ReservationWorkflow.transition(reservation, RESERVATION_STATUS.CHECKED_OUT)
     updated.checkedOutAt = new Date().toISOString()
     await this.#persist(updated)
+    await this.#syncTimers(reservationId, updated, { onStateChange: true, anchor: updated.updatedAt })
     this.#emit(RESERVATION_EVENTS.CHECKED_OUT, { reservationId, reservation: updated })
     return { success: true }
   }
@@ -624,6 +911,7 @@ constructor(context) {
 
     const updated = ReservationWorkflow.transition(reservation, RESERVATION_STATUS.NO_SHOW)
     await this.#persist(updated)
+    await this.#syncTimers(reservationId, updated, { onStateChange: true, anchor: updated.updatedAt })
     this.#emit(RESERVATION_EVENTS.NO_SHOW, { reservationId, reservation: updated })
     return { success: true }
   }
@@ -643,6 +931,9 @@ constructor(context) {
     updated.previousStatus = reservation.status
     updated.archivedAt = new Date().toISOString()
     await this.#persist(updated)
+    // Synced before the emit, which can throw: an archived reservation must never
+    // be left with a live deadline when a subscriber fails.
+    await this.#syncTimers(reservationId, updated, { onStateChange: true, anchor: updated.updatedAt })
     this.#emit(RESERVATION_EVENTS.ARCHIVED, { reservationId, reservation: updated })
     return { success: true }
   }
@@ -669,8 +960,19 @@ constructor(context) {
       updatedAt: new Date().toISOString(),
     }
     await this.#persist(restored)
+
+    // BOOKING-EXPIRATION-TIMERS-1 (review, group 3). Synced immediately after the
+    // confirmed write and before the emit, which can throw. The timer outcome is
+    // returned rather than discarded, so a caller of `restoreReservation` can see
+    // whether the restored state actually got a deadline instead of a bare
+    // `{ success: true }`.
+    const timer = await this.#syncTimers(reservationId, restored, {
+      onStateChange: true,
+      anchor: restored.updatedAt,
+    })
     this.#emit(RESERVATION_EVENTS.RESTORED, { reservationId, reservation: restored })
-    return { success: true, data: restored }
+
+    return this.#withTimer({ success: true, data: restored }, timer)
   }
 
   /**
@@ -685,7 +987,15 @@ constructor(context) {
     if (!reservation) return { success: false, errors: ['Reservation not found'] }
 
     if (this.#repo) {
-      await this.#repo.delete({ id: reservationId })
+      const deleted = await this.#repo.delete({ id: reservationId })
+      if (!deleted) {
+        // A falsy result means the row was not removed. Throwing here is what
+        // keeps the timer ownership honest below: nothing is dropped for a
+        // reservation that is still there.
+        throw new Error(
+          `Reservation ${reservationId} deletion did not persist: repository returned no row`
+        )
+      }
     }
     this.#reservations.delete(reservationId)
     if (this.#context?.dataManager) {
@@ -696,6 +1006,14 @@ constructor(context) {
         this.#context.dataManager.set('reservations', reservations)
       }
     }
+
+    // BOOKING-EXPIRATION-TIMERS-1 (review, group 3). The timers are dropped
+    // directly after the confirmed deletion/cache mutation and BEFORE the emit,
+    // which can throw: a deleted reservation must never keep an armed timer or a
+    // queued job that could later try to expire an id that no longer exists. The
+    // original subscriber error still propagates unchanged, and there is nothing
+    // to roll back.
+    await this.#syncTimers(reservationId, null)
     this.#emit(RESERVATION_EVENTS.UPDATED, { reservationId, action: 'deleted' })
     return { success: true }
   }

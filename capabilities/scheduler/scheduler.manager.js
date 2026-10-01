@@ -118,8 +118,22 @@ export class SchedulerManager {
 
     try {
       const handler = this.#handlers.get(job.handler)
-      if (handler) {
-        await handler(job.payload)
+      const outcome = handler ? await handler(job.payload) : null
+
+      // BOOKING-EXPIRATION-TIMERS-1 (review, group 4). A handler that resolves
+      // with `{ requeue: true }` is reporting that this delivery was premature and
+      // did no work. The job returns to PENDING at its ORIGINAL runAt — rebuilt
+      // from `job`, not from the running copy — so the scheduled execution for
+      // that deadline is preserved rather than consumed by this early run. Without
+      // this, an early tick marked the job completed and the expiration deadline
+      // then had no delivery at all.
+      if (outcome && outcome.requeue === true) {
+        const requeued = JobBuilder.markRequeued(job)
+        this.#jobs.set(jobId, requeued)
+        this.#persist(requeued)
+        this.#emit(SCHEDULER_EVENTS.JOB_REQUEUED, { jobId, handler: job.handler })
+
+        return { success: true, result: { status: 'requeued', runAt: requeued.runAt } }
       }
 
       const completed = JobBuilder.markCompleted(job)
@@ -129,7 +143,11 @@ export class SchedulerManager {
 
       return { success: true }
     } catch (error) {
-      const failed = JobBuilder.markFailed(job)
+      // A handler that declares its failure non-retryable is failed for good, not
+      // returned to `pending`. A failure that happened after the work was already
+      // committed must not be re-run by the generic retry counter: that would
+      // repeat committed work, not fix anything.
+      const failed = JobBuilder.markFailed(job, { permanent: error?.retryable === false })
       this.#jobs.set(jobId, failed)
       this.#persist(failed)
       this.#emit(SCHEDULER_EVENTS.JOB_FAILED, { jobId, error: error.message })
@@ -178,6 +196,17 @@ export class SchedulerManager {
    */
   registerHandler(name, fn) {
     this.#handlers.set(name, fn)
+  }
+
+  /**
+   * Remove a handler registration. `run()` skips a job whose handler is gone
+   * rather than failing it, so unregistering only affects jobs that are still
+   * pending at the moment of removal.
+   * @param {string} name - Handler name
+   * @returns {boolean} - whether a registration was removed
+   */
+  unregisterHandler(name) {
+    return this.#handlers.delete(name)
   }
 
   /**

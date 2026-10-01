@@ -13,7 +13,6 @@ import { ReservationTimer } from './reservation.timer.js'
 import { ReservationRecovery } from './reservation.recovery.js'
 import { ReservationFlow } from './reservation.flow.js'
 import { RESERVATION_EVENTS } from './reservation.events.js'
-import { RESERVATION_STATUS } from './reservation.status.js'
 import { ReservationSearch } from './reservation.search.js'
 
 export class ReservationCapability extends BaseCapability {
@@ -25,13 +24,20 @@ export class ReservationCapability extends BaseCapability {
   #manager = null
   #service = null
   #timer = null
+  #timerActivation = null
   #recovery = null
 
   async init(context, config = {}) {
     await super.init(context, config)
     this.#manager = new ReservationManager(context)
     this.#service = new ReservationService(this.#manager)
-    this.#timer = new ReservationTimer(context)
+    // BOOKING-EXPIRATION-TIMERS-1. The timer is handed the manager so it can (a)
+    // route expiration through the single atomic manager path and (b) attach
+    // itself to the manager, which is where lifecycle timer wiring lives. Wiring
+    // it in the wrappers below instead would have missed every production caller
+    // that goes straight to the manager or the service (the business manager and
+    // the HTTP routes do).
+    this.#timer = new ReservationTimer(context, { manager: this.#manager })
     this.#recovery = new ReservationRecovery(context)
     if (typeof this.#manager.hydrate === 'function') {
       const tenantId = context?.tenant?.id
@@ -55,15 +61,45 @@ export class ReservationCapability extends BaseCapability {
     // This is the directly affected consumer being wired; no event-delivery
     // framework is introduced and the existing EXPIRED path is unchanged.
     this.on(RESERVATION_EVENTS.NO_RESPONSE, this.#onReservationNoResponse.bind(this))
+    // BOOKING-EXPIRATION-TIMERS-1. The `reservationExpiration` handler is
+    // registered BEFORE anything can schedule it; previously the name was only
+    // ever enqueued, so a due job could not run.
+    //
+    // The outcome is kept and exposed on `timerActivation` instead of being
+    // discarded: an activation without a scheduler used to report success while no
+    // expiration handler existed, leaving every armed deadline unrunnable and the
+    // failure invisible.
+    //
+    // It is REPORTED, not thrown. Without a scheduler, automatic expiration is
+    // off and says so; every other reservation duty still works, and failing the
+    // whole capability over one absent dependency would take the search-index,
+    // event and manager behaviour down with it. `already_active` is a legitimate
+    // outcome and is not a failure.
+    this.#timerActivation = (await this.#timer?.activate()) ?? null
     await super.activate()
   }
 
+  /**
+   * The timer registration outcome from the last `activate()`: `{ status, handler, error }`.
+   * A `failed` status means automatic expiration is not running in this process.
+   * @returns {{ status: string, handler?: string, error?: string }|null}
+   */
+  get timerActivation() {
+    return this.#timerActivation
+  }
+
   async deactivate() {
+    // Stops this instance's timers and cancels their queued jobs before the
+    // capability goes away. Does not touch another instance's jobs.
+    await this.#timer?.deactivate()
     await super.deactivate()
   }
 
   async destroy() {
+    await this.#timer?.destroy()
+    this.#manager?.attachTimer?.(null)
     this.#manager = null
+    this.#service = null
     this.#timer = null
     this.#recovery = null
     await super.destroy()
@@ -90,11 +126,10 @@ export class ReservationCapability extends BaseCapability {
   // ── Core Methods ──
 
   async createRequest(data) {
-    const result = await this.#manager?.createRequest(data) || { success: false, errors: ['Manager not initialized'] }
-    if (result.success && result.reservationId) {
-      this.#timer?.startReservationTimer(result.reservationId, RESERVATION_STATUS.REQUESTED)
-    }
-    return result
+    // BOOKING-EXPIRATION-TIMERS-1. The `requested` timer is armed by the manager
+    // after the reservation is persisted; the wrapper only forwards the result,
+    // which now carries the separate `timer` outcome.
+    return this.#manager?.createRequest(data) || { success: false, errors: ['Manager not initialized'] }
   }
 
   async validateReservation(reservationId) {
@@ -102,37 +137,26 @@ export class ReservationCapability extends BaseCapability {
   }
 
   async requestOwnerConfirmation(reservationId) {
-    const result = await this.#manager?.requestOwnerConfirmation(reservationId) || { success: false, errors: ['Manager not initialized'] }
-    if (result.success) {
-      this.#timer?.stopTimer(reservationId, RESERVATION_STATUS.REQUESTED)
-      this.#timer?.startReservationTimer(reservationId, RESERVATION_STATUS.OWNER_PENDING)
-    }
-    return result
+    // The manager stops the `requested` timer and arms the 24h `owner_pending`
+    // one, anchored to that transition.
+    return this.#manager?.requestOwnerConfirmation(reservationId) || { success: false, errors: ['Manager not initialized'] }
   }
 
   async confirmReservation(reservationId) {
-    const result = await this.#manager?.confirmReservation(reservationId) || { success: false, errors: ['Manager not initialized'] }
-    if (result.success) {
-      this.#timer?.stopTimer(reservationId, RESERVATION_STATUS.OWNER_PENDING)
-    }
-    return result
+    // The manager drops the `owner_pending` timer and arms the 6h
+    // `payment_pending` one.
+    return this.#manager?.confirmReservation(reservationId) || { success: false, errors: ['Manager not initialized'] }
   }
 
   async rejectReservation(reservationId, reason) {
-    const result = await this.#manager?.rejectReservation(reservationId, reason) || { success: false, errors: ['Manager not initialized'] }
-    if (result.success) {
-      this.#timer?.stopTimer(reservationId, RESERVATION_STATUS.OWNER_PENDING)
-    }
-    return result
+    // The manager stops every timer for the reservation, including `requested`.
+    return this.#manager?.rejectReservation(reservationId, reason) || { success: false, errors: ['Manager not initialized'] }
   }
 
   async cancelReservation(reservationId, reason) {
-    const result = await this.#manager?.cancelReservation(reservationId, reason) || { success: false, errors: ['Manager not initialized'] }
-    if (result.success) {
-      this.#timer?.stopTimer(reservationId, RESERVATION_STATUS.OWNER_PENDING)
-      this.#timer?.stopTimer(reservationId, RESERVATION_STATUS.PAYMENT_PENDING)
-    }
-    return result
+    // The manager stops every timer for the reservation, including `requested` —
+    // the case these wrappers used to omit.
+    return this.#manager?.cancelReservation(reservationId, reason) || { success: false, errors: ['Manager not initialized'] }
   }
 
   async expireReservation(reservationId) {

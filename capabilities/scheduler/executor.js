@@ -33,6 +33,16 @@ export class SchedulerExecutor {
   }
 
   /**
+   * Remove a handler registration, so a job left over from a destroyed producer
+   * fails as "Handler not found" instead of running against a detached instance.
+   * @param {string} name - Handler name
+   * @returns {boolean} - whether a registration was removed
+   */
+  unregisterHandler(name) {
+    return this.#handlers.delete(name)
+  }
+
+  /**
    * Execute a job with full validation
    * @param {object} job - Job object
    * @returns {Promise<object>} - { success, result?, error? }
