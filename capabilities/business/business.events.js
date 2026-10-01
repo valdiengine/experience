@@ -51,6 +51,13 @@ export const BUSINESS_RESERVATION_EVENTS = {
   RESERVATION_REJECTED: 'business.reservation:rejected',
   RESERVATION_CANCELLED: 'business.reservation:cancelled',
   RESERVATION_EXPIRED: 'business.reservation:expired',
+  // BOOKING-EXPIRATION-ATOMIC-1. Sibling of RESERVATION_EXPIRED for the
+  // NO_RESPONSE outcome, so an owner who never answered is not reported to
+  // subscribers as an expiry. Consumers were inspected before adding this: no
+  // module subscribes to 'business.reservation:expired' by that literal, so the
+  // sibling introduces no handler that could silently miss an outcome, and
+  // nothing existing changes behaviour.
+  RESERVATION_NO_RESPONSE: 'business.reservation:no_response',
   RESERVATION_CHECKED_IN: 'business.reservation:checked_in',
   RESERVATION_CHECKED_OUT: 'business.reservation:checked_out',
   RESERVATION_ARCHIVED: 'business.reservation:archived',

@@ -95,7 +95,11 @@ export function createClientDouble(program = {}, defaults = {}) {
   const statements = []
   const perKindCounts = {}
   const resolve = (kind, params) => {
-    const callIndex = perKindCounts[kind] = (perKindCounts[kind] ?? -1) + 1
+    // `callIndex` is 0-based for the programmed function; `perKindCounts` holds
+    // the real number of calls per kind. They were the same expression once, so
+    // the first call of every kind reported 0 and `kindsSeen()` was off by one.
+    const callIndex = perKindCounts[kind] ?? 0
+    perKindCounts[kind] = callIndex + 1
     // BEGIN / COMMIT / ROLLBACK are issued by database/connection/postgres.connection.js
     // itself, not by the repository under test, so they are always acknowledged.
     // They are still recorded, which is how a test observes rollback orchestration.

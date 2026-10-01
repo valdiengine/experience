@@ -2,7 +2,7 @@ import { BUSINESS_RESERVATION_EVENTS } from '../business.events.js'
 import { BusinessOrchestrationError } from '../business.errors.js'
 import { BUSINESS_PERMISSIONS } from '../business.permissions.js'
 import { BUSINESS_STATUS } from '../business.status.js'
-import { isArchivableStatus } from '../../reservation/reservation.status.js'
+import { isArchivableStatus, RESERVATION_STATUS } from '../../reservation/reservation.status.js'
 
 export class BusinessReservationManager {
   #context
@@ -217,14 +217,31 @@ export class BusinessReservationManager {
     await this.#checkPermission(identity, BUSINESS_PERMISSIONS.UPDATE)
     const reservation = await this.#assertReservationBelongsToBusiness(reservationId, businessId)
     const result = await this.#delegateService('expireReservation', reservationId, identity)
-    if (result?.success && reservation?.accommodationId) {
-      try {
-        const availabilityManager = this.#availabilityManager
-        if (availabilityManager?.releaseReservation) {
-          await availabilityManager.releaseReservation(reservation.accommodationId, reservation.dates?.checkIn, reservation.dates?.checkOut, identity)
-        }
-      } catch { }
-      this.#emit(BUSINESS_RESERVATION_EVENTS.RESERVATION_EXPIRED, { businessId, reservationId, identity })
+    if (result?.success) {
+      // BOOKING-EXPIRATION-ATOMIC-1. The extra range-based release that used to
+      // run here is removed, mirroring BOOKING-CANCEL-ROUTING-1's removal from
+      // cancelReservation. The delegated reservation manager now routes through
+      // expireReservationWithRelease, which releases exactly the recorded
+      // occupied nights and marks those lines released. The operation removed
+      // here ran over checkIn..checkOut with check-out inclusive — one night
+      // wider than any occupied-night set — with no reservationId filter, so it
+      // matched every RESERVED night in range regardless of which reservation
+      // held it, wrote availability `status`/`notes` without touching
+      // `reserved_count` or `reservation_lines.released_at`, and hid every
+      // failure in a bare `catch { }`. Removing it cannot leave a leak behind,
+      // because the delegated call now performs the real release; the reverse
+      // deletion order would have.
+      //
+      // The payload's event follows the RESULTING status. Expiration resolves
+      // OWNER_PENDING to no_response and the others to expired, so a fixed
+      // `business.reservation:expired` would misreport an unanswered owner. The
+      // delegated result carries the status it actually landed.
+      this.#emit(
+        result.status === RESERVATION_STATUS.NO_RESPONSE
+          ? BUSINESS_RESERVATION_EVENTS.RESERVATION_NO_RESPONSE
+          : BUSINESS_RESERVATION_EVENTS.RESERVATION_EXPIRED,
+        { businessId, reservationId, identity, status: result.status ?? null }
+      )
     }
     return result
   }

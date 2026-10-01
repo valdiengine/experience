@@ -47,6 +47,14 @@ export class ReservationCapability extends BaseCapability {
     this.on(RESERVATION_EVENTS.CONFIRMED, this.#onReservationConfirmed.bind(this))
     this.on(RESERVATION_EVENTS.CANCELLED, this.#onReservationCancelled.bind(this))
     this.on(RESERVATION_EVENTS.EXPIRED, this.#onReservationExpired.bind(this))
+    // BOOKING-EXPIRATION-ATOMIC-1. NO_RESPONSE is the expiration outcome for an
+    // unanswered OWNER_PENDING reservation and is terminal, exactly like
+    // EXPIRED. Without this subscription it would produce no search-index
+    // handling at all, so the reservation would stay listed in search while its
+    // capacity had been released — the same divergence EXPIRED already handled.
+    // This is the directly affected consumer being wired; no event-delivery
+    // framework is introduced and the existing EXPIRED path is unchanged.
+    this.on(RESERVATION_EVENTS.NO_RESPONSE, this.#onReservationNoResponse.bind(this))
     await super.activate()
   }
 
@@ -192,6 +200,15 @@ export class ReservationCapability extends BaseCapability {
   }
 
   #onReservationExpired(event) {
+    this.#triggerSearchRemove(event.reservation)
+  }
+
+  /**
+   * The NO_RESPONSE expiration outcome is terminal, so it removes the
+   * reservation from the search index exactly as EXPIRED does.
+   * BOOKING-EXPIRATION-ATOMIC-1.
+   */
+  #onReservationNoResponse(event) {
     this.#triggerSearchRemove(event.reservation)
   }
 

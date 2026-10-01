@@ -29,6 +29,34 @@ const SUPPORTED_CONSUMPTION_RECORD_VERSIONS = Object.freeze([1])
 const STRICT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
 /**
+ * The APPROVED source -> target pairs for an expiration, and the whole of it.
+ *
+ * BOOKING-EXPIRATION-ATOMIC-1. Two independent allow-lists — "these targets are
+ * terminal" and "these sources are expirable" — admit every cross product, so
+ * `requested -> no_response` and `owner_pending -> expired` both passed while
+ * being unapproved combinations. The pair is the approved unit, so it is
+ * declared as ONE map and validated as one pair: the target must be the value
+ * this source maps to. Any other combination is refused at the repository
+ * boundary, before any write or release, on both adapter paths.
+ *
+ * This mirrors `EXPIRATION_TARGETS` in reservation.workflow.js, which is
+ * already a source -> target map. It is duplicated here as a literal rather than
+ * imported because importing from `capabilities/reservation` into
+ * `capabilities/persistence` would be a cross-capability import (see the
+ * capability-context note above), and because this file already names domain
+ * tables and statuses as literals. The two are asserted equal, pair by pair, by
+ * the focused test suite, so a divergence is caught rather than silent.
+ *
+ * These are terminal outcomes only, so `cancelled` is absent by construction:
+ * expiration cannot express a cancellation even indirectly.
+ */
+const EXPIRATION_TRANSITIONS = Object.freeze({
+  requested: 'expired',
+  owner_pending: 'no_response',
+  payment_pending: 'expired',
+})
+
+/**
  * The pristine Map mutation method, captured at module load.
  *
  * BOOKING-MOCK-CANCEL-ATOMIC-1. Rollback of a mock cancellation must not be
@@ -838,6 +866,45 @@ export class ReservationRepository extends BaseRepository {
   }
 
   /**
+   * The replacement row an EXPIRATION publishes, built from the AUTHORITATIVE
+   * STORED row and changing exactly two fields.
+   *
+   * BOOKING-EXPIRATION-ATOMIC-1. Expiration used to reuse the cancellation merge
+   * (`#mergeMockRow`), which shallow-copies every key the CALLER payload
+   * happens to carry onto the stored row. That makes unrelated-field preservation
+   * a property of the caller's restraint rather than of the repository: a payload
+   * carrying `cancelledAt`, `notes`, `metadata` or `accommodationId` silently
+   * overwrote the stored values, and the caller's `accommodationId` could also
+   * contradict the stored one while the release still used the stored row as its
+   * ownership authority. Expiration is a status-only operation, so it is given a
+   * replacement that is derived from the stored row instead:
+   *
+   *   - `status` — the approved target, the one field the operation owns;
+   *   - `updatedAt` — the maintained timestamp, matching `updated_at = NOW()` on
+   *     the PostgreSQL path;
+   *   - everything else, taken verbatim from the stored row: `cancelledAt`,
+   *     `cancelled_at`, `notes`, `metadata`, `specialRequests`, `customer`,
+   *     `dates`, `tenantId`, `accommodationId`, `businessId`, `resourceId`,
+   *     `guests`, `deletedAt`, and any field this code has never heard of.
+   *
+   * The stored row is spread first and only these two keys are assigned, so a
+   * caller cannot widen what expiration writes, whether by adding keys or by
+   * sending a value that happens to be `undefined` for one of them. The stored
+   * row is not mutated: a new object is returned.
+   *
+   * Cancellation keeps `#mergeMockRow` unchanged; this is used only when the
+   * synchronous section is serving expiration.
+   *
+   * @param {object} storedReservation the authoritative stored row
+   * @param {string} status the approved terminal target
+   * @param {string} now the same timestamp used for the capacity and line writes
+   * @returns {object} a new object; `storedReservation` is never mutated
+   */
+  #expirationReplacementRow(storedReservation, status, now) {
+    return { ...storedReservation, status, updatedAt: now }
+  }
+
+  /**
    * The stored reservation row this cancellation is allowed to act on.
    *
    * Mirrors the predicate the in-memory adapter's `update` would have applied
@@ -892,7 +959,24 @@ export class ReservationRepository extends BaseRepository {
    * @param {string} tenantId
    * @returns {{reservation: object|null, release: {released: object[], noOp: boolean}}}
    */
-  #commitMockCancellationSync(reservationData, tenantId) {
+  #commitMockCancellationSync(reservationData, tenantId, options = {}) {
+    // BOOKING-EXPIRATION-ATOMIC-1. `options` selects which terminal operation
+    // this synchronous section is serving and adds the expiration-only
+    // precondition. The defaults reproduce the cancellation call EXACTLY, so
+    // `cancelReservationWithRelease` behaviour — including every error message
+    // below — is unchanged by the extraction.
+    const operation = options?.operation || 'cancelReservationWithRelease'
+    const expectedStatus = options?.expectedStatus ?? null
+
+    // How the replacement reservation row is BUILT. Cancellation merges the
+    // caller's payload over the stored row, byte-for-byte as before; expiration
+    // derives it from the stored row and changes only `status` and `updatedAt`,
+    // so unrelated-field preservation is enforced here instead of depending on
+    // which keys the caller happened to send. This flag changes nothing else —
+    // the selection, validation, planning, publication and rollback below are
+    // shared, and the ownership/capacity authority is the stored row either way.
+    const isExpiration = operation === 'expireReservationWithRelease'
+
     const store = this.adapter?.constructor?.store
     const reservationTable = store?.get?.(this.adapter?.entityName) || null
     const linesStore = store?.get?.('reservation_lines') || null
@@ -922,7 +1006,7 @@ export class ReservationRepository extends BaseRepository {
         {
           entityName: this.adapter?.entityName,
           entityId: reservationData?.id,
-          operation: 'cancelReservationWithRelease',
+          operation,
         }
       )
     }
@@ -939,6 +1023,37 @@ export class ReservationRepository extends BaseRepository {
     // resolved before, and it does so BEFORE any line or capacity work.
     if (!storedReservation) {
       return { reservation: null, release: { released: [], noOp: true } }
+    }
+
+    // BOOKING-EXPIRATION-ATOMIC-1. Expiration precondition, checked against the
+    // stored row rather than the caller payload, and before ANY line selection,
+    // record resolution or capacity work — so a stale expiration that no longer
+    // matches the caller's expectation cannot publish a partial or full release.
+    //
+    // WHAT IT GUARDS: competing writes to the SAME reservation. The caller read
+    // the row, and between that read and this write another writer — a
+    // confirmation, a rejection, a cancellation, or a second expiration — moved
+    // it on. The caller states the status it believes is stored, and if the
+    // stored row no longer says that, this expiration no longer describes the
+    // current row and must not act on it. It is not a lock and not a
+    // cross-reservation guard: it says nothing about whether some OTHER
+    // reservation can expire concurrently, and two different reservations
+    // expiring at the same moment are unaffected by it.
+    //
+    // This is deliberately NOT the `released_at` idempotency guard. A repeated
+    // release finding no unreleased lines is a no-op; that says nothing about
+    // whether the status write was still appropriate. This check answers the
+    // separate question: may this caller still move this row to a terminal
+    // status? Cancellation does not pass `expectedStatus` and is unaffected.
+    if (expectedStatus != null && storedReservation.status !== expectedStatus) {
+      throw new RepositoryValidationError(
+        `Reservation ${reservationData.id} is ${storedReservation.status ?? '(no status)'}, not ${expectedStatus}; refusing to ${operation}`,
+        {
+          entityName: this.adapter?.entityName,
+          entityId: reservationData?.id,
+          operation,
+        }
+      )
     }
 
     // Used only to VERIFY line ownership below; when the stored row carries no
@@ -959,7 +1074,7 @@ export class ReservationRepository extends BaseRepository {
       if (line?.tenantId != null && line.tenantId !== effectiveTenantId) {
         throw new RepositoryValidationError(
           `Reservation line ${line.id} belongs to tenant ${line.tenantId}, not ${effectiveTenantId}`,
-          { entityName: 'reservation_lines', entityId: line.id, operation: 'cancelReservationWithRelease' }
+          { entityName: 'reservation_lines', entityId: line.id, operation }
         )
       }
       if (
@@ -969,7 +1084,7 @@ export class ReservationRepository extends BaseRepository {
       ) {
         throw new RepositoryValidationError(
           `Reservation line ${line.id} targets ${line.targetId}, but reservation ${reservationData.id} holds ${authoritativeAccommodationId}; refusing to choose a target`,
-          { entityName: 'reservation_lines', entityId: line.id, operation: 'cancelReservationWithRelease' }
+          { entityName: 'reservation_lines', entityId: line.id, operation }
         )
       }
     }
@@ -1032,7 +1147,15 @@ export class ReservationRepository extends BaseRepository {
 
     // Every replacement object is prepared here, before the first write, and no
     // stored row is ever mutated in place.
-    const nextReservation = this.#mergeMockRow(storedReservation, reservationData)
+    //
+    // Expiration builds the reservation replacement from the STORED row and
+    // changes only `status` and `updatedAt` (see #expirationReplacementRow), so
+    // the caller's `cancelledAt`, `notes`, `metadata`, `accommodationId` and any
+    // other unrelated key cannot reach the store through this write. Cancellation
+    // keeps the caller-payload merge, unchanged.
+    const nextReservation = isExpiration
+      ? this.#expirationReplacementRow(storedReservation, reservationData.status, now)
+      : this.#mergeMockRow(storedReservation, reservationData)
     const nextCapacity = Array.from(capacityPlan.values(), ({ row, delta }) => ({
       id: row.id,
       next: this.#mockReleasedAvailability(row, this.#mockReservedCount(row) - delta, now),
@@ -1116,6 +1239,57 @@ export class ReservationRepository extends BaseRepository {
     }
   }
 
+  /**
+   * The PostgreSQL half of the shared atomic terminal-transition-with-release
+   * core, used by BOTH cancellation and expiration.
+   *
+   * BOOKING-EXPIRATION-ATOMIC-1. The two operations differ only in the status
+   * statement they issue; everything that makes the operation atomic is common
+   * and lives here exactly once:
+   *
+   *   - the enclosing `transaction()`, so the status update and every
+   *     `released_at` / capacity write commit or unwind together;
+   *   - missing-row handling (zero rows is an error, never a silent success);
+   *   - the call into `releaseReservationLines`, which owns the record validator,
+   *     the legacy DATE_RANGE refusal, the plan-before-mutate ordering and the
+   *     `released_at` compare-and-set.
+   *
+   * The caller supplies the statement because the two operations genuinely need
+   * different columns: cancellation stamps `cancelled_at` and carries the
+   * cancel reason into `special_requests`; expiration must touch NEITHER, so it
+   * supplies a statement that writes `status` and `updated_at` only. Extracting
+   * the shared part rather than copying the body is what keeps the two from
+   * drifting apart again.
+   *
+   * @param {object} reservationData
+   * @param {string} tenantId
+   * @param {object} options
+   * @param {string} options.sql the status UPDATE statement
+   * @param {Array}  options.params its bound parameters
+   * @param {string} options.emptyResultMessage thrown when the statement matches no row
+   * @returns {Promise<{reservation: object, release: {released: object[], noOp: boolean}}>}
+   */
+  async #postgresTerminalTransitionWithRelease(reservationData, tenantId, { sql, params, emptyResultMessage }) {
+    return transaction(async (client) => {
+      const reservationResult = await client.query(sql, params)
+
+      if (reservationResult.rows.length === 0) {
+        throw new Error(emptyResultMessage)
+      }
+
+      const release = await this.releaseReservationLines(
+        client,
+        reservationData.id,
+        tenantId
+      )
+
+      return {
+        reservation: reservationResult.rows[0],
+        release,
+      }
+    })
+  }
+
   async cancelReservationWithRelease(reservationData, tenantId) {
     this._enforceNotDisposed()
     this._enforceInitialized()
@@ -1131,9 +1305,8 @@ export class ReservationRepository extends BaseRepository {
       return reservation
     }
 
-    return transaction(async (client) => {
-      const reservationResult = await client.query(
-        `UPDATE reservations
+    return this.#postgresTerminalTransitionWithRelease(reservationData, tenantId, {
+      sql: `UPDATE reservations
          SET status = $1,
              cancelled_at = $2,
              special_requests = $3,
@@ -1141,33 +1314,152 @@ export class ReservationRepository extends BaseRepository {
          WHERE id = $4
            AND tenant_id = $5
          RETURNING *`,
-        [
-          reservationData.status,
-          reservationData.cancelledAt || null,
-          reservationData.notes || null,
-          reservationData.id,
-          tenantId,
-        ]
-      )
-
-      if (reservationResult.rows.length === 0) {
-        throw new Error(
-          `Reservation ${reservationData.id} update failed - not found or not authorized`
-        )
-      }
-
-      const release = await this.releaseReservationLines(
-        client,
+      params: [
+        reservationData.status,
+        reservationData.cancelledAt || null,
+        reservationData.notes || null,
         reservationData.id,
-        tenantId
-      )
-
-      return {
-        reservation: reservationResult.rows[0],
-        release,
-      }
+        tenantId,
+      ],
+      // Preserved verbatim from the pre-extraction body.
+      emptyResultMessage: `Reservation ${reservationData.id} update failed - not found or not authorized`,
     })
   }
+
+  /**
+   * The APPROVED source -> target PAIRS for an expiration.
+   *
+   * BOOKING-EXPIRATION-ATOMIC-1. This is the expiration sibling of
+   * `cancelReservationWithRelease`. It shares the atomic mechanics with it — the
+   * same synchronous Map planning/publication/rollback, and the same PostgreSQL
+   * transaction — through #commitMockCancellationSync and
+   * #postgresTerminalTransitionWithRelease, rather than duplicating them. That is
+   * the point: expiration previously wrote status and released nothing, so the
+   * release gate in #resolveRecordedReleaseDates did not apply to it at all.
+   *
+   * The pair is validated as a PAIR, not as two independent allow-lists: the
+   * caller-stated source must map to the caller-stated target in
+   * EXPIRATION_TRANSITIONS. `requested -> no_response`,
+   * `owner_pending -> expired` and `payment_pending -> no_response` are each
+   * individually plausible and each unapproved, so admitting them on the strength
+   * of their members would be wrong. The check runs before any store work and is
+   * therefore identical on both adapter paths.
+   *
+   * What expiration deliberately does NOT do, so that it cannot become a
+   * cancellation with extra steps:
+   *
+   *   - it never writes `cancelled_at`, in any adapter. The PostgreSQL statement
+   *     below omits the column entirely, so it is neither set nor cleared to
+   *     NULL, and the Map replacement is built from the stored row with only
+   *     `status` and `updatedAt` assigned. A pre-existing `cancelledAt` on the
+   *     stored row survives expiration untouched.
+   *   - it never writes `special_requests` or any other unrelated column, on
+   *     either adapter.
+   *   - it accepts only the approved pairs, so `cancelled` cannot be reached.
+   *
+   * On the Map path the replacement row is derived from the AUTHORITATIVE STORED
+   * row, not from the caller payload. Preservation of `cancelledAt`, `notes`,
+   * `metadata`, `tenantId`, `accommodationId` and every other unrelated property
+   * is therefore a property of this method rather than of the caller's
+   * restraint: a payload carrying conflicting values for those keys cannot reach
+   * the store through this write. The release below likewise uses the stored
+   * row's accommodation as its ownership authority.
+   *
+   * `expectedStatus` is REQUIRED and is re-validated against the authoritative
+   * store, not the caller payload: the Map path compares the stored row's status
+   * before any line or capacity work, and the PostgreSQL predicate carries the
+   * same condition so the check also holds against a row that changed between
+   * the caller's read and this write. It guards competing writes to the SAME
+   * reservation: if another writer moved THIS row on, this expiration no longer
+   * describes it and is refused. It is not a lock and says nothing about other
+   * reservations. This is deliberately separate from the `released_at`
+   * idempotency guard, which only says a release already happened; it does not
+   * say the status write is still appropriate.
+   *
+   * RETURN SHAPE matches `cancelReservationWithRelease` per adapter, so a caller
+   * treats the result identically: the bare stored row (or null) on the Map
+   * path, a `{ reservation, release }` wrapper from the PostgreSQL transaction.
+   *
+   * NOT CERTIFIED: physical PostgreSQL rollback, and concurrency between
+   * processes. The Map path is synchronously atomic for store-write failures
+   * within one process and buys no crash durability.
+   *
+   * @param {object} reservationData domain object carrying `id` and the target `status`
+   * @param {string} tenantId
+   * @param {object} options
+   * @param {string} options.expectedStatus the source status the caller believes is stored
+   * @returns {Promise<object|null|{reservation: object, release: object}>}
+   */
+  async expireReservationWithRelease(reservationData, tenantId, { expectedStatus } = {}) {
+    this._enforceNotDisposed()
+    this._enforceInitialized()
+    this._enforceWritable()
+
+    const targetStatus = reservationData?.status
+
+    // The APPROVED PAIR, validated before any store work. Required, and validated
+    // rather than trusted: an expiration with no stated starting state has no way
+    // to detect that it is stale, and an unstated or wrong target has no way to
+    // be shown to be the one this source is approved to reach.
+    const approvedTarget = EXPIRATION_TRANSITIONS[expectedStatus]
+
+    if (approvedTarget === undefined) {
+      throw new RepositoryValidationError(
+        `Cannot expire reservation ${reservationData?.id}: ${JSON.stringify(expectedStatus)} is not a supported expiration source status`,
+        {
+          entityName: this.adapter?.entityName,
+          entityId: reservationData?.id,
+          operation: 'expireReservationWithRelease',
+        }
+      )
+    }
+
+    if (targetStatus !== approvedTarget) {
+      throw new RepositoryValidationError(
+        `Cannot expire reservation ${reservationData?.id} from ${expectedStatus} to ${JSON.stringify(targetStatus)}: the approved outcome for ${expectedStatus} is ${approvedTarget}`,
+        {
+          entityName: this.adapter?.entityName,
+          entityId: reservationData?.id,
+          operation: 'expireReservationWithRelease',
+        }
+      )
+    }
+
+    const hasPostgres = this.adapter?.provider?.name === 'postgres'
+
+    if (!hasPostgres) {
+      this._enforceContext()
+      const { reservation } = this.#commitMockCancellationSync(reservationData, tenantId, {
+        operation: 'expireReservationWithRelease',
+        expectedStatus,
+      })
+      return reservation
+    }
+
+    return this.#postgresTerminalTransitionWithRelease(reservationData, tenantId, {
+      // `cancelled_at` and `special_requests` are deliberately absent from the
+      // SET list: expiration must preserve them exactly as stored, including a
+      // `cancelled_at` that is already populated. Only `updated_at` is
+      // maintained alongside the status, matching the Map replacement row's
+      // `{ ...stored, status, updatedAt }` — so the two adapters write the same
+      // two fields and neither can carry a caller's unrelated value into a column.
+      sql: `UPDATE reservations
+         SET status = $1,
+             updated_at = NOW()
+         WHERE id = $2
+           AND tenant_id = $3
+           AND status = $4
+         RETURNING *`,
+      params: [targetStatus, reservationData.id, tenantId, expectedStatus],
+      // Zero rows is ambiguous on this statement and deliberately not
+      // disambiguated with an extra read: the row may be missing, not
+      // authorized, or no longer in the expected status. The message says so
+      // rather than asserting one cause.
+      emptyResultMessage:
+        `Reservation ${reservationData.id} expiration did not match expected status ${expectedStatus}: the row is missing, not authorized, or is no longer ${expectedStatus}`,
+    })
+  }
+
   async releaseReservationLines(client, reservationId, tenantId) {
     const linesResult = await client.query(`
       SELECT rl.*

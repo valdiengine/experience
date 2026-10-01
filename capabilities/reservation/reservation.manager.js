@@ -1,4 +1,35 @@
 /**
+ * The customer-facing sentence for each expiration outcome.
+ *
+ * BOOKING-EXPIRATION-ATOMIC-1. A notification must describe what actually
+ * happened, so the two outcomes cannot share one message. The EXPIRED wording is
+ * the pre-existing sentence, kept byte-for-byte; NO_RESPONSE gets its own that
+ * names the real cause (no owner reply) instead of asserting a generic expiry.
+ * Copy is product-facing and is offered for review, not treated as approved legal
+ * or commercial wording.
+ */
+const EXPIRATION_NOTIFICATION_BODIES = {
+  [RESERVATION_STATUS.EXPIRED]: (reservation) =>
+    `Su solicitud de reserva para ${reservation.dates.checkIn} al ${reservation.dates.checkOut} ha expirado.`,
+  [RESERVATION_STATUS.NO_RESPONSE]: (reservation) =>
+    `Su solicitud de reserva para ${reservation.dates.checkIn} al ${reservation.dates.checkOut} se cerró porque el propietario no respondió.`,
+}
+
+/**
+ * The success event for each expiration outcome.
+ *
+ * BOOKING-EXPIRATION-ATOMIC-1. EXPIRED outcomes keep the existing EXPIRED event,
+ * so every current subscriber of `reservation:expired` keeps working unchanged.
+ * NO_RESPONSE gets the new specific event. This is a data lookup, not an event
+ * framework: there is no delivery layer, queue or retry introduced here, and the
+ * existing post-publication subscriber-error policy is untouched.
+ */
+const EXPIRATION_SUCCESS_EVENTS = {
+  [RESERVATION_STATUS.EXPIRED]: RESERVATION_EVENTS.EXPIRED,
+  [RESERVATION_STATUS.NO_RESPONSE]: RESERVATION_EVENTS.NO_RESPONSE,
+}
+
+/**
  * Reservation Manager — Central orchestration of reservation lifecycle
  *
  * Business-agnostic: works for any resource type
@@ -375,10 +406,42 @@ constructor(context) {
 
   /**
    * Expire reservation (timeout, abandonment)
+   *
+   * BOOKING-EXPIRATION-ATOMIC-1. Expiration now moves the reservation to a terminal
+   * status AND releases its recorded occupied nights in ONE repository operation,
+   * so the release gate in the repository (#resolveRecordedReleaseDates) applies to
+   * expiration for the first time. Previously it wrote status only, via
+   * #persist, and released nothing — which is why the gate, while intact, certified
+   * nothing about expiration.
+   *
+   * Target selection follows the reservation's own current state, via
+   * EXPIRATION_TARGETS, rather than being hardcoded:
+   *
+   *     REQUESTED      -> EXPIRED
+   *     OWNER_PENDING  -> NO_RESPONSE
+   *     PAYMENT_PENDING-> EXPIRED
+   *     CONFIRMED      -> rejected (not expirable)
+   *
+   * Expiration is NOT cancellation: `cancelledAt` is never set, cleared or
+   * repurposed, cancellation's reason-into-`special_requests` write is not
+   * performed, and `cancelReservationWithRelease` is not called. Any pre-existing
+   * `cancelledAt` on the stored row is left exactly as it is.
+   *
+   * Unsupported source states are rejected BEFORE the repository is reached, so
+   * nothing is ever released for them, and the established thrown
+   * `Invalid transition` behaviour is preserved: for every state with no
+   * expiration target the call below raises that error, which is what repeated
+   * manager expiry of an already-terminal reservation still does.
+   *
+   * A repository that cannot perform the atomic operation fails loudly. There is
+   * no status-only degradation, because that is precisely the defect being fixed:
+   * a missing method, a null result or a rejection produces no success, no terminal
+   * cache entry, no success event and no notification.
+   *
    * @param {string} reservationId
-   * @param {object|null} identity
-   * @returns {{ success: boolean, errors?: string[] }}
-   */
+ * @param {object|null} identity
+ * @returns {{ success: boolean, status?: string, errors?: string[] }}
+ */
   async expireReservation(reservationId, identity) {
     await this.#checkPermission(identity, RESERVATION_PERMISSIONS.CANCEL)
     const reservation = await this.#loadReservation(reservationId)
@@ -386,21 +449,81 @@ constructor(context) {
       return { success: false, errors: ['Reservation not found'] }
     }
 
-    const updated = ReservationWorkflow.transition(reservation, RESERVATION_STATUS.EXPIRED)
-    await this.#persist(updated)
+    // The target is derived from the state the reservation is actually in, so
+    // the three approved outcomes stay distinguishable and CONFIRMED stays
+    // non-expirable.
+    const targetStatus = ReservationWorkflow.getExpirationTarget(reservation.status)
+
+    if (!targetStatus) {
+      // Raises the established invalid-transition error for every unsupported
+      // state: CONFIRMED, an already-terminal reservation such as EXPIRED or
+      // NO_RESPONSE (repeated expiry), and anything else. Nothing has been
+      // persisted at this point and no release has been attempted.
+      ReservationWorkflow.transition(reservation, RESERVATION_STATUS.EXPIRED)
+      return {
+        success: false,
+        errors: [`Reservation ${reservationId} cannot be expired from status ${reservation.status}`],
+      }
+    }
+
+    const updated = ReservationWorkflow.transition(reservation, targetStatus)
+
+    // BOOKING-CANCEL-ROUTING-1 routing rule, applied to expiration: the branch is
+    // chosen by the presence of the repository, never by the
+    // config.persistenceProvider string, because the repository selects its own
+    // adapter internally.
+    if (this.#repo) {
+      if (typeof this.#repo.expireReservationWithRelease !== 'function') {
+        // Never degrade to status-only persistence: capacity would stay held
+        // while the caller was told the reservation had expired.
+        throw new Error(
+          `Reservation repository cannot release capacity for ${reservationId}: expireReservationWithRelease is unavailable`
+        )
+      }
+
+      // The result is only a success signal, and its shape is adapter-specific
+      // (a bare stored row or null on the Map path, a { reservation, release }
+      // wrapper from the PostgreSQL transaction) exactly as for cancellation. The
+      // cached value stays the domain object `updated`, so the cache read path is
+      // never fed a wrapper. The source status is passed as the repository's
+      // precondition, so a reservation that moved on between this read and the
+      // write cannot be expired by this call.
+      const persisted = await this.#repo.expireReservationWithRelease(updated, reservation.tenantId, {
+        expectedStatus: reservation.status,
+      })
+      if (!persisted) {
+        throw new Error(
+          `Reservation ${reservationId} expiration did not persist: repository returned no row`
+        )
+      }
+
+      this.#cacheReservation(updated)
+    } else {
+      // Repo-less cache-backed expiration. Preserved deliberately: this shape has
+      // no line to release — createRequest wrote none — so no capacity was ever
+      // consumed and mutating the cache is consistent. It is not reported as a
+      // failure merely for lacking a repository.
+      await this.#persist(updated)
+    }
+
+    // Emitted only after persistence succeeded. #emit is synchronous and
+    // subscriber-error behaviour is unchanged: a subscriber that throws still
+    // propagates after the write is committed.
+    const successEvent = EXPIRATION_SUCCESS_EVENTS[targetStatus]
 
     const notifications = this.#context?.capabilities?.get?.('notifications')
     if (notifications) {
+      const body = EXPIRATION_NOTIFICATION_BODIES[targetStatus]
       await notifications.send({
         channel: reservation.customer.channelPreference || 'email',
         recipient: reservation.customer.email || reservation.customer.phone,
-        body: `Su solicitud de reserva para ${reservation.dates.checkIn} al ${reservation.dates.checkOut} ha expirado.`,
+        body: typeof body === 'function' ? body(reservation) : body,
       })
     }
 
-    this.#emit(RESERVATION_EVENTS.EXPIRED, { reservationId, reservation: updated })
+    this.#emit(successEvent, { reservationId, reservation: updated, fromStatus: reservation.status, toStatus: targetStatus })
 
-    return { success: true }
+    return { success: true, status: targetStatus }
   }
 
   /**
