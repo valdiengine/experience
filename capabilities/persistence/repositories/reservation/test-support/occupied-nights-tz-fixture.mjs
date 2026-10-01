@@ -127,6 +127,15 @@ if (OP === 'create') {
     metadata: { note: 'written before the record existed' },
     releasedAt: null,
   })
+  // The stub adapter's create does not persist, so seed the row the runtime
+  // adapter would have stored. Cancellation refuses to release without it.
+  store.get('reservations').set('res-tz', {
+    id: 'res-tz',
+    tenantId: TENANT,
+    accommodationId: CABIN,
+    status: 'pending',
+    deletedAt: null,
+  })
 
   await repo.cancelReservationWithRelease({ id: 'res-tz', status: 'cancelled' }, TENANT)
 

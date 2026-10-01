@@ -28,6 +28,18 @@ const SUPPORTED_CONSUMPTION_RECORD_VERSIONS = Object.freeze([1])
 /** Strict calendar date shape. Record dates must match it exactly. */
 const STRICT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
+/**
+ * The pristine Map mutation method, captured at module load.
+ *
+ * BOOKING-MOCK-CANCEL-ATOMIC-1. Rollback of a mock cancellation must not be
+ * defeatable by a failure injected on the publication path. Publication calls
+ * the table's own `set`, so a caller (or a test) can make exactly one of those
+ * writes throw by replacing that method. Restore therefore does NOT go through
+ * the table: it calls Map.prototype.set directly, which an instance-level
+ * override cannot intercept.
+ */
+const RAW_MAP_SET = Map.prototype.set
+
 export class ReservationRepository extends BaseRepository {
   static entityName = 'reservation'
   static version = '1.0.0'
@@ -737,50 +749,343 @@ export class ReservationRepository extends BaseRepository {
     store.get('reservation_lines').set(line.id, line)
   }
 
-  #releaseMockCapacity(reservationId, tenantId) {
+/**
+   * The un-clamped reserved count of a mock availability row.
+   *
+   * Extracted so the release path can assert an aggregate precondition against
+   * the same value it later writes, instead of re-deriving the fallback chain.
+   * `reservedCount` is authoritative; `capacity`/`available` are the legacy
+   * fallback the create path also honours.
+   *
+   * @param {object} row
+   * @returns {number}
+   */
+  #mockReservedCount(row) {
+    const fallback = row?.capacity != null && row?.available != null ? row.capacity - row.available : 0
+    return Number(row?.reservedCount ?? fallback) || 0
+  }
+
+  /**
+   * The replacement availability row for a released quantity. Mirrors the
+   * create path's arithmetic exactly; only `reservedCount` differs by delta.
+   *
+   * @param {object} row
+   * @param {number} reservedCount the already-decremented reserved count
+   * @param {string} now
+   * @returns {object} a new object; the stored row is never mutated
+   */
+  #mockReleasedAvailability(row, reservedCount, now) {
+    const inventory = Number(row.inventory ?? row.capacity) || 0
+    return {
+      ...row,
+      reservedCount,
+      available: Math.max(0, inventory - reservedCount),
+      status: row.isBlocked === true ? 'blocked' : (reservedCount >= inventory ? 'reserved' : 'available'),
+      updatedAt: now,
+    }
+  }
+
+  /**
+   * Merge semantics equivalent to the in-memory adapter's `mergePaths`:
+   * dotted keys are set as nested paths, everything else is shallow-merged.
+   * Mirrored here because the adapter's own `update` is async and cannot be
+   * called from inside the synchronous publication section.
+   *
+   * @param {object} row
+   * @param {object} data
+   * @returns {object} a new object; `row` is never mutated
+   */
+  #mergeMockRow(row, data) {
+    const shallow = {}
+    for (const [key, value] of Object.entries(data || {})) {
+      if (!key.includes('.')) { shallow[key] = value; continue }
+      const parts = key.split('.')
+      let cursor = shallow
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (cursor[parts[i]] === null || typeof cursor[parts[i]] !== 'object') cursor[parts[i]] = {}
+        cursor = cursor[parts[i]]
+      }
+      cursor[parts[parts.length - 1]] = value
+    }
+    return { ...row, ...shallow }
+  }
+
+  /**
+   * The stored reservation row this cancellation is allowed to act on.
+   *
+   * Mirrors the predicate the in-memory adapter's `update` would have applied
+   * for `{ id, tenantId }` plus the context tenant and the soft-delete filter
+   * BaseRepository._buildQuery adds: exact id, exact tenant, not deleted.
+   * Returns null when there is no such row, in which case the status write has
+   * no store effect — the same outcome the adapter's `update` had when it
+   * resolved `null`.
+   *
+   * @param {Map|null} table
+   * @param {object} reservationData
+   * @param {string} tenantId
+   * @returns {object|null}
+   */
+  #storedMockReservation(table, reservationData, tenantId) {
+    if (!table) return null
+    for (const row of table.values()) {
+      if (row?.id !== reservationData.id) continue
+      if (row?.tenantId !== tenantId) continue
+      if ((row?.deletedAt ?? null) !== null) continue
+      return row
+    }
+    return null
+  }
+
+  /**
+   * Release capacity and mark lines released, atomically, for the in-memory path.
+   *
+   * BOOKING-MOCK-CANCEL-ATOMIC-1. Entirely SYNCHRONOUS: it calls no async
+   * function and contains no `await`, so no other request can observe a partial
+   * state — the section from the first read to the last write is one turn of the
+   * event loop. Ordering inside it:
+   *
+   *   1. locate the stored reservation row (ownership predicate above);
+   *   2. select unreleased candidates explicitly;
+   *   3. resolve and validate every candidate's record, unchanged policy;
+   *   4. derive capacity deltas internally and aggregate them by capacity row,
+   *      rejecting a missing row or an aggregate shortfall;
+   *   5. build every replacement object and capture every pre-image;
+   *   6. publish, then restore synchronously if any publication write throws.
+   *
+   * Nothing is written until step 6, so every rejection above leaves the store
+   * untouched. Rollback replays the captured pre-images in reverse publication
+   * order through the pristine Map.prototype.set, so a failure injected on the
+   * publication path cannot also defeat the restore.
+   *
+   * SCOPE: in-process and turn-bounded only. This is NOT a database
+   * transaction. It provides no crash durability, no isolation from another
+   * process, and no protection against a second writer outside this process.
+   *
+   * @param {object} reservationData the reservation being cancelled
+   * @param {string} tenantId
+   * @returns {{reservation: object|null, release: {released: object[], noOp: boolean}}}
+   */
+  #commitMockCancellationSync(reservationData, tenantId) {
     const store = this.adapter?.constructor?.store
-    if (!store) return { released: [], noOp: true }
+    const reservationTable = store?.get?.(this.adapter?.entityName) || null
+    const linesStore = store?.get?.('reservation_lines') || null
+    const availStore = store?.get?.('availability') || null
 
-    const linesStore = store.get('reservation_lines')
-    const availStore = store.get('availability')
-    if (!linesStore || !availStore) return { released: [], noOp: true }
+    // Tenant, resolved exactly as BaseRepository._buildQuery resolves it for the
+    // write this section replaces: a context tenant (string form, or object
+    // `id`) is spread OVER the caller's query and so overrides the supplied
+    // tenantId, and a soft-deletable repository adds `deletedAt: null`.
+    //
+    // `_enforceContext()` is NOT equivalent and must not be assumed to be: it
+    // only asserts that a context object exists and compares no tenant at all
+    // (base.repository.js:55-57). The predicate below is written out for that
+    // reason rather than relying on the guard.
+    const contextTenant = this.context?.tenant
+    const contextTenantId =
+      typeof contextTenant === 'string' ? contextTenant : (contextTenant?.id ?? null)
+    const effectiveTenantId = contextTenantId ?? tenantId
 
-    const candidates = Array.from(linesStore.values()).filter(
-      (line) => line?.reservationId === reservationId && !line.releasedAt
+    // `_buildQuery` silently discards a supplied tenantId that disagrees with
+    // the context tenant. Honouring the caller's tenant is impossible while
+    // that stands, so refuse rather than cancel under the context tenant on the
+    // caller's request for a different one.
+    if (contextTenantId != null && contextTenantId !== tenantId) {
+      throw new RepositoryValidationError(
+        `Context tenant ${contextTenantId} does not match the supplied tenant ${tenantId}`,
+        {
+          entityName: this.adapter?.entityName,
+          entityId: reservationData?.id,
+          operation: 'cancelReservationWithRelease',
+        }
+      )
+    }
+
+    const storedReservation = this.#storedMockReservation(
+      reservationTable,
+      reservationData,
+      effectiveTenantId
     )
 
-    // Resolve and validate every candidate's record BEFORE any mock mutation, so
-    // a case C line aborts while the store is still untouched. The existing
-    // releasedAt filter above is the repeat-release guard, so a line released
-    // once is not selected again and cannot be decremented twice.
+    // The stored row is the ONLY authority for ownership. Without one there is
+    // nothing to verify ownership against, so the caller payload is NOT used as
+    // a fallback: this returns the null result that the adapter's `update`
+    // resolved before, and it does so BEFORE any line or capacity work.
+    if (!storedReservation) {
+      return { reservation: null, release: { released: [], noOp: true } }
+    }
+
+    // Used only to VERIFY line ownership below; when the stored row carries no
+    // accommodation there is nothing to compare and no target is chosen.
+    const authoritativeAccommodationId = storedReservation.accommodationId ?? null
+
+    // Explicit unreleased selection. This is the repeat-cancel guard: a line
+    // already marked released is never selected again, so it cannot decrement
+    // capacity a second time. Selection is independent of the reservation's
+    // status — no candidates does NOT mean the status is already cancelled.
+    const candidates = linesStore
+      ? Array.from(linesStore.values()).filter(
+        (line) => line?.reservationId === reservationData.id && (line?.releasedAt ?? null) === null
+      )
+      : []
+
+    for (const line of candidates) {
+      if (line?.tenantId != null && line.tenantId !== effectiveTenantId) {
+        throw new RepositoryValidationError(
+          `Reservation line ${line.id} belongs to tenant ${line.tenantId}, not ${effectiveTenantId}`,
+          { entityName: 'reservation_lines', entityId: line.id, operation: 'cancelReservationWithRelease' }
+        )
+      }
+      if (
+        authoritativeAccommodationId != null &&
+        line?.targetId != null &&
+        line.targetId !== authoritativeAccommodationId
+      ) {
+        throw new RepositoryValidationError(
+          `Reservation line ${line.id} targets ${line.targetId}, but reservation ${reservationData.id} holds ${authoritativeAccommodationId}; refusing to choose a target`,
+          { entityName: 'reservation_lines', entityId: line.id, operation: 'cancelReservationWithRelease' }
+        )
+      }
+    }
+
+    // Resolve and validate every candidate's record BEFORE any mutation, so a
+    // case C line aborts while the store is still untouched. Policy unchanged.
     const plan = candidates.map((line) => ({
       line,
       ...this.#resolveRecordedReleaseDates(line),
     }))
 
-    const released = []
-
-    for (const { line, dates } of plan) {
-      for (const date of dates) {
-        const row = this.#mockAvailabilityRow(availStore, tenantId, line.targetId, date)
-        if (!row) continue
-        const inventory = Number(row.inventory ?? row.capacity) || 0
-        const releasedQty = Number(line.quantity || 1)
-        const reservedCount = Math.max(0, (Number(row.reservedCount ?? (row.capacity != null && row.available != null ? row.capacity - row.available : 0)) || 0) - releasedQty)
-        availStore.set(row.id, {
-          ...row,
-          reservedCount,
-          available: Math.max(0, inventory - reservedCount),
-          status: row.isBlocked === true ? 'blocked' : (reservedCount >= inventory ? 'reserved' : 'available'),
-          updatedAt: new Date().toISOString(),
-        })
-      }
-      const now = new Date().toISOString()
-      linesStore.set(line.id, { ...line, releasedAt: now, updatedAt: now })
-      released.push({ ...line, releasedAt: now })
+    // Deltas are derived here from the validated lines and aggregated by the
+    // actual capacity row, so two lines sharing a row are checked and released
+    // as one row rather than sequentially clamped against each other.
+    //
+    // An ABSENT availability table is not the same as an empty one: with an
+    // empty table every lookup below misses and is refused, but with the table
+    // absent the lookups must not be skipped at all — skipping them would still
+    // mark the lines released, publishing a release with no capacity change.
+    // So any plan entry that actually occupies dates requires the table, and its
+    // absence is refused before any mutation. A plan with no dates — a valid
+    // non-DATE_RANGE line, not-applicable — has nothing to release, so it is
+    // scoped separately and still succeeds. This is distinct from a case C line
+    // (a record present but invalid), which aborts above at validation.
+    const requiresCapacityTable = plan.some(({ dates }) => dates.length > 0)
+    if (requiresCapacityTable && !availStore) {
+      throw new AvailabilityConflictError(
+        `Cannot release: the availability table is absent, but ${reservationData.id} occupies dates that must be released`
+      )
     }
 
-    return { released, noOp: released.length === 0 }
+    const capacityPlan = new Map()
+    for (const { line, dates } of plan) {
+      const releasedQty = Number(line.quantity || 1)
+      for (const date of dates) {
+        const row = this.#mockAvailabilityRow(availStore, effectiveTenantId, line.targetId, date)
+        if (!row) {
+          throw new AvailabilityConflictError(
+            `Cannot release: no availability row for tenant ${effectiveTenantId}, target ${line.targetId}, date ${date}`
+          )
+        }
+        const existing = capacityPlan.get(row.id)
+        if (existing) { existing.delta += releasedQty; continue }
+        capacityPlan.set(row.id, { row, delta: releasedQty })
+      }
+    }
+    // Aggregate precondition, once per row, before any write. The previous
+    // behaviour subtracted per line and clamped at zero, so a second line on
+    // a shared row silently released less than it should.
+    for (const { row, delta } of capacityPlan.values()) {
+      if (this.#mockReservedCount(row) - delta < 0) {
+        throw new AvailabilityConflictError(
+          `Cannot release: date ${row.date} has insufficient reservedCount`
+        )
+      }
+    }
+
+    const now = new Date().toISOString()
+
+    // Every replacement object is prepared here, before the first write, and no
+    // stored row is ever mutated in place.
+    const nextReservation = this.#mergeMockRow(storedReservation, reservationData)
+    const nextCapacity = Array.from(capacityPlan.values(), ({ row, delta }) => ({
+      id: row.id,
+      next: this.#mockReleasedAvailability(row, this.#mockReservedCount(row) - delta, now),
+    }))
+    const nextLines = plan.map(({ line }) => ({
+      id: line.id,
+      next: { ...line, releasedAt: now, updatedAt: now },
+    }))
+
+    const preImages = [
+      {
+        table: reservationTable,
+        name: this.adapter?.entityName,
+        id: nextReservation.id,
+        image: { ...storedReservation },
+      },
+    ]
+    for (const entry of nextCapacity) {
+      preImages.push({
+        table: availStore,
+        name: 'availability',
+        id: entry.id,
+        image: { ...capacityPlan.get(entry.id).row },
+      })
+    }
+    for (const entry of nextLines) {
+      preImages.push({
+        table: linesStore,
+        name: 'reservation_lines',
+        id: entry.id,
+        image: { ...candidates.find((line) => line.id === entry.id) },
+      })
+    }
+
+    try {
+      reservationTable.set(nextReservation.id, nextReservation)
+      for (const entry of nextCapacity) availStore.set(entry.id, entry.next)
+      for (const entry of nextLines) linesStore.set(entry.id, entry.next)
+    } catch (error) {
+      const unrestored = []
+      for (let i = preImages.length - 1; i >= 0; i--) {
+        const { table, name, id, image } = preImages[i]
+        try {
+          RAW_MAP_SET.call(table, id, image)
+        } catch {
+          unrestored.push(`${name}/${id}`)
+        }
+      }
+      if (unrestored.length > 0) {
+        throw new AggregateError(
+          [error],
+          `Mock cancellation rollback incomplete for: ${unrestored.join(', ')}`
+        )
+      }
+      throw error
+    }
+
+    // Notification is deliberately OUTSIDE the rollback section, and that is a
+    // real limit, not an oversight. `_emit` is synchronous
+    // (base.repository.js:79-81): it calls `eventBus.emit(...)` directly, so a
+    // subscriber that throws propagates and rejects the caller AFTER the stores
+    // are already committed. Rollback does NOT cover it, and this comment does
+    // not claim otherwise.
+    //
+    // This preserves the established contract rather than changing it. Before
+    // this section, `_releaseMockCapacity` ran first and `this.update(...)` then
+    // emitted from inside BaseRepository.update, so a throwing subscriber also
+    // rejected the caller with capacity already mutated and the row already
+    // written. Swallowing subscriber errors or rolling committed stores back
+    // because a listener failed would be a new policy, not a fix, so neither is
+    // done here. A store-write failure and a listener failure are different
+    // things and only the first is restored.
+    this._emit('repository:entity_updated', { data: reservationData })
+
+    return {
+      reservation: nextReservation,
+      release: {
+        released: nextLines.map((entry) => entry.next),
+        noOp: nextLines.length === 0,
+      },
+    }
   }
 
   async cancelReservationWithRelease(reservationData, tenantId) {
@@ -791,11 +1096,11 @@ export class ReservationRepository extends BaseRepository {
     const hasPostgres = this.adapter?.provider?.name === 'postgres'
 
     if (!hasPostgres) {
-      this.#releaseMockCapacity(reservationData.id, tenantId)
-      return this.update(
-        { id: reservationData.id, tenantId },
-        reservationData
-      )
+      // _enforceContext was previously applied by this.update(); it is called
+      // explicitly here because the synchronous section replaces that call.
+      this._enforceContext()
+      const { reservation } = this.#commitMockCancellationSync(reservationData, tenantId)
+      return reservation
     }
 
     return transaction(async (client) => {

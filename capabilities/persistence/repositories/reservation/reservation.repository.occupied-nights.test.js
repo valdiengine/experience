@@ -165,6 +165,14 @@ async function pgRepo(provider = realProvider()) {
 /** A repository on the in-memory path. */
 async function mockRepo(provider = realProvider(), store = null) {
   const s = store || resetMockStore('availability', 'reservation_lines', 'reservations')
+  // The real writable adapter persists on create; the MockReservationAdapter in
+  // test-support is a stub whose create/update return copies without writing.
+  // Cancellation requires the authoritative stored reservation row, so the
+  // fixture seeds it — matching what the runtime adapter would have left behind
+  // after createReservationWithLine. No assertion below depends on this.
+  if (!s.get('reservations').has(RES_ID)) {
+    s.get('reservations').set(RES_ID, { ...reservationPayload(), deletedAt: null })
+  }
   const repo = new ReservationRepository(new MockReservationAdapter(), createContext(provider, TENANT))
   await repo.initialize()
   return { repo, store: s }
@@ -1300,6 +1308,9 @@ await test('a record created in one timezone releases identically when transferr
 
       const store = resetMockStore('availability', 'reservation_lines', 'reservations')
       seedAvailability(store, { start, nights, tenantId: TENANT, accommodationId: CABIN, inventory: 4, reservedCount: 1 })
+      // The stub adapter does not persist the reservation, so seed the row the
+      // runtime adapter would have stored. Release refuses without it.
+      store.get('reservations').set(RES_ID, { id: RES_ID, tenantId: TENANT, accommodationId: CABIN, status: 'pending', deletedAt: null })
       store.get('reservation_lines').set('line-1', {
         id: 'line-1',
         reservationId: RES_ID,
