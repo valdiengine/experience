@@ -553,6 +553,83 @@ await test('a real Map repository that cannot find the reservation does not repo
 })
 
 // ---------------------------------------------------------------------------
+// 5b. BOOKING-LEGACY-RELEASE-GATE-1 reaches the manager unchanged
+// ---------------------------------------------------------------------------
+
+// The manager has no legacy fallback of its own: a refusal raised by the
+// repository must propagate out of cancelReservation with nothing done. These
+// use the real repository on the real writable in-memory adapter, so the store
+// assertions below are real state, not spy bookkeeping.
+
+await test('a record-less DATE_RANGE line leaves no cancelled cache state, event or notification', async () => {
+  const store = seedStore()
+  // A line shaped like one written before the occupied-night record existed.
+  store.get(LINE_TABLE).get('line-1').metadata = null
+  const { repo } = await mapRepository(store)
+  const { context, events, notifications } = managerContext({ repo, persistenceProvider: 'mock', withNotifications: true })
+  const manager = new ReservationManager(context)
+
+  await assertRejects(
+    () => manager.cancelReservation(RES_ID, 'guest request'),
+    'refusing to release it because the consumed dates cannot be derived from stored bounds',
+    'a record-less DATE_RANGE line through the manager'
+  )
+
+  assertEqual(
+    manager.getById(RES_ID)?.status,
+    RESERVATION_STATUS.REQUESTED,
+    'the manager cache must not read cancelled after a refusal'
+  )
+  assert(!events.some((e) => e.event === RESERVATION_EVENTS.CANCELLED), 'no cancelled event may be emitted')
+  assertEqual(notifications.length, 0, 'no cancellation notification may be sent')
+  assertDeep(reservedCounts(store), [NIGHTS, NIGHTS], 'no capacity may be released')
+  assertEqual(store.get(LINE_TABLE).get('line-1').releasedAt, null, 'the line must not be marked released')
+  assertEqual(
+    store.get(RESERVATION_TABLE).get(RES_ID).status,
+    RESERVATION_STATUS.REQUESTED,
+    'the stored reservation status must be unchanged'
+  )
+})
+
+await test('a mixed reservation aborts completely through the manager, including the valid line', async () => {
+  const store = seedStore()
+  // line-1 keeps its valid version-1 record from seedStore; the record-less
+  // line comes second, so the refusal happens after a valid plan was resolved.
+  store.get(LINE_TABLE).set('line-2', {
+    id: 'line-2',
+    reservationId: RES_ID,
+    lineOrder: 2,
+    targetType: 'accommodation',
+    targetId: CABIN,
+    temporal: { mode: 'DATE_RANGE', startDate: START, endDate: END },
+    quantity: NIGHTS,
+    metadata: null,
+    releasedAt: null,
+  })
+  const { repo } = await mapRepository(store)
+  const { context, events, notifications } = managerContext({ repo, persistenceProvider: 'mock', withNotifications: true })
+  const manager = new ReservationManager(context)
+
+  await assertRejects(
+    () => manager.cancelReservation(RES_ID, 'guest request'),
+    'refusing to release it because the consumed dates cannot be derived from stored bounds',
+    'a mixed reservation whose second line lacks a record'
+  )
+
+  assertEqual(manager.getById(RES_ID)?.status, RESERVATION_STATUS.REQUESTED, 'the cache must not read cancelled')
+  assert(!events.some((e) => e.event === RESERVATION_EVENTS.CANCELLED), 'no cancelled event may be emitted')
+  assertEqual(notifications.length, 0, 'no cancellation notification may be sent')
+  assertDeep(reservedCounts(store), [NIGHTS, NIGHTS], 'not even the valid line may release its capacity')
+  assertEqual(store.get(LINE_TABLE).get('line-1').releasedAt, null, 'the valid line must not be marked released')
+  assertEqual(store.get(LINE_TABLE).get('line-2').releasedAt, null, 'the refused line must not be marked released')
+  assertEqual(
+    store.get(RESERVATION_TABLE).get(RES_ID).status,
+    RESERVATION_STATUS.REQUESTED,
+    'the stored reservation status must be unchanged'
+  )
+})
+
+// ---------------------------------------------------------------------------
 // 6. Repo-less cache-backed cancellation is preserved
 // ---------------------------------------------------------------------------
 

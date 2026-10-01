@@ -822,42 +822,67 @@ await test('a record present with a null temporal does not silently release zero
 })
 
 // ---------------------------------------------------------------------------
-// 8. Release: legacy branch is preserved for lines with no record
+// 8. Release: record-less DATE_RANGE is refused (BOOKING-LEGACY-RELEASE-GATE-1)
 // ---------------------------------------------------------------------------
 
-await test('a line with no record keeps the existing legacy inclusive arithmetic', async () => {
+await test('a DATE_RANGE line with no record is refused instead of releasing legacy dates', async () => {
+  // CHANGED EXPECTATION (was: "a line with no record keeps the existing legacy
+  // inclusive arithmetic", asserting the legacy dates were released).
+  // BOOKING-LEGACY-RELEASE-GATE-1 refuses this line instead.
   const client = createClientDouble(releaseProgram({
     selectLines: () => rows([lineRow({ metadata: null })]),
   }))
   installClient(client)
   try {
     const repo = await pgRepo()
-    await repo.releaseReservationLines(client, RES_ID, TENANT)
-    assertDeep(
-      client.callsOf('releaseCapacity').map((s) => s.params[3]),
-      legacyDates(START, END),
-      'the legacy branch must be unchanged'
+    const error = await assertRejects(
+      () => repo.releaseReservationLines(client, RES_ID, TENANT),
+      'AvailabilityConsumptionRecordError',
+      'a record-less DATE_RANGE line'
     )
+    assertEqual(error.details.lineId, 'line-1', 'the offending line id must be reported')
+    assertEqual(error.details.reservationId, RES_ID, 'the reservation id must be reported for diagnosis')
+    assertEqual(error.details.reason, 'DATE_RANGE line has no versioned occupied-night record', 'the reason must be recorded')
+    assertEqual(
+      JSON.stringify(error.details).includes('pre-record'),
+      false,
+      'the metadata object must not be dumped into the error'
+    )
+    assertEqual(client.callsOf('markLineReleased').length, 0, 'the line must not be marked released')
+    assertEqual(client.callsOf('releaseCapacity').length, 0, 'no capacity may be released')
   } finally {
     uninstallClient()
   }
 })
 
-await test('a line with unrelated metadata but no record still uses the legacy branch', async () => {
+await test('a DATE_RANGE line with unrelated metadata but no record is refused', async () => {
+  // CHANGED EXPECTATION (was: "a line with unrelated metadata but no record still
+  // uses the legacy branch"). Unrelated metadata is still not a record.
   const client = createClientDouble(releaseProgram({
     selectLines: () => rows([lineRow({ metadata: JSON.stringify({ channel: 'web', note: 'pre-record row' }) })]),
   }))
   installClient(client)
   try {
     const repo = await pgRepo()
-    await repo.releaseReservationLines(client, RES_ID, TENANT)
-    assertDeep(client.callsOf('releaseCapacity').map((s) => s.params[3]), legacyDates(START, END), 'legacy arithmetic must be preserved')
+    const error = await assertRejects(
+      () => repo.releaseReservationLines(client, RES_ID, TENANT),
+      'AvailabilityConsumptionRecordError',
+      'unrelated metadata without a record'
+    )
+    assertEqual(error.details.lineId, 'line-1', 'the offending line id must be reported')
+    assertEqual(
+      JSON.stringify(error.details).includes('pre-record'),
+      false,
+      'the unrelated metadata values must not be dumped into the error'
+    )
+    assertEqual(client.callsOf('releaseCapacity').length, 0, 'no capacity may be released')
   } finally {
     uninstallClient()
   }
 })
 
 await test('a record-less non-DATE_RANGE line performs no capacity release and is still marked released', async () => {
+  // UNCHANGED: the gate is deliberately not broadened to other temporal modes.
   const client = createClientDouble(releaseProgram({
     selectLines: () => rows([lineRow({ temporal: { mode: 'NIGHTLY', startDate: START, endDate: END }, metadata: null })]),
   }))
@@ -865,23 +890,47 @@ await test('a record-less non-DATE_RANGE line performs no capacity release and i
   try {
     const repo = await pgRepo()
     await repo.releaseReservationLines(client, RES_ID, TENANT)
-    assertEqual(client.callsOf('releaseCapacity').length, 0, 'the non-DATE_RANGE legacy behaviour is unchanged: no capacity work')
+    assertEqual(client.callsOf('releaseCapacity').length, 0, 'a record-less non-DATE_RANGE line does no capacity work')
     assertEqual(client.callsOf('markLineReleased').length, 1, 'the line is still marked released, as before')
   } finally {
     uninstallClient()
   }
 })
 
-await test('historical cancellation is not blanket-blocked: record-less lines release as they always did', async () => {
+await test('historical cancellation of a record-less DATE_RANGE line is refused, not blanket-blocked by mode', async () => {
+  // CHANGED EXPECTATION (was: "historical cancellation is not blanket-blocked:
+  // record-less lines release as they always did", asserting noOp false and the
+  // legacy dates released). It is now refused, and the refusal is specific to the
+  // missing record rather than to cancellation as such.
   const client = createClientDouble(releaseProgram({
     selectLines: () => rows([lineRow({ metadata: null })]),
   }))
   installClient(client)
   try {
     const repo = await pgRepo()
+    await assertRejects(
+      () => repo.releaseReservationLines(client, RES_ID, TENANT),
+      'AvailabilityConsumptionRecordError',
+      'a historical record-less DATE_RANGE line'
+    )
+    assertEqual(client.callsOf('markLineReleased').length, 0, 'the historical line must not be marked released')
+    assertEqual(client.callsOf('releaseCapacity').length, 0, 'its capacity must stay held, not be mis-released')
+  } finally {
+    uninstallClient()
+  }
+})
+
+await test('a cancellation with no lines at all is not a legacy-line refusal', async () => {
+  // The gate refuses a record-less DATE_RANGE *line*, not cancellation itself.
+  const client = createClientDouble(releaseProgram({
+    selectLines: () => rows([]),
+  }))
+  installClient(client)
+  try {
+    const repo = await pgRepo()
     const result = await repo.releaseReservationLines(client, RES_ID, TENANT)
-    assertEqual(result.noOp, false, 'a historical line must still release')
-    assertDeep(client.callsOf('releaseCapacity').map((s) => s.params[3]), legacyDates(START, END), 'its legacy dates must be released')
+    assertEqual(result.noOp, true, 'a reservation with no lines still completes as a no-op release')
+    assertEqual(client.callsOf('releaseCapacity').length, 0, 'no capacity work, as before')
   } finally {
     uninstallClient()
   }
@@ -1068,6 +1117,68 @@ await test('an invalid record rolls back the reservation status update in the sa
   }
 })
 
+await test('a record-less DATE_RANGE line aborts the whole PostgreSQL cancellation', async () => {
+  const client = createClientDouble({
+    updateReservation: () => rows([{ id: RES_ID, status: 'cancelled' }]),
+    selectLines: () => rows([lineRow({ metadata: null })]),
+  })
+  installClient(client)
+  try {
+    const repo = await pgRepo()
+    await assertRejects(
+      () => repo.cancelReservationWithRelease({ id: RES_ID, status: 'cancelled' }, TENANT),
+      'AvailabilityConsumptionRecordError',
+      'a record-less DATE_RANGE line on the PostgreSQL path'
+    )
+    assertEqual(client.callsOf('updateReservation').length, 1, 'the status update is issued before the line plan is built')
+    assertEqual(client.callsOf('markLineReleased').length, 0, 'no line release marker may be written')
+    assertEqual(client.callsOf('releaseCapacity').length, 0, 'no capacity may be released')
+    // What this double proves is the orchestration only: ROLLBACK was issued and
+    // COMMIT was not. That PostgreSQL actually discards the status update is the
+    // database's guarantee, not something a recording client can demonstrate.
+    assertEqual(client.callsOf('rollback').length, 1, 'ROLLBACK must be issued for the refusal')
+    assertEqual(client.callsOf('commit').length, 0, 'COMMIT must never be issued for the refusal')
+  } finally {
+    uninstallClient()
+  }
+})
+
+await test('a mixed PostgreSQL cancellation is aborted even when the record-less line comes last', async () => {
+  // The valid line is resolved first, but the whole plan is built before any
+  // mutation, so the later refusal must cancel the earlier line's release too.
+  const record = validRecord(civilRange(START, NIGHTS), 1)
+  const client = createClientDouble({
+    updateReservation: () => rows([{ id: RES_ID, status: 'cancelled' }]),
+    selectLines: () => rows([
+      lineRow({ metadata: JSON.stringify({ __occupiedNights: record }) }),
+      lineRow({ id: 'line-2', line_order: 2, metadata: null }),
+    ]),
+  })
+  installClient(client)
+  try {
+    const repo = await pgRepo()
+    await assertRejects(
+      () => repo.cancelReservationWithRelease({ id: RES_ID, status: 'cancelled' }, TENANT),
+      'AvailabilityConsumptionRecordError',
+      'a mixed reservation whose last line lacks a record'
+    )
+    assertEqual(
+      client.callsOf('markLineReleased').length,
+      0,
+      'the valid line must not be marked released once a later line refuses'
+    )
+    assertEqual(
+      client.callsOf('releaseCapacity').length,
+      0,
+      'no capacity may be released for the valid line either'
+    )
+    assertEqual(client.callsOf('rollback').length, 1, 'ROLLBACK must be issued for the whole cancellation')
+    assertEqual(client.callsOf('commit').length, 0, 'COMMIT must never be issued for the refusal')
+  } finally {
+    uninstallClient()
+  }
+})
+
 await test('cancellation with no lines is a no-op and still commits', async () => {
   const client = createClientDouble({
     updateReservation: () => rows([{ id: RES_ID, status: 'cancelled' }]),
@@ -1201,7 +1312,9 @@ await test('the in-memory path releases the recorded dates and does not decremen
   )
 })
 
-await test('the in-memory path keeps the legacy branch for a record-less line', async () => {
+await test('the in-memory path refuses a record-less DATE_RANGE line and changes nothing', async () => {
+  // CHANGED EXPECTATION (was: "the in-memory path keeps the legacy branch for a
+  // record-less line", asserting the legacy dates were released on the Map path).
   const { repo, store } = await mockRepo()
   seedAvailability(store, { start: START, nights: NIGHTS, tenantId: TENANT, accommodationId: CABIN, inventory: 4, reservedCount: 1 })
   store.get('reservation_lines').set('line-1', {
@@ -1214,13 +1327,35 @@ await test('the in-memory path keeps the legacy branch for a record-less line', 
     metadata: null,
     releasedAt: null,
   })
-  const end = new Date(END)
-  end.setDate(end.getDate() - 1)
-  await repo.cancelReservationWithRelease({ id: RES_ID, status: 'cancelled' }, TENANT)
+  const before = JSON.stringify({
+    reservation: store.get('reservations').get(RES_ID),
+    availability: availabilityRows(store),
+    line: store.get('reservation_lines').get('line-1'),
+  })
+
+  const error = await assertRejects(
+    () => repo.cancelReservationWithRelease({ id: RES_ID, status: 'cancelled' }, TENANT),
+    'AvailabilityConsumptionRecordError',
+    'a record-less DATE_RANGE line on the in-memory path'
+  )
+  assertEqual(error.details.lineId, 'line-1', 'the offending line id must be reported')
+  assertEqual(error.details.reservationId, RES_ID, 'the reservation id must be reported for diagnosis')
+
   assertDeep(
-    availabilityRows(store).filter((r) => r.reservedCount === 0).map((r) => r.date),
-    legacyDates(START, END),
-    'the legacy arithmetic must be preserved on the in-memory path'
+    availabilityRows(store).map((r) => r.reservedCount),
+    new Array(NIGHTS).fill(1),
+    'every recorded occupied night must keep its capacity'
+  )
+  assertEqual(store.get('reservation_lines').get('line-1').releasedAt, null, 'the line must not be marked released')
+  assertEqual(store.get('reservations').get(RES_ID).status, 'pending', 'the reservation status must be unchanged')
+  assertEqual(
+    JSON.stringify({
+      reservation: store.get('reservations').get(RES_ID),
+      availability: availabilityRows(store),
+      line: store.get('reservation_lines').get('line-1'),
+    }),
+    before,
+    'reservation status, capacity and the line release marker must all be untouched'
   )
 })
 
@@ -1335,22 +1470,34 @@ await test('a record created in one timezone releases identically when transferr
   assertEqual(transferred, ZONES.length * DST_WINDOWS.length, 'every source zone and window must be transferred')
 })
 
-await test('the legacy branch is preserved and is demonstrably timezone-dependent', () => {
-  // This is the pre-existing local-time arithmetic, left byte-for-byte unchanged.
-  // It is shown here as evidence of the deployment gate, not as correctness.
-  const results = ZONES.map((tz) => ({ tz, r: runFixture(tz, 'legacy-release', START, NIGHTS) }))
+await test('a record-less DATE_RANGE line is refused in every timezone, before any date is derived', () => {
+  // CHANGED EXPECTATION (was: "the legacy branch is preserved and is demonstrably
+  // timezone-dependent", asserting a zone-dependent released count > 0).
+  // BOOKING-LEGACY-RELEASE-GATE-1 refuses the line instead, and because the
+  // refusal precedes any date derivation the outcome no longer depends on the
+  // ambient zone at all.
+  const results = ZONES.map((tz) => ({ tz, r: runFixture(tz, 'record-less-refusal', START, NIGHTS) }))
   for (const { tz, r } of results) {
-    assertEqual(r.effectiveZone, tz, `legacy fixture must run in ${tz}`)
-    assert(r.releasedCount > 0, `TZ=${tz}: the legacy branch must still release capacity`)
-    assert(r.releasedCount <= NIGHTS, `TZ=${tz}: the legacy branch must not release more nights than were consumed`)
+    assertEqual(r.effectiveZone, tz, `refusal fixture must run in ${tz}`)
+    assertEqual(r.refused, true, `TZ=${tz}: the record-less DATE_RANGE line must be refused`)
+    assertEqual(r.errorName, 'AvailabilityConsumptionRecordError', `TZ=${tz}: the typed refusal must be raised`)
+    assertEqual(
+      r.errorReason,
+      'DATE_RANGE line has no versioned occupied-night record',
+      `TZ=${tz}: the refusal reason must be the missing record`
+    )
+    assertEqual(r.releasedCount, 0, `TZ=${tz}: no capacity may be released by a refused line`)
+    assertDeep(r.stillReservedDates, r.seededDates, `TZ=${tz}: every seeded night must keep its capacity`)
+    assertEqual(r.lineReleasedAt, null, `TZ=${tz}: the line must not be marked released`)
+    assertEqual(r.reservationStatus, 'pending', `TZ=${tz}: the reservation status must be unchanged`)
   }
-  // Santiago is UTC-3/-4, so the legacy local-time arithmetic loses a night that
-  // the UTC contract keeps. The record exists precisely to remove this dependency.
-  const utcCount = results.find((x) => x.tz === 'UTC').r.releasedCount
-  const santiagoCount = results.find((x) => x.tz === 'America/Santiago').r.releasedCount
-  assert(
-    santiagoCount < utcCount,
-    `legacy output must be zone-dependent: UTC released ${utcCount}, Santiago released ${santiagoCount}`
+  // The property that replaces the old zone-dependence assertion: every zone
+  // produces the identical outcome, because no date arithmetic runs at all.
+  const signatures = new Set(results.map(({ r }) => JSON.stringify([r.refused, r.releasedCount, r.stillReservedDates])))
+  assertEqual(
+    signatures.size,
+    1,
+    `the refusal outcome must be identical in every zone, got ${signatures.size} distinct outcomes`
   )
 })
 

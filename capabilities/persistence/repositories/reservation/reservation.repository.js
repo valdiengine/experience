@@ -67,11 +67,16 @@ export class ReservationRepository extends BaseRepository {
    * #legacyLocalExpandRange for that reason alone. This is a compatibility
    * freeze, NOT a claim that the arithmetic is correct, and NOT evidence that
    * releasing historical reservations is safe or approved for deployment. The
-   * local-time iteration remains timezone-dependent and remains subject to the
-   * historical-release deployment gate in
-   * docs/ai/BOOKING_OCCUPIED_NIGHTS_1B_IMPLEMENTATION_REPORT.md. Resolving that
-   * gate needs a release-policy decision that is explicitly pending, and it may
-   * not be resolved by "improving" the arithmetic here.
+   * local-time iteration remains timezone-dependent.
+   *
+   * As of BOOKING-LEGACY-RELEASE-GATE-1 this is no longer reachable from any
+   * release path: a DATE_RANGE line without a versioned occupied-night record is
+   * refused at #resolveRecordedReleaseDates, so the historical-release deployment
+   * gate recorded in
+   * docs/ai/BOOKING_OCCUPIED_NIGHTS_1B_IMPLEMENTATION_REPORT.md is now resolved
+   * by refusal rather than by trusting these bounds. What remains reachable is
+   * #prepareNewLineConsumption for a NON-DATE_RANGE line at creation time, which
+   * is unchanged. The arithmetic itself must not be "improved" here.
    *
    * @param {object} temporal - { mode, startDate, endDate }
    * @returns {string[]} Array of date strings 'YYYY-MM-DD'
@@ -105,32 +110,6 @@ export class ReservationRepository extends BaseRepository {
       current.setDate(current.getDate() + 1)
     }
     return dates
-  }
-
-  /**
-   * LEGACY COMPATIBILITY BRANCH — BOOKING-OCCUPIED-NIGHTS-1B.
-   *
-   * This is the pre-existing local-time expansion above. It is deliberately left
-   * byte-for-byte unchanged and is reached only for lines that carry no reserved
-   * consumption record. It exists to keep the undeployed code's previous
-   * behaviour available for rows written before the record was introduced.
-   *
-   * It is NOT evidence that historical release is correct. It does not resolve
-   * the unknown create-time timezone, code version or timezone-rule version of
-   * any existing row, and it is not an authorisation to deploy or to cancel real
-   * historical reservations. See the deployment gate in
-   * docs/ai/BOOKING_OCCUPIED_NIGHTS_1B_IMPLEMENTATION_REPORT.md.
-   *
-   * Do not deduplicate, normalise or otherwise "improve" its output: any change
-   * here alters existing behaviour rather than preserving it.
-   *
-   * As of BOOKING-CALENDAR-UTC-1 this branch no longer depends on
-   * AvailabilityCalendar. It calls the private #legacyLocalExpandRange, so a
-   * future change to the shared calendar can no longer move this output. That
-   * isolation is the whole point; the arithmetic is still the historical one.
-   */
-  #legacyExpandDateRange(temporal) {
-    return this.#expandDateRange(temporal)
   }
 
   /**
@@ -461,32 +440,80 @@ export class ReservationRepository extends BaseRepository {
    * Resolve which dates a release must act on, from persisted line data only.
    * Request-supplied metadata is never consulted.
    *
-   *   A. reserved record absent          -> legacy compatibility branch
-   *   B. record present and valid        -> the recorded dates
-   *   C. record present but invalid      -> typed error, rolled back
+   *   A. reserved record absent, DATE_RANGE  -> REFUSED (BOOKING-LEGACY-RELEASE-GATE-1)
+   *   B. reserved record absent, other mode  -> not-applicable, no capacity work
+   *   C. reserved record present and valid   -> the recorded dates
+   *   D. reserved record present but invalid -> typed error, aborted before mutation
    *
-   * A case C line is never downgraded to A.
+   * This is the single resolution boundary used by BOTH the PostgreSQL release
+   * (releaseReservationLines) and the writable Map release
+   * (#commitMockCancellationSync), so one refusal rule covers both adapter paths.
+   *
+   * APPROVED PRODUCT DECISION — BOOKING-LEGACY-RELEASE-GATE-1.
+   * Automatic cancellation/release of a historical DATE_RANGE line that carries
+   * no versioned occupied-night record is refused. This replaces the former
+   * legacy range-based release, which derived the consumed dates from the stored
+   * temporal bounds and therefore re-introduced the exact timezone dependency the
+   * record exists to remove: BOOKING-OCCUPIED-NIGHTS-1B section 7 measured it
+   * releasing 4 nights in UTC but only 3 in America/Santiago and
+   * Australia/Lord_Howe for the same 4-night stay. Those bounds do not record the
+   * create-time timezone, code version or timezone-rule version of the row, so the
+   * dates they imply are not evidence of what was consumed.
+   *
+   * The refusal happens HERE, while the per-line plan is being built, so on the
+   * Map path it precedes publication entirely and no stored row is written at all.
+   * On the PostgreSQL path the reservation status UPDATE has already been issued in
+   * the same transaction() callback: the refusal precedes every released_at and
+   * capacity write and is unwound by ROLLBACK. That path does make the status write
+   * before refusing — only its commit is avoided.
+   *
+   * The throw is intentionally not caught, and the two recovery stories differ. On
+   * PostgreSQL the enclosing transaction() unwinds the earlier status update. On the
+   * Map path nothing needs restoring here, because the refusal precedes publication;
+   * the pre-image replay in #commitMockCancellationSync is a separate mechanism for a
+   * different failure class — a store write that throws during publication.
+   *
+   * Scope limits, deliberate:
+   *   - The consumed dates are NOT inferred from stored bounds as a fallback.
+   *   - A record-less line with any non-DATE_RANGE temporal mode keeps its
+   *     not-applicable behaviour (no capacity work, still marked released). This
+   *     decision does not broaden to unsupported temporal modes, which remain a
+   *     separate open question.
+   *   - A reservation with no lines at all still cancels; only a DATE_RANGE line
+   *     without a record is refused.
+   *   - No backfill, no historical-data mutation, no cancel-without-release
+   *     feature. Records for historical rows are an operational decision.
    *
    * Reserved-record presence is inspected *before* the temporal-mode branch is
    * chosen. A record governs the release whatever temporal.mode says, so a line
    * whose mode is missing or incompatible still has its record validated and
    * throws rather than being skipped and marked released without releasing its
-   * capacity. Only lines with no record at all keep the existing mode-specific
-   * legacy behaviour.
+   * capacity.
    *
    * @param {object} line
-   * @returns {{ dates: string[], source: 'legacy'|'recorded'|'not-applicable' }}
+   * @param {string} [reservationId] for diagnosis only; never used to derive dates
+   * @returns {{ dates: string[], source: 'recorded'|'not-applicable' }}
    */
-  #resolveRecordedReleaseDates(line) {
+  #resolveRecordedReleaseDates(line, reservationId) {
     const metadata = this.#readLineMetadata(line)
     const hasRecord = Object.prototype.hasOwnProperty.call(metadata, RESERVED_OCCUPIED_NIGHTS_KEY)
 
     if (!hasRecord) {
-      // No record: keep the existing mode-specific legacy behaviour untouched.
+      // A record governs the release whatever temporal.mode says, so the mode
+      // branch is only consulted when there is no record at all.
       if (line?.temporal?.mode !== 'DATE_RANGE') {
         return { dates: [], source: 'not-applicable' }
       }
-      return { dates: this.#legacyExpandDateRange(line.temporal), source: 'legacy' }
+      // BOOKING-LEGACY-RELEASE-GATE-1: refuse instead of expanding stored
+      // bounds. Identifiers only; the metadata object is never included.
+      throw new AvailabilityConsumptionRecordError(
+        `Reservation ${reservationId ?? line?.reservationId ?? '(unknown)'} line ${line?.id} is a DATE_RANGE line with no versioned occupied-night record; refusing to release it because the consumed dates cannot be derived from stored bounds`,
+        {
+          reservationId: reservationId ?? line?.reservationId ?? null,
+          lineId: line?.id ?? null,
+          reason: 'DATE_RANGE line has no versioned occupied-night record',
+        }
+      )
     }
 
     return {
@@ -948,10 +975,11 @@ export class ReservationRepository extends BaseRepository {
     }
 
     // Resolve and validate every candidate's record BEFORE any mutation, so a
-    // case C line aborts while the store is still untouched. Policy unchanged.
+    // refused record-less DATE_RANGE line (BOOKING-LEGACY-RELEASE-GATE-1) or a
+    // case D invalid record aborts while the store is still untouched.
     const plan = candidates.map((line) => ({
       line,
-      ...this.#resolveRecordedReleaseDates(line),
+      ...this.#resolveRecordedReleaseDates(line, reservationData.id),
     }))
 
     // Deltas are derived here from the validated lines and aggregated by the
@@ -1155,12 +1183,13 @@ export class ReservationRepository extends BaseRepository {
     }
 
     // Resolve and validate every line's record BEFORE the first mutation, so a
-    // case C line aborts before any released_at mark and before any capacity
+    // refused record-less DATE_RANGE line (BOOKING-LEGACY-RELEASE-GATE-1) or an
+    // invalid record aborts before any released_at mark and before any capacity
     // decrement. Because this runs inside the caller's transaction, the
     // reservation status update is rolled back with it.
     const plan = linesResult.rows.map((line) => ({
       line,
-      ...this.#resolveRecordedReleaseDates(line),
+      ...this.#resolveRecordedReleaseDates(line, reservationId),
     }))
 
     for (const { line, dates } of plan) {

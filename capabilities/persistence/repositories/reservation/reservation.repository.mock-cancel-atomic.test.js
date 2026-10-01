@@ -725,10 +725,13 @@ await test('a subscriber that does not throw leaves the committed state intact',
 })
 
 // ---------------------------------------------------------------------------
-// 9. Legacy policy is unchanged in this slice
+// 9. BOOKING-LEGACY-RELEASE-GATE-1 on the writable Map path
 // ---------------------------------------------------------------------------
 
-await test('a record-less DATE_RANGE line still uses the legacy branch and is still released', async () => {
+await test('a record-less DATE_RANGE line is refused and nothing is committed', async () => {
+  // CHANGED EXPECTATION (was: "a record-less DATE_RANGE line still uses the
+  // legacy branch and is still released", asserting reserved counts reached 0 and
+  // the line was marked released). The approved product decision refuses it.
   const { repo, store } = await mockRepo()
   seedReservation(store)
   seedAvailability(store, START, { inventory: 4, reservedCount: 1, available: 3, status: 'available' })
@@ -744,11 +747,75 @@ await test('a record-less DATE_RANGE line still uses the legacy branch and is st
     metadata: null,
     releasedAt: null,
   })
+  const before = snapshotAll(store)
 
-  await repo.cancelReservationWithRelease(cancelPayload(), TENANT)
+  const error = await assertRejects(
+    () => repo.cancelReservationWithRelease(cancelPayload(), TENANT),
+    'AvailabilityConsumptionRecordError',
+    'a record-less DATE_RANGE line'
+  )
 
-  assertDeep(reservedCounts(store), [0, 0], 'the legacy arithmetic must be preserved')
-  assert(typeof store.get(LINE_TABLE).get('line-1').releasedAt === 'string', 'the legacy line must still be marked released')
+  assertEqual(error.details.lineId, 'line-1', 'the offending line id must be reported')
+  assertEqual(error.details.reservationId, RES_ID, 'the reservation id must be reported for diagnosis')
+  assertEqual(
+    error.details.reason,
+    'DATE_RANGE line has no versioned occupied-night record',
+    'the reason must be the missing record'
+  )
+  assertEqual(
+    JSON.stringify(error.details).includes('__occupiedNights'),
+    false,
+    'the metadata object must not be dumped into the error'
+  )
+  assertDeep(reservedCounts(store), [1, 1], 'no capacity may be released by a refused line')
+  assertEqual(store.get(LINE_TABLE).get('line-1').releasedAt, null, 'the line must not be marked released')
+  assertDeep(snapshotAll(store), before, 'all three stores must be byte-identical after the refusal')
+})
+
+await test('a mixed reservation aborts completely when the record-less line comes after a valid one', async () => {
+  // The valid line is resolved first and its dates are known, but the plan is
+  // built for every candidate before the mutation loop, so the later refusal
+  // must leave the earlier valid line unreleased too.
+  const { repo, store } = await mockRepo()
+  seedReservation(store)
+  const dates = civilRange(START, NIGHTS)
+  for (const date of dates) {
+    seedAvailability(store, date, { inventory: 4, reservedCount: 1, available: 3, status: 'available' })
+  }
+  store.get(LINE_TABLE).set('line-valid', {
+    id: 'line-valid',
+    reservationId: RES_ID,
+    lineOrder: 1,
+    targetType: 'accommodation',
+    targetId: CABIN,
+    temporal: { mode: 'DATE_RANGE', startDate: START, endDate: END },
+    quantity: 1,
+    metadata: { __occupiedNights: { version: 1, dates: [...dates], quantity: 1 } },
+    releasedAt: null,
+  })
+  store.get(LINE_TABLE).set('line-legacy', {
+    id: 'line-legacy',
+    reservationId: RES_ID,
+    lineOrder: 2,
+    targetType: 'accommodation',
+    targetId: CABIN,
+    temporal: { mode: 'DATE_RANGE', startDate: START, endDate: END },
+    quantity: 1,
+    metadata: null,
+    releasedAt: null,
+  })
+  const before = snapshotAll(store)
+
+  await assertRejects(
+    () => repo.cancelReservationWithRelease(cancelPayload(), TENANT),
+    'AvailabilityConsumptionRecordError',
+    'a mixed reservation whose second line lacks a record'
+  )
+
+  assertDeep(reservedCounts(store), new Array(NIGHTS).fill(1), 'no night may be released, not even for the valid line')
+  assertEqual(store.get(LINE_TABLE).get('line-valid').releasedAt, null, 'the valid line must not be marked released')
+  assertEqual(store.get(LINE_TABLE).get('line-legacy').releasedAt, null, 'the refused line must not be marked released')
+  assertDeep(snapshotAll(store), before, 'the whole cancellation must abort with every store untouched')
 })
 
 await test('a record-less non-DATE_RANGE line still releases nothing and is still marked released', async () => {

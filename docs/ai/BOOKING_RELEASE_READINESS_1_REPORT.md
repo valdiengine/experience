@@ -3,6 +3,15 @@
 Static, code-only audit. No database access, no historical-row inspection, no runtime probes, no
 executable changes. HEAD `392d2d3e7f1ce2a62e1504c6eac6487fdbfedf80` (`booking-pricing-1a`).
 
+> **Update — BOOKING-LEGACY-RELEASE-GATE-1 (implemented).** D1 is decided: unresolved historical
+> `DATE_RANGE` consumption is **refused**, at `#resolveRecordedReleaseDates`, for both adapters, before
+> any write. `#legacyExpandDateRange` and `source: 'legacy'` no longer exist; the
+> `#legacyLocalExpandRange` arithmetic remains only for non-`DATE_RANGE` creation-time consumption.
+> Superseded claims below are the ones marked *(superseded)*; the audit's other findings — §2 mock
+> atomicity, §3 manager/business release, §4 expiration reachability, §2.3 divergences — are unchanged
+> and still stand as written. Line references in the original text were accurate at the audited HEAD and
+> are left as historical record; see `docs/ai/BOOKING_LEGACY_RELEASE_GATE_1_REPORT.md`.
+
 ## Call chain
 
 `api/routes/reservation.routes.js:403 cancel` -> `:415` tenant-scoped / `:429` service ->
@@ -28,8 +37,10 @@ itself a defect**:
   (`:228-233`) returns `consumption: null` for non-DATE_RANGE lines, and `#buildLineMetadata`
   (`:268-276`) deletes any caller-forged `__occupiedNights` (`:272`) and assigns a record only when
   one genuinely exists (`:273-274`).
-- `:477` no record **and** `mode === 'DATE_RANGE'` -> `#legacyExpandDateRange` (`:120-121` ->
-  `#expandDateRange:67`), `source: 'legacy'`. This is the unproven case.
+- *(superseded)* `:477` no record **and** `mode === 'DATE_RANGE'` -> `#legacyExpandDateRange` (`:120-121` ->
+  `#expandDateRange:67`), `source: 'legacy'`. This is the unproven case. **Now:** this branch refuses
+  with `AvailabilityConsumptionRecordError` instead of expanding bounds; the legacy release source is
+  gone.
 - `:480-483` record present -> `#validateConsumptionRecord`, `source: 'recorded'`.
 
 **Expected absence does not prove "never consumed capacity" — and the mechanism does not either.** For
@@ -52,7 +63,9 @@ Therefore:
 **Recommended condition: refuse on `source === 'legacy'`** — record absent *and*
 `temporal.mode === 'DATE_RANGE'`. Leave `recorded` releasing. The predicate belongs at the `:477`
 branch so both adapters inherit it. `#readLineMetadata` (`:334`, corrupt-string throw `:344`) is
-unchanged and still guards a case C record.
+unchanged and still guards a case C record. *(superseded — implemented as recommended; the predicate is
+now the refusal itself, and the throw happens inside the per-line plan before either adapter's mutation
+loop.)*
 
 `not-applicable` must **not** be blanket-refused either — that would make every directly-submitted
 non-DATE_RANGE line uncancellable. Leave the permissive branch behaving as it does and document it as
@@ -301,7 +314,9 @@ Preserve vs refuse, stated without overclaiming:
   unresolved set stays identifiable. Cost: those cancellations cannot complete through the normal
   path, and an explicit non-releasing cancellation may be needed.
 
-Recommendation: refuse for `source === 'legacy'` only (section 1). **No backfill, normalization or
+Recommendation: refuse for `source === 'legacy'` only (section 1). *(superseded — implemented; refusal
+is the shipped behaviour, and the "refuse" bullet above is now the observed behaviour rather than a
+trade-off argument.)* **No backfill, normalization or
 historical mutation is authorized or proposed here.** Reconciliation requires trustworthy evidence
 for each affected reservation and a separately reviewed mechanism; this audit establishes neither,
 and re-deriving a record from stored bounds or re-running the corrected UTC expansion over an
@@ -320,6 +335,9 @@ In scope for the next slice:
    while `#repo` is absent is a configuration error and must not return success.
 2. Delete the dead `availability.updateAvailability` calls (`:335-341`, `:248-255`).
 3. `reservation.repository.js` — refuse `source === 'legacy'` at the `:477` branch for both adapters.
+   *(superseded — implemented; the shared resolver now throws
+   `AvailabilityConsumptionRecordError` for a record-less `DATE_RANGE` line and takes `reservationId`
+   for diagnosis only.)*
 4. **SUPERSEDED by BOOKING-MOCK-CANCEL-ATOMIC-1 (implemented).** The proposed
    `InMemoryRepositoryAdapter.commitReservationCancellationSync` primitive was **not** created, because the
    adapter was verified first and the assumption was wrong: the only Map-backed writable adapter is
@@ -371,7 +389,9 @@ concurrency claim and has only been tested against a mock client.
 These are implementation decisions, **not** authorization to mutate historical data.
 
 1. **Refuse** automatic release for unresolved historical `DATE_RANGE` consumption — `source ===
-   'legacy'` (`:477`) throws on both adapters, before any write.
+   'legacy'` (`:477`) throws on both adapters, before any write. *(superseded — implemented; a
+   record-less `DATE_RANGE` line throws `AvailabilityConsumptionRecordError` naming `reservationId`,
+   `lineId` and the reason, with no metadata dumped, on both adapter paths.)*
 2. **No cancel-without-release feature** in this slice.
 3. **Remove** the extra business cancellation release (`business-reservation.manager.js:197-203`);
    **preserve** the explicit hold-release APIs (`availability.routes.js:133-152`).
@@ -385,9 +405,17 @@ These are implementation decisions, **not** authorization to mutate historical d
 
 - **D1** Legacy record-less policy for DATE_RANGE lines: refuse (recommended) vs preserve. Decides
   whether any reconciliation tooling enters scope at all — and no tooling is authorized until
-  separately reviewed.
-- **D2** Whether a non-releasing cancellation affordance is required for refused legacy lines, and who
-  may invoke it.
+  separately reviewed. *(superseded — decided: **refuse**. Implemented as
+  BOOKING-LEGACY-RELEASE-GATE-1. No reconciliation tooling is authorized, no backfill was performed and
+   no historical row was touched. The cost of refusal is accepted for this milestone: a
+   non-releasing cancellation affordance was considered and excluded, so refused lines cannot
+   complete through the normal path — see D2.)*
+- **D2** *(closed by scope decision, not deferred)* Whether a non-releasing cancellation affordance
+  is required for refused legacy lines, and who may invoke it. BOOKING-LEGACY-RELEASE-GATE-1 resolved
+  this for the current milestone by **excluding** the affordance: no cancel-without-release feature
+  ships here, and refused record-less lines simply cannot complete through the normal path. This is
+  not an open decision blocking that slice. A future proposal remains possible, but it is separate
+  work under its own review.
 - **D3** **RESOLVED by this pass — no longer open.** Whether `business-reservation.manager.js:201`
   is retained. The `reserve()`/`release()` caller inventory (§3) shows the explicit operation at
   `availability.routes.js:144` / `business.service.js:1376-1381` is independent, and that
