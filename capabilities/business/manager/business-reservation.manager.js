@@ -192,15 +192,21 @@ export class BusinessReservationManager {
   async cancelReservation(businessId, reservationId, reason, identity) {
     await this.#assertBusinessActive(businessId)
     await this.#checkPermission(identity, BUSINESS_PERMISSIONS.UPDATE)
-    const reservation = await this.#assertReservationBelongsToBusiness(reservationId, businessId)
+    await this.#assertReservationBelongsToBusiness(reservationId, businessId)
     const result = await this.#delegateService('cancelReservation', reservationId, reason, identity)
-    if (result?.success && reservation?.accommodationId) {
-      try {
-        const availabilityManager = this.#availabilityManager
-        if (availabilityManager?.releaseReservation) {
-          await availabilityManager.releaseReservation(reservation.accommodationId, reservation.dates?.checkIn, reservation.dates?.checkOut, identity)
-        }
-      } catch { }
+    if (result?.success) {
+      // BOOKING-CANCEL-ROUTING-1. The extra range-based release that used to run
+      // here is removed. The delegated reservation manager routes through
+      // cancelReservationWithRelease, which has already released exactly the
+      // recorded occupied nights and marked the lines released. This second pass
+      // ran over checkIn..checkOut with check-out inclusive, one night wider than
+      // any occupied-night set, and could mark a night AVAILABLE without
+      // decrementing reserved_count, exposing inventory that is still held. Its
+      // bare `catch { }` also hid every failure. The explicitly exposed
+      // hold-release operation (business.service.js releaseDate ->
+      // business.manager.js releaseReservation -> business-availability.manager.js
+      // releaseReservation) is untouched and remains the supported way to clear
+      // a line-less hold.
       this.#emit(BUSINESS_RESERVATION_EVENTS.RESERVATION_CANCELLED, { businessId, reservationId, reason, identity })
     }
     return result

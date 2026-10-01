@@ -319,27 +319,44 @@ constructor(context) {
     const updated = ReservationWorkflow.transition(reservation, RESERVATION_STATUS.CANCELLED)
     updated.notes = reason ? `${updated.notes}\nCancelada: ${reason}` : updated.notes
     updated.cancelledAt = new Date().toISOString()
-    const isPostgres = this.#context?.config?.persistenceProvider === 'postgres'
 
-    if (isPostgres) {
-      if (!this.#repo?.cancelReservationWithRelease) {
-        throw new Error(`Reservation repository cannot release capacity for ${reservationId}`)
+    // BOOKING-CANCEL-ROUTING-1. Routing is decided by the presence of the
+    // repository, NOT by the config.persistenceProvider string. The repository
+    // already selects its own adapter internally, so a config/adapter
+    // disagreement previously picked the wrong branch: with a real repository
+    // but a non-PostgreSQL config string, cancellation performed a status-only
+    // update and released no capacity at all.
+    if (this.#repo) {
+      if (typeof this.#repo.cancelReservationWithRelease !== 'function') {
+        // Never degrade to status-only persistence: capacity would stay held
+        // while the caller was told the reservation was cancelled.
+        throw new Error(
+          `Reservation repository cannot release capacity for ${reservationId}: cancelReservationWithRelease is unavailable`
+        )
       }
 
-      await this.#repo.cancelReservationWithRelease(updated, reservation.tenantId)
+      // The return shape is adapter-specific: the mock branch resolves the stored
+      // row (or null), while the PostgreSQL branch resolves a wrapper
+      // `{ reservation, release }` from inside its transaction. Both are treated
+      // purely as a success signal and the cached value stays the domain object
+      // `updated`, exactly as before this change, so the cache read path is not
+      // fed a wrapper object.
+      const persisted = await this.#repo.cancelReservationWithRelease(updated, reservation.tenantId)
+      if (!persisted) {
+        // A falsy result means nothing was persisted or released. Do not cache it
+        // as cancelled, do not notify, and do not emit success.
+        throw new Error(
+          `Reservation ${reservationId} cancellation did not persist: repository returned no row`
+        )
+      }
+
       this.#cacheReservation(updated)
     } else {
+      // Repo-less cache-backed cancellation. The cache is the datastore of
+      // record here: createRequest wrote no line for this shape, so no capacity
+      // was ever consumed and mutating the cache is a consistent cancellation.
+      // Deliberately NOT reported as failure merely for lacking a repository.
       await this.#persist(updated)
-
-      const availability = this.#context?.capabilities?.get?.('availability')
-      if (availability?.updateAvailability) {
-        await availability.updateAvailability([{
-          date: reservation.dates.checkIn,
-          endDate: reservation.dates.checkOut,
-          status: 'available',
-          resourceId: reservation.resourceId,
-        }])
-      }
     }
 
     const notifications = this.#context?.capabilities?.get?.('notifications')
