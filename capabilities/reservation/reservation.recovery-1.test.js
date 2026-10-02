@@ -13,13 +13,45 @@
  * restart; everything else is rebuilt. Nothing is re-seeded by hand after a restart,
  * so the state recovery reads is genuinely the state the previous process wrote.
  */
-import { createTestBundle, TEST_TENANT } from '../../tests/capability/capability.context.factory.js'
+import { createTestBundle } from '../../tests/capability/capability.context.factory.js'
 import { InMemoryRepositoryAdapter } from '../../tests/capability/capability.mock.repositories.js'
 import { createReservationData } from '../../tests/fixtures/reservation.fixture.js'
 import { dateOffset } from '../../tests/fixtures/availability.fixture.js'
 import { COMMERCIAL_CAPABILITIES } from '../../runtime/startup/capability.bootstrap.js'
 import { RESERVATION_STATUS } from './reservation.status.js'
 import { ReservationTimer } from './reservation.timer.js'
+
+/**
+ * BOOKING-EXPIRATION-STAGE-1. The tenant this suite recovers under.
+ *
+ * This suite asserts that a PERSISTED tenant's reservations are reconstructed at
+ * startup, so it must run under a persisted-tenant identity. It previously used
+ * the shared `TEST_TENANT`, whose id is the literal string `commercial` - which is
+ * the synthetic bootstrap tenant, not a persisted one.
+ *
+ * `application.start.js` already states that the capability-level boot recovers
+ * under the synthetic tenant "which owns no real reservations", and real
+ * reservations belong to the BookingRegistry tenants handled by
+ * `startTenantReservationRecovery()`. After Stage proved that a synthetic tenant
+ * must never reach a uuid `tenant_id` predicate, reusing `commercial` here would
+ * have this suite assert the impossible: recovery of persisted rows for a tenant
+ * that by construction owns none.
+ *
+ * Nothing else about the suite changes. Every behavioural assertion - original
+ * anchor preservation, the offline sweep, no_response, idempotency, unusable
+ * anchors, autoExpiration off and tenant isolation - is unchanged and still runs
+ * through the same production code paths.
+ */
+const PERSISTED_TENANT = {
+  id: '6f1c2a80-5d3e-4f17-9b64-2c8e0a71d4f5',
+  name: 'Persisted Booking Tenant',
+  slug: 'ensueno-curinanco',
+}
+
+/** Build a bundle under the persisted tenant this suite recovers for. */
+function createPersistedTenantBundle() {
+  return createTestBundle({ tenant: PERSISTED_TENANT })
+}
 
 const RESERVATION_TABLE = 'reservation'
 const AVAILABILITY_TABLE = 'availability'
@@ -164,7 +196,7 @@ await test('the commercial capability list contains SchedulerCapability before R
 })
 
 await test('the commercial registry exposes the scheduler and registers the expiration handler', async () => {
-  const bundle = await createTestBundle()
+  const bundle = await createPersistedTenantBundle()
 
   try {
     assertEqual(bundle.registry.size, 10, 'the commercial registry must hold all ten capabilities')
@@ -220,7 +252,7 @@ await test('the expiration handler is registered before recovery schedules anyth
 
   const anchor = new Date(Date.now() - 13 * HOUR).toISOString()
   const context = {
-    tenant: TEST_TENANT,
+    tenant: PERSISTED_TENANT,
     capabilities: registryLike,
     dataManager: null,
     eventBus: { emit: () => {} },
@@ -231,8 +263,8 @@ await test('the expiration handler is registered before recovery schedules anyth
     attachTimer: () => {},
     findReservationsByStatus: async () => ({
       status: 'ok',
-      tenantId: TEST_TENANT.id,
-      rows: [{ id: 'res-order', tenantId: TEST_TENANT.id, status: RESERVATION_STATUS.REQUESTED, createdAt: anchor }],
+      tenantId: PERSISTED_TENANT.id,
+      rows: [{ id: 'res-order', tenantId: PERSISTED_TENANT.id, status: RESERVATION_STATUS.REQUESTED, createdAt: anchor }],
       foreignRows: 0,
     }),
     expireReservationFromTimer: async () => ({ success: true, status: RESERVATION_STATUS.EXPIRED }),
@@ -268,7 +300,7 @@ for (const [label, advance, persistedStatus, expectedAnchorField] of [
   ['payment_pending', 'confirmReservation', RESERVATION_STATUS.PAYMENT_PENDING, 'updatedAt'],
 ]) {
   await test(`a ${label} reservation is re-armed after a restart with its original deadline`, async () => {
-    const first = await createTestBundle()
+    const first = await createPersistedTenantBundle()
     let originalAnchor
 
     try {
@@ -289,7 +321,7 @@ for (const [label, advance, persistedStatus, expectedAnchorField] of [
       assertEqual(persisted.status, persistedStatus, `the persisted state must be ${persistedStatus}`)
       originalAnchor = persisted[expectedAnchorField]
       assert(typeof originalAnchor === 'string', `the persisted ${expectedAnchorField} must exist`)
-      assertEqual(persisted.tenantId, TEST_TENANT.id, 'the persisted row must belong to the tenant')
+      assertEqual(persisted.tenantId, PERSISTED_TENANT.id, 'the persisted row must belong to the tenant')
 
       // The live process really did arm it before the restart.
       assert(
@@ -300,7 +332,7 @@ for (const [label, advance, persistedStatus, expectedAnchorField] of [
       await simulateRestart(first)
     }
 
-    const second = await createTestBundle()
+    const second = await createPersistedTenantBundle()
     try {
       const report = second.capability('reservation').expirationRecovery
       assertEqual(report.status, 'ok', `recovery must succeed: ${JSON.stringify(report)}`)
@@ -314,7 +346,7 @@ for (const [label, advance, persistedStatus, expectedAnchorField] of [
 
       const record = second.capability('reservation').timer.getTimer('res-1', persistedStatus)
       assert(record, 'the recovered timer must be armed')
-      assertEqual(record.tenantId, TEST_TENANT.id, 'the recovered timer must carry the tenant')
+      assertEqual(record.tenantId, PERSISTED_TENANT.id, 'the recovered timer must carry the tenant')
       assert(
         second.registry.get('scheduler').manager.getJob(record.jobId),
         'the recovered timer must have a queued job'
@@ -334,7 +366,7 @@ for (const [label, advance, persistedStatus, expectedAnchorField] of [
 console.log('\noffline elapsed deadline:')
 
 await test('a deadline that elapsed while offline expires through the atomic path exactly once', async () => {
-  const first = await createTestBundle()
+  const first = await createPersistedTenantBundle()
   try {
     await persistRequest(first)
     // The process is down for longer than the 12h `requested` timeout.
@@ -344,7 +376,7 @@ await test('a deadline that elapsed while offline expires through the atomic pat
     await simulateRestart(first)
   }
 
-  const second = await createTestBundle()
+  const second = await createPersistedTenantBundle()
   try {
     const report = second.capability('reservation').expirationRecovery
     const entry = reportEntry(report, 'res-1')
@@ -380,7 +412,7 @@ await test('a deadline that elapsed while offline expires through the atomic pat
 })
 
 await test('an owner_pending deadline that elapsed while offline produces no_response', async () => {
-  const first = await createTestBundle()
+  const first = await createPersistedTenantBundle()
   try {
     await persistRequest(first)
     const moved = await first.capability('reservation').manager.requestOwnerConfirmation('res-1', first.identity)
@@ -391,7 +423,7 @@ await test('an owner_pending deadline that elapsed while offline produces no_res
     await simulateRestart(first)
   }
 
-  const second = await createTestBundle()
+  const second = await createPersistedTenantBundle()
   try {
     const entry = reportEntry(second.capability('reservation').expirationRecovery, 'res-1')
     assertEqual(entry.outcome, 'expired', `the elapsed owner_pending deadline must expire: ${JSON.stringify(entry)}`)
@@ -413,7 +445,7 @@ await test('an owner_pending deadline that elapsed while offline produces no_res
 console.log('\nremaining deadline:')
 
 await test('a future deadline keeps the original anchor instead of the restart time', async () => {
-  const first = await createTestBundle()
+  const first = await createPersistedTenantBundle()
   let createdAt
   try {
     await persistRequest(first)
@@ -422,7 +454,7 @@ await test('a future deadline keeps the original anchor instead of the restart t
     await simulateRestart(first)
   }
 
-  const second = await createTestBundle()
+  const second = await createPersistedTenantBundle()
   try {
     const entry = reportEntry(second.capability('reservation').expirationRecovery, 'res-1')
     const record = second.capability('reservation').timer.getTimer('res-1', RESERVATION_STATUS.REQUESTED)
@@ -454,7 +486,7 @@ await test('a future deadline keeps the original anchor instead of the restart t
 console.log('\nchanged while offline:')
 
 await test('a reservation that reached a non-expirable state while offline is not expired', async () => {
-  const first = await createTestBundle()
+  const first = await createPersistedTenantBundle()
   try {
     await persistRequest(first)
     // Something else finished the reservation while this process was down.
@@ -463,7 +495,7 @@ await test('a reservation that reached a non-expirable state while offline is no
     await simulateRestart(first)
   }
 
-  const second = await createTestBundle()
+  const second = await createPersistedTenantBundle()
   try {
     const timer = second.capability('reservation').timer
     const report = second.capability('reservation').expirationRecovery
@@ -486,7 +518,7 @@ await test('a reservation that reached a non-expirable state while offline is no
 })
 
 await test('a reservation that no longer exists is reported, not resurrected', async () => {
-  const first = await createTestBundle()
+  const first = await createPersistedTenantBundle()
   try {
     await persistRequest(first)
     store().get(RESERVATION_TABLE).delete('res-1')
@@ -494,7 +526,7 @@ await test('a reservation that no longer exists is reported, not resurrected', a
     await simulateRestart(first)
   }
 
-  const second = await createTestBundle()
+  const second = await createPersistedTenantBundle()
   try {
     const report = second.capability('reservation').expirationRecovery
     assertEqual(report.scanned, 0, 'a deleted reservation must not be recovered')
@@ -513,14 +545,14 @@ await test('a reservation that no longer exists is reported, not resurrected', a
 console.log('\nrepeated recovery:')
 
 await test('recovering twice neither duplicates the timer nor resets the deadline', async () => {
-  const first = await createTestBundle()
+  const first = await createPersistedTenantBundle()
   try {
     await persistRequest(first)
   } finally {
     await simulateRestart(first)
   }
 
-  const second = await createTestBundle()
+  const second = await createPersistedTenantBundle()
   try {
     const timer = second.capability('reservation').timer
     const before = timer.getTimer('res-1', RESERVATION_STATUS.REQUESTED)
@@ -552,14 +584,14 @@ await test('recovering twice neither duplicates the timer nor resets the deadlin
 console.log('\nautoExpiration disabled:')
 
 await test('autoExpiration false reconstructs nothing', async () => {
-  const bundle = await createTestBundle()
+  const bundle = await createPersistedTenantBundle()
   let disabledTimer = null
   try {
     // Seeded after the bundle came up, so the commercial (enabled) recovery already
     // ran and found nothing: from here the switch alone decides this row's fate.
     InMemoryRepositoryAdapter.seed(RESERVATION_TABLE, [{
       id: 'res-cfg',
-      tenantId: TEST_TENANT.id,
+      tenantId: PERSISTED_TENANT.id,
       accommodationId: 'acc-test',
       resourceId: 'unit-1',
       status: RESERVATION_STATUS.REQUESTED,
@@ -581,7 +613,7 @@ await test('autoExpiration false reconstructs nothing', async () => {
     const disabledContext = {
       ...bundle.context,
       dataManager: {
-        get: (key) => (key === `tenantConfig.${TEST_TENANT.id}.reservation`
+        get: (key) => (key === `tenantConfig.${PERSISTED_TENANT.id}.reservation`
           ? { autoExpiration: false }
           : undefined),
       },
@@ -626,7 +658,7 @@ await test('an unusable anchor is reported and no deadline is invented', async (
   // A legacy row with no usable state-entry timestamp at all.
   InMemoryRepositoryAdapter.seed(RESERVATION_TABLE, [{
     id: 'res-legacy',
-    tenantId: TEST_TENANT.id,
+    tenantId: PERSISTED_TENANT.id,
     accommodationId: 'acc-test',
     resourceId: 'unit-1',
     status: RESERVATION_STATUS.REQUESTED,
@@ -636,7 +668,7 @@ await test('an unusable anchor is reported and no deadline is invented', async (
     updatedAt: null,
   }])
 
-  const bundle = await createTestBundle()
+  const bundle = await createPersistedTenantBundle()
   try {
     const report = bundle.capability('reservation').expirationRecovery
     const entry = reportEntry(report, 'res-legacy')
@@ -765,7 +797,7 @@ await test('recovery for one tenant never arms or expires another tenant reserva
 console.log('\nscheduler unavailable:')
 
 await test('recovery without the scheduler capability fails explicitly', async () => {
-  const bundle = await createTestBundle()
+  const bundle = await createPersistedTenantBundle()
   let detachedTimer = null
   try {
     await persistRequest(bundle)

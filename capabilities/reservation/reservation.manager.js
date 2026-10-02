@@ -50,6 +50,41 @@ import { RESERVATION_PERMISSIONS } from './reservation.permissions.js'
 import { validateReservation } from './reservation.schema.js'
 import { validateDateRange, validateStatusTransition, checkAvailability, checkReservationOverlap } from './reservation.validation.js'
 
+/**
+ * The synthetic tenant the commercial capability runtime boots under.
+ *
+ * BOOKING-EXPIRATION-STAGE-1. `application.start.js` and
+ * `capability.bootstrap.js` both default the commercial tenant to
+ * `{ id: 'commercial' }`. That identity exists to give the wiring a tenant-shaped
+ * context; it is NOT a persisted tenant and owns no rows. Real Booking tenants
+ * are the UUIDs reconstructed into the BookingRegistry.
+ *
+ * Sending it into a tenant-scoped persisted read is not a harmless no-op: the
+ * reservations predicate is `tenant_id = $2` against a uuid column, so
+ * PostgreSQL raises `invalid input syntax for type uuid: "commercial"` before any
+ * scoping question is even reached.
+ */
+export const SYNTHETIC_COMMERCIAL_TENANT_ID = 'commercial'
+
+/**
+ * Whether a tenant id is a legitimate scope for a persisted, tenant-scoped read.
+ *
+ * This is deliberately a check for the ABSENCE of a persisted-tenant scope, not
+ * for a specific shape (such as "looks like a UUID"). A persisted tenant is
+ * whatever the database says it is; the one identity this layer knows cannot be
+ * one is the synthetic commercial bootstrap tenant. Keeping the rule negative
+ * means a new real tenant form is not silently refused.
+ *
+ * @param {string|null|undefined} tenantId
+ * @returns {boolean}
+ */
+export function isPersistedTenantScope(tenantId) {
+  if (typeof tenantId !== 'string') return false
+  const normalized = tenantId.trim()
+  if (normalized === '') return false
+  return normalized !== SYNTHETIC_COMMERCIAL_TENANT_ID
+}
+
 export class ReservationManager {
   #context = null
   #reservations = new Map()
@@ -247,6 +282,15 @@ constructor(context) {
    *
    * With no tenant context there is no legitimate scope to enumerate, so the
    * read is REFUSED rather than widened. That is reported, not silently empty.
+   *
+   * BOOKING-EXPIRATION-STAGE-1. The synthetic-tenant distinction deliberately
+   * does NOT live here. This method is a provider-agnostic tenant-scoped read and
+   * is also driven directly by the certified recovery/timer suites and by
+   * `startTenantReservationRecovery()`. Refusing the synthetic tenant per call
+   * would have to know that "commercial" is not persisted, which is a bootstrap
+   * fact, not a persistence fact. The bootstrap-aware caller
+   * (`ReservationCapability.activate()`) applies `isPersistedTenantScope()`
+   * before reaching this method, which is where the Stage failure originated.
    *
    * @param {string[]} statuses - Reservation statuses to read
    * @returns {Promise<{ status: string, reason?: string, error?: string, tenantId: string|null, rows: object[], foreignRows: number }>}

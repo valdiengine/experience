@@ -90,13 +90,17 @@ async function main() {
   const missingRepos = commercialRepos.filter((n) => !bundle.repositoryRuntime?.registry?.isRegistered?.(n))
   record('registries', 'repositories.commercial', missingRepos.length === 0, missingRepos.length ? `missing: ${missingRepos.join(',')}` : '9/9')
 
+  // BOOKING-EXPIRATION-STAGE-1: `scheduler` is part of the commercial runtime
+  // composition and the expected total is 10, not the legacy 9.
   const capCount = bundle.capabilityRegistry?.size || 0
-  record('registries', 'capabilities.all', capCount === 9, `count=${capCount} (expected 9)`)
-  const commercialCaps = ['business', 'accommodation', 'availability', 'reservation', 'visitor', 'owner', 'booking', 'notifications', 'opportunity']
+  record('registries', 'capabilities.all', capCount === 10, `count=${capCount} (expected 10)`)
+  const commercialCaps = ['business', 'accommodation', 'availability', 'scheduler', 'reservation', 'visitor', 'owner', 'booking', 'notifications', 'opportunity']
   const missingCaps = commercialCaps.filter((id) => !bundle.capabilityRegistry?.has?.(id))
-  record('registries', 'capabilities.commercial', missingCaps.length === 0, missingCaps.length ? `missing: ${missingCaps.join(',')}` : '9/9')
+  record('registries', 'capabilities.commercial', missingCaps.length === 0, missingCaps.length ? `missing: ${missingCaps.join(',')}` : '10/10')
+  record('registries', 'capabilities.scheduler', bundle.capabilityRegistry?.has?.('scheduler') === true, `scheduler=${bundle.capabilityRegistry?.has?.('scheduler')}`)
   const activeCaps = (bundle.capabilityRegistry?.getActive?.() || []).map((c) => c.id)
-  record('registries', 'capabilities.active', activeCaps.length === 9, `active=${activeCaps.length}`)
+  record('registries', 'capabilities.active', activeCaps.length === 10, `active=${activeCaps.length}`)
+  record('registries', 'capabilities.scheduler-active', activeCaps.includes('scheduler'), `active contains scheduler`)
 
   // 4. Contexts
   const ctx = bundle.capabilityContext
@@ -220,7 +224,7 @@ async function aggregateHealth(bundle) {
   const engineHealth = await bundle.engine.healthCheck()
   const repoHealth = await bundle.repositoryRuntime.health()
   const active = (bundle.capabilityRegistry.getActive() || []).length
-  const commercialHealthy = active === 9 && (bundle.repositoryRuntime.registry.count || 0) === 12
+  const commercialHealthy = active === 10 && (bundle.repositoryRuntime.registry.count || 0) === 12
   const pipelineHealth = bundle.pipeline?.health || {}
   return {
     application: engineHealth.application,

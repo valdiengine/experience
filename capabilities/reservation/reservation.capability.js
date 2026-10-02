@@ -6,7 +6,7 @@
  * No direct imports from other capabilities
  */
 import { BaseCapability } from '../core/base.capability.js'
-import { ReservationManager } from './reservation.manager.js'
+import { ReservationManager, isPersistedTenantScope } from './reservation.manager.js'
 import { ReservationService } from './reservation.service.js'
 import { ReservationWorkflow } from './reservation.workflow.js'
 import { ReservationTimer } from './reservation.timer.js'
@@ -42,7 +42,7 @@ export class ReservationCapability extends BaseCapability {
     this.#recovery = new ReservationRecovery(context)
     if (typeof this.#manager.hydrate === 'function') {
       const tenantId = context?.tenant?.id
-      if (tenantId && tenantId !== 'commercial') {
+      if (isPersistedTenantScope(tenantId)) {
         await this.#manager.hydrate()
       }
     }
@@ -87,8 +87,35 @@ export class ReservationCapability extends BaseCapability {
     // only be able to report the same missing scheduler again — so it is skipped
     // here and that skip is itself visible, rather than being masked by a second,
     // vaguer outcome.
+    //
+    // BOOKING-EXPIRATION-STAGE-1. `init()` already refused to hydrate persisted
+    // state under the synthetic `commercial` tenant, but this recovery call had
+    // no equivalent guard. `recoverFromPersistedState()` delegates to
+    // `manager.findReservationsByStatus()`, which put the context tenant into a
+    // `tenant_id = $2` predicate against a uuid column, so Passenger logged
+    // `invalid input syntax for type uuid: "commercial"`.
+    //
+    // Why this stayed hidden until Slice E: without `SchedulerCapability` the
+    // timer could not register, `timerActivation.status` was not 'registered',
+    // and this branch was never taken. Adding the scheduler made it reachable.
+    //
+    // So the same distinction is applied here, in the same style as `init()`. The
+    // synthetic tenant owns no persisted reservations by construction, and
+    // `startTenantReservationRecovery()` remains the owner of restart recovery
+    // for the real BookingRegistry tenants, each of which builds its own
+    // manager/timer pair under its own UUID scope. Nothing is recovered here
+    // that was not already recovered there.
     this.#expirationRecovery = this.#timerActivation?.status === 'registered'
-      ? await this.#timer.recoverFromPersistedState()
+      ? (isPersistedTenantScope(this.tenant?.id)
+        ? await this.#timer.recoverFromPersistedState()
+        : {
+          source: 'recovery',
+          status: 'skipped',
+          reason: 'synthetic_tenant_scope',
+          tenantId: this.tenant?.id ?? null,
+          error: 'The synthetic commercial tenant owns no persisted reservations; restart recovery for real Booking tenants is performed by startTenantReservationRecovery()',
+          reservations: [],
+        })
       : {
         source: 'recovery',
         status: 'skipped',
