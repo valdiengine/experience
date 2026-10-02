@@ -31,13 +31,17 @@ all 23 contract methods with empty/interface-conforming results.
 
 ```
 start()
- 1. BootstrapPipeline.run(sources)        -> config (providers DISABLED, RB3)
- 2. bootstrapRuntime(...)                 -> engine + runtimeContext + eventBus + repositoryRuntime
+  1. BootstrapPipeline.run(sources)        -> config (providers DISABLED, RB3)
+  2. bootstrapRuntime(...)                 -> engine + runtimeContext + eventBus + repositoryRuntime
                                             + authenticationRuntime + cmsRuntime
- 3. registerRepositories(...)             -> 12 repositories (3 support + 9 commercial)
- 4. registerCapabilities(...)             -> 9 capabilities registered/initialized/activated
- 5. validateRuntime(...)                  -> static/structural validation
- 6. emit contexts_ready, health_ready, completed
+  3. registerRepositories(...)             -> 12 repositories (3 support + 9 commercial)
+  3b. bootstrapEnsueñoBookingRegistry()    -> shared process-local BookingRegistry
+                                            (PostgreSQL runtime only)
+  4. registerCapabilities(...)             -> 10 capabilities registered/initialized/activated
+  4b. startTenantReservationRecovery(...)  -> one expiration runtime per UNIQUE registered
+                                             Booking tenant (BOOKING-EXPIRATION-RECOVERY-1)
+  5. validateRuntime(...)                  -> static/structural validation
+  6. emit contexts_ready, health_ready, completed
 ```
 
 Startup events (fixed order): `startup:started → runtime_ready → repositories_ready →
@@ -75,8 +79,37 @@ Commercial (9): `business`, `accommodation`, `availability`, `reservation`, `vis
 
 ## Capabilities registered
 
-`business`, `accommodation`, `availability`, `reservation`, `visitor`, `owner`,
-`booking`, `notifications`, `opportunity`.
+`business`, `accommodation`, `availability`, `scheduler`, `reservation`, `visitor`,
+`owner`, `booking`, `notifications`, `opportunity`.
+
+`SchedulerCapability` is ordered immediately before `ReservationCapability`: the
+reservation capability registers its expiration handler against the scheduler during
+`activate()`, and reconstructs persisted expiration timers right after that
+registration succeeds (BOOKING-EXPIRATION-RECOVERY-1).
+
+## Real tenant expiration ownership (step 4b)
+
+Step 4 recovers under the synthetic `commercial` tenant, which owns no real
+reservations. Real reservations live under the tenants the `BookingRegistry` holds, and
+the only runtime that reached them was the request-scoped manager inside the public
+Booking path — whose timers die with the request. Step 4b closes that:
+
+- Enumeration is `BookingRegistry.list()` deduplicated by `tenantId`. A tenant absent
+  from the registry is never scanned; there is no cross-tenant scan.
+- Per unique tenant: a derived context whose `tenant.id` is the REAL tenant, with its own
+  `createRepositoriesFacade(repositoryRuntime, scopedContext)`, one `ReservationManager`,
+  one `ReservationTimer` and one per-instance handler name
+  (`reservationExpiration:reservation-N`). The global commercial context is not mutated,
+  and no traveler/request semantics are reused.
+- `capabilities` stays the shared `CapabilityRegistry`, so every tenant timer resolves the
+  ONE already-active shared `SchedulerCapability`. No scheduler per tenant.
+- The tenant runtimes are held by `bundle.tenantReservationRecoveryRuntime` for the
+  process lifetime, so reconstructed future deadlines stay armed.
+- `cleanup()` destroys them FIRST, before the capabilities (and therefore before
+  `SchedulerCapability.destroy()`), because each tenant timer must unregister its handler
+  and cancel its own jobs while the shared scheduler is still alive.
+- A per-tenant failure marks `bundle.tenantReservationRecovery.status = 'degraded'` with
+  the reason; startup is not failed.
 
 ## Verification
 

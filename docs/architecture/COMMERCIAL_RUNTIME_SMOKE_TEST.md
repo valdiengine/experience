@@ -21,7 +21,7 @@ execution of the platform (previously only static import scans passed). Success 
 | Runtime starts via `application.start()` | PASS |
 | All modules register and start (database, auth, authorization, cms, repository) | PASS |
 | 12 repositories registered (3 support + 9 commercial) | PASS |
-| 9 capabilities registered/initialized/activated | PASS |
+| 10 capabilities registered/initialized/activated | PASS |
 | Capability contexts wired (runtime + repositories + eventBus) | PASS |
 | Fixed startup event order emitted | PASS |
 | Repository mock contract behavior (findById/findMany/paginate/…) | PASS |
@@ -96,11 +96,17 @@ repository resolves to a `BaseRepository` instance backed by the `'mock'` adapte
 
 ## 7. Capabilities registered
 
-9 capabilities, all active: `business`, `accommodation`, `availability`,
-`reservation`, `visitor`, `owner`, `booking`, `notifications`, `opportunity`.
+10 capabilities, all active: `business`, `accommodation`, `availability`,
+`scheduler`, `reservation`, `visitor`, `owner`, `booking`, `notifications`,
+`opportunity`.
 Every capability resolves via `context.capabilities.get()`, receives the shared
 `RuntimeContext` + repositories facade + eventBus, and peers only via
 `context.capabilities.get(...)` (no direct imports).
+
+This count is the record of the original 9-capability smoke run;
+BOOKING-EXPIRATION-RECOVERY-1 added `scheduler` (10th) and is re-verified by
+`capabilities/reservation/reservation.recovery-1.test.js` rather than by this
+historical run.
 
 ## 8. Health
 

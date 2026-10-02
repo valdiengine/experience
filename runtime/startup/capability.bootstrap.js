@@ -1,7 +1,7 @@
 /**
  * Capability Bootstrap — registers and wires the commercial capability registry
  *
- * P13.5.5 (Runtime Entry & Wiring): registers the nine commercial capabilities in the
+ * P13.5.5 (Runtime Entry & Wiring): registers the ten commercial capabilities in the
  * existing CapabilityRegistry, initializes and activates them, and injects the shared
  * runtime context (runtime modules, repositories facade, eventBus, tenant,
  * configuration, and the capability registry itself for context.capabilities.get(...)).
@@ -10,11 +10,26 @@
  * - Capabilities never import each other; communication only via context.capabilities.get(...)
  * - No infrastructure imports inside capabilities
  * - context.repositories is a delegation wrapper over the booted RepositoryRuntime
+ *
+ * BOOKING-EXPIRATION-RECOVERY-1: `SchedulerCapability` joins this list. It was
+ * absent, so `ReservationTimer.activate()` — which resolves the scheduler ONLY
+ * through `context.capabilities.get('scheduler')` — reported a failed handler
+ * registration in the commercial runtime, and automatic reservation expiration
+ * never ran there at all. `capabilities/core/register.js` is the generic
+ * development catalog and was never the commercial path; this list is.
+ *
+ * ORDER IS DELIBERATE. `CapabilityRegistry` preserves registration order in
+ * `getAll()`, and this function initializes and then activates in that order, so
+ * `SchedulerCapability` is placed immediately before `ReservationCapability`:
+ * scheduler is registered, initialized AND activated before the reservation
+ * capability's `activate()` tries timer activation. Registration order alone
+ * would NOT be enough — activation order is what the timer depends on.
  */
 import { CapabilityRegistry } from '../../capabilities/core/registry.js'
 import { BusinessCapability } from '../../capabilities/business/business.capability.js'
 import { AccommodationCapability } from '../../capabilities/accommodation/accommodation.capability.js'
 import { AvailabilityCapability } from '../../capabilities/availability/availability.capability.js'
+import { SchedulerCapability } from '../../capabilities/scheduler/scheduler.capability.js'
 import { ReservationCapability } from '../../capabilities/reservation/reservation.capability.js'
 import { VisitorCapability } from '../../capabilities/visitor/visitor.capability.js'
 import { OwnerCapability } from '../../capabilities/owner/owner.capability.js'
@@ -28,6 +43,8 @@ export const COMMERCIAL_CAPABILITIES = [
   BusinessCapability,
   AccommodationCapability,
   AvailabilityCapability,
+  // Before ReservationCapability: see the ordering note above.
+  SchedulerCapability,
   ReservationCapability,
   VisitorCapability,
   OwnerCapability,
@@ -120,7 +137,7 @@ export async function registerCapabilities(runtime, options = {}) {
     }
     context.repositories = createRepositoriesFacade(repositoryRuntime, context)
 
-    // Register the nine commercial capability classes (reuse existing registry)
+    // Register the ten commercial capability classes (reuse existing registry)
     for (const CapClass of COMMERCIAL_CAPABILITIES) {
       registry.register(new CapClass())
     }
@@ -130,7 +147,9 @@ export async function registerCapabilities(runtime, options = {}) {
       await capability.init(context, configuration[capability.id] || {})
     }
 
-    // Activate each capability (emits capability:activated on the shared event bus)
+    // Activate each capability (emits capability:activated on the shared event bus).
+    // `getAll()` is registration order, so the scheduler is already active by the
+    // time ReservationCapability.activate() runs its timer activation.
     for (const capability of registry.getAll()) {
       await capability.activate()
     }

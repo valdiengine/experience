@@ -53,11 +53,14 @@
  * Deliberate limits (not hidden behaviour)
  * ----------------------------------------
  *   - Durability: timer state and scheduler jobs live in the process
- *     (`DataManager`/Maps). A restart loses both; nothing here reconstructs
- *     timers from stored reservations. That is the recovery slice, not this one.
- *   - Historical rows: only reservations whose state change this process
- *     performed are armed. Nothing is inferred from reservations that already
- *     existed.
+ *     (`DataManager`/Maps). A restart loses both. They are REBUILT after a
+ *     restart by `recoverFromPersistedState()` (BOOKING-EXPIRATION-RECOVERY-1),
+ *     which reconstructs them from the persisted reservation rows — the durable
+ *     truth — rather than from anything the scheduler remembered. It is still not
+ *     durable storage of its own: nothing here survives a restart on its own.
+ *   - Historical rows: outside recovery, only reservations whose state change
+ *     this process performed are armed. Nothing is inferred from reservations
+ *     that already existed, except through that explicit recovery pass.
  *   - The anchor is `updatedAt`, which any later write also touches, so it is
  *     "the last write at or before the transition", not a dedicated
  *     `statusChangedAt`. It is read from the state object the manager just
@@ -279,6 +282,264 @@ export class ReservationTimer {
     }
 
     return result
+  }
+
+  // ── Restart recovery ──
+
+  /**
+   * Reconstruct automatic expiration work from PERSISTED reservation state.
+   *
+   * BOOKING-EXPIRATION-RECOVERY-1.
+   *
+   * Timer records and scheduler jobs live in the process, so a restart loses
+   * both. The persisted reservation row is what survives, and it is the only
+   * durable truth here: the scheduler job is a disposable delivery mechanism
+   * that gets re-created, never a record to be restored.
+   *
+   * What this does, in order:
+   *
+   *   1. Refuses to run without a registered handler, without a scheduler, or
+   *      with automatic expiration switched off — reporting which.
+   *   2. Reads the persisted reservations in expirable states through the
+   *      manager's tenant-scoped repository read. This is a READ of durable
+   *      state; it introduces no writer of any kind.
+   *   3. Hands each row to `syncReservationState()`, which is the existing
+   *      ownership, anchoring and idempotency path. Nothing is armed from a
+   *      fresh `Date.now()`: the deadline comes from the persisted state-entry
+   *      anchor plus the configured timeout, exactly as a first arming would.
+   *      A reservation whose persisted state has moved on is simply not in the
+   *      scan, and one that changed between the read and the arming is caught by
+   *      the atomic path's expected-state check before anything is written.
+   *   4. Runs ONE sweep, so anything already overdue while the process was down
+   *      goes through the same atomic manager expiration path a live timer would
+   *      have used. There is no Recovery-only writer: recovery arms timers and
+   *      the existing expiry machinery does the expiring.
+   *
+   * Idempotent: arming an already-armed, unchanged state keeps its deadline, and
+   * the sweep settles what it expires, so calling this twice cannot duplicate a
+   * timer, reset a deadline or release capacity twice.
+   *
+   * @returns {Promise<object>} - A structured report; never throws for a recovery problem
+   */
+  async recoverFromPersistedState() {
+    const tenantId = this.#tenantId
+    const base = {
+      source: 'recovery',
+      tenantId,
+      instanceId: this.#instanceId,
+      handler: this.#handlerName,
+      at: new Date().toISOString(),
+    }
+
+    if (this.#destroyed) {
+      return { ...base, status: 'skipped', reason: 'timer_destroyed', reservations: [] }
+    }
+
+    if (!this.#active) {
+      // Recovery schedules work; without the handler nothing could ever run it.
+      return {
+        ...base,
+        status: 'skipped',
+        reason: STOP_REASONS.INACTIVE,
+        error: 'Reservation expiration recovery requires a registered expiration handler',
+        reservations: [],
+      }
+    }
+
+    if (!this.#scheduler) {
+      return {
+        ...base,
+        status: 'failed',
+        reason: STOP_REASONS.SCHEDULER_MISSING,
+        error: 'Reservation expiration recovery requires the scheduler capability',
+        reservations: [],
+      }
+    }
+
+    // Configuration decides, not the age of a persisted row. An old reservation
+    // does not get to switch automatic expiration back on.
+    const auto = this.#config.getAutoExpirationSettings()
+    if (!auto.enabled) {
+      return {
+        ...base,
+        status: 'skipped',
+        reason: STOP_REASONS.DISABLED,
+        error: auto.error || 'Automatic reservation expiration is disabled for this tenant',
+        reservations: [],
+      }
+    }
+
+    const statuses = this.#config.getExpirableStatuses()
+    const scan = typeof this.#manager?.findReservationsByStatus === 'function'
+      ? await this.#manager.findReservationsByStatus(statuses)
+      : { status: 'failed', reason: 'scan_unavailable', error: 'Reservation recovery needs a tenant-scoped persisted read' }
+
+    if (!scan || scan.status !== 'ok') {
+      return {
+        ...base,
+        status: 'failed',
+        reason: scan?.reason || 'scan_unavailable',
+        error: scan?.error || 'The persisted reservation state could not be read',
+        scanned: 0,
+        reservations: [],
+      }
+    }
+
+    const reservations = []
+    for (const row of scan.rows) {
+      reservations.push(await this.#recoverOneReservation(row))
+    }
+
+    // Everything already overdue while the process was down is driven through the
+    // existing sweep, so it is expired by exactly the same path as live work.
+    const sweep = await this.checkExpiration()
+    const folded = this.#foldSweep(reservations, sweep)
+
+    const totals = {
+      scanned: scan.rows.length,
+      foreignRows: scan.foreignRows,
+      armed: folded.filter((r) => r.outcome === 'armed').length,
+      expired: folded.filter((r) => r.outcome === 'expired').length,
+      skipped: folded.filter((r) => r.outcome === 'skipped').length,
+      failed: folded.filter((r) => r.outcome === 'failed').length,
+      committedPostCommit: folded.filter((r) => r.outcome === 'committed_post_commit').length,
+    }
+
+    return {
+      ...base,
+      // A recovery that could not do part of its work is not a success.
+      status: totals.failed > 0 ? 'partial' : 'ok',
+      reason: totals.failed > 0 ? 'some_reservations_failed' : null,
+      statuses,
+      scanned: scan.rows.length,
+      foreignRows: scan.foreignRows,
+      sweep: {
+        expired: sweep.expired.length,
+        failed: sweep.failed.length,
+        skipped: sweep.skipped.length,
+      },
+      totals,
+      reservations: folded,
+    }
+  }
+
+  /**
+   * Reconstruct one reservation's timer from its persisted row.
+   * @private
+   */
+  async #recoverOneReservation(row) {
+    const reservationId = row?.id || null
+    if (!reservationId) {
+      return {
+        reservationId: null,
+        outcome: 'failed',
+        reason: 'no_reservation_id',
+        error: 'A persisted reservation row has no id to recover',
+      }
+    }
+
+    // `onStateChange` is deliberately NOT set: this is not a new transition, so
+    // an already-armed timer keeps its existing deadline instead of being
+    // re-anchored and restarted.
+    const armed = await this.syncReservationState(reservationId, row)
+
+    const entry = {
+      reservationId,
+      persistedStatus: row?.status ?? null,
+      reservationStatus: armed?.reservationStatus ?? row?.status ?? null,
+      tenantId: row?.tenantId ?? null,
+      outcome: 'skipped',
+      reason: armed?.reason ?? null,
+      error: armed?.error ?? null,
+    }
+
+    if (armed?.status === 'armed' || armed?.status === 'kept') {
+      return {
+        ...entry,
+        outcome: 'armed',
+        action: armed.action,
+        generation: armed.generation,
+        jobId: armed.jobId,
+        anchorAt: armed.anchorAt,
+        expiresAt: armed.expiresAt,
+        timeoutMs: armed.timeoutMs,
+        overdue: new Date(armed.expiresAt).getTime() <= Date.now(),
+      }
+    }
+
+    if (armed?.status === 'not_expirable') {
+      return { ...entry, outcome: 'skipped', reason: STOP_REASONS.STATE_UNSUPPORTED }
+    }
+
+    if (armed?.status === 'skipped') {
+      // A missing or malformed anchor is a FAILURE to recover, not a benign skip:
+      // the reservation is in an expirable state and no deadline could be
+      // derived for it. It is reported with its reason and no deadline is
+      // invented. `state_unavailable` means the row vanished between the read
+      // and the arming, which is a genuine no-op.
+      const unusableAnchor = armed.reason === 'no_anchor_timestamp'
+      return {
+        ...entry,
+        outcome: unusableAnchor ? 'failed' : 'skipped',
+      }
+    }
+
+    return {
+      ...entry,
+      outcome: 'failed',
+      reason: armed?.reason || 'arming_failed',
+      jobId: armed?.jobId ?? null,
+    }
+  }
+
+  /**
+   * Merge the sweep's per-reservation outcomes into the recovery report.
+   *
+   * The sweep is the authority on what actually happened to a due reservation:
+   * its classification is copied through rather than restated, so a post-commit
+   * failure keeps `committed: true` / `retryable: false` here too.
+   * @private
+   */
+  #foldSweep(reservations, sweep) {
+    const byReservation = new Map()
+    for (const entry of [...sweep.expired, ...sweep.failed, ...sweep.skipped]) {
+      if (entry?.reservationId) byReservation.set(entry.reservationId, entry)
+    }
+
+    return reservations.map((entry) => {
+      const result = byReservation.get(entry.reservationId)
+      if (!result) return entry
+
+      if (result.status === 'expired') {
+        return {
+          ...entry,
+          outcome: 'expired',
+          reason: null,
+          expiredStatus: result.status,
+          reservationStatus: entry.reservationStatus,
+        }
+      }
+
+      if (result.status === 'failed') {
+        const committed = result.committed === true
+        return {
+          ...entry,
+          outcome: committed ? 'committed_post_commit' : 'failed',
+          reason: result.reason,
+          error: result.error,
+          phase: result.phase ?? null,
+          committed,
+          retryable: result.retryable !== false,
+          postCommitError: result.postCommitError ?? null,
+        }
+      }
+
+      return {
+        ...entry,
+        outcome: entry.outcome === 'armed' && result.reason === 'not_due' ? 'armed' : entry.outcome,
+        sweepReason: result.reason ?? null,
+      }
+    })
   }
 
   // ── State synchronisation ──

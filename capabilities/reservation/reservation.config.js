@@ -83,6 +83,21 @@ export class ReservationConfig {
   }
 
   /**
+   * Every status that has an approved automatic expiration.
+   *
+   * BOOKING-EXPIRATION-RECOVERY-1. Read from the same table the timeouts come
+   * from, so a caller that needs to enumerate expirable states — restart
+   * recovery scanning the persisted reservations, for instance — cannot drift
+   * from the timeout policy that would then arm them.
+   *
+   * A copy is returned: the caller must not be able to extend the policy.
+   * @returns {string[]}
+   */
+  getExpirableStatuses() {
+    return Object.keys(TIMEOUT_SETTINGS)
+  }
+
+  /**
    * Resolve the auto-expiration switch, reporting an unusable override
    * explicitly instead of guessing what was meant.
    * @returns {{ enabled: boolean, enabledRaw: any, supported: boolean, errors: string[], error: string|null }}

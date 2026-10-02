@@ -217,6 +217,96 @@ constructor(context) {
   }
 
   /**
+   * The tenant this context is bound to, in the shape `createRequest()` and the
+   * repository both use.
+   * @private
+   */
+  get #tenantId() {
+    const tenant = this.#context?.tenant
+    return (tenant && typeof tenant === 'object' ? tenant.id : tenant) || null
+  }
+
+  /**
+   * Read persisted reservations in the given statuses, scoped to THIS context's
+   * tenant.
+   *
+   * BOOKING-EXPIRATION-RECOVERY-1. Restart recovery needs to enumerate durable
+   * state, and an enumeration that is not tenant-scoped is how a recovery pass
+   * ends up arming or expiring another tenant's rows. Two independent guards
+   * apply, and the second exists because the first is somebody else's code:
+   *
+   *   1. The read goes through `context.repositories.reservation`, whose
+   *      `BaseRepository._buildQuery()` spreads the context tenant OVER the
+   *      supplied query. A `tenantId` in the filter cannot widen the scope, and
+   *      with no context tenant the query carries none at all — so this call
+   *      cannot become a cross-tenant scan by accident.
+   *   2. Every returned row is then checked against the context tenant and any
+   *      row that disagrees is dropped and counted. A repository or adapter that
+   *      ever returned more than the scope still cannot hand recovery another
+   *      tenant's reservation.
+   *
+   * With no tenant context there is no legitimate scope to enumerate, so the
+   * read is REFUSED rather than widened. That is reported, not silently empty.
+   *
+   * @param {string[]} statuses - Reservation statuses to read
+   * @returns {Promise<{ status: string, reason?: string, error?: string, tenantId: string|null, rows: object[], foreignRows: number }>}
+   */
+  async findReservationsByStatus(statuses) {
+    const tenantId = this.#tenantId
+    if (!tenantId) {
+      return {
+        status: 'failed',
+        reason: 'no_tenant_scope',
+        tenantId: null,
+        rows: [],
+        foreignRows: 0,
+        error: 'Reservation state cannot be enumerated without a tenant-scoped context',
+      }
+    }
+    if (!this.#repo) {
+      return {
+        status: 'failed',
+        reason: 'repository_unavailable',
+        tenantId,
+        rows: [],
+        foreignRows: 0,
+        error: 'The reservation repository is not resolvable in this context',
+      }
+    }
+
+    const wanted = Array.isArray(statuses) && statuses.length > 0 ? statuses : []
+    const rows = []
+
+    // One query per status rather than a single `in` filter: `in` support varies
+    // by adapter, and a silently different filter would quietly change which
+    // reservations are recovered.
+    for (const status of wanted) {
+      try {
+        const found = await this.#repo.findMany({ status })
+        if (Array.isArray(found)) rows.push(...found)
+      } catch (error) {
+        return {
+          status: 'failed',
+          reason: 'repository_read_failed',
+          tenantId,
+          rows: [],
+          foreignRows: 0,
+          error: `Reading persisted reservations for status ${status} failed: ${error?.message || error}`,
+        }
+      }
+    }
+
+    const owned = rows.filter((row) => row?.tenantId === tenantId)
+
+    return {
+      status: 'ok',
+      tenantId,
+      rows: owned,
+      foreignRows: rows.length - owned.length,
+    }
+  }
+
+  /**
    * Create a reservation request
    * @param {object} data - { businessId, accommodationId, visitorId, resourceId, customer, dates, guests, source }
    * @param {object|null} identity

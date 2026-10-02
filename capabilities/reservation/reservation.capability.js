@@ -25,6 +25,7 @@ export class ReservationCapability extends BaseCapability {
   #service = null
   #timer = null
   #timerActivation = null
+  #expirationRecovery = null
   #recovery = null
 
   async init(context, config = {}) {
@@ -76,6 +77,28 @@ export class ReservationCapability extends BaseCapability {
     // event and manager behaviour down with it. `already_active` is a legitimate
     // outcome and is not a failure.
     this.#timerActivation = (await this.#timer?.activate()) ?? null
+
+    // BOOKING-EXPIRATION-RECOVERY-1. Restart recovery, strictly AFTER the handler
+    // is registered: recovery arms timers, and a timer whose handler does not
+    // exist would queue work nothing could ever run.
+    //
+    // It runs only when the registration actually succeeded. A failed
+    // registration is reported through `timerActivation`, and recovery would
+    // only be able to report the same missing scheduler again — so it is skipped
+    // here and that skip is itself visible, rather than being masked by a second,
+    // vaguer outcome.
+    this.#expirationRecovery = this.#timerActivation?.status === 'registered'
+      ? await this.#timer.recoverFromPersistedState()
+      : {
+        source: 'recovery',
+        status: 'skipped',
+        reason: this.#timerActivation?.status === 'already_active'
+          ? 'already_active'
+          : 'timer_not_registered',
+        error: this.#timerActivation?.error || 'The reservation expiration handler is not registered',
+        reservations: [],
+      }
+
     await super.activate()
   }
 
@@ -86,6 +109,21 @@ export class ReservationCapability extends BaseCapability {
    */
   get timerActivation() {
     return this.#timerActivation
+  }
+
+  /**
+   * The restart-recovery report from the last `activate()`.
+   *
+   * BOOKING-EXPIRATION-RECOVERY-1. Automatic expiration work is reconstructed
+   * from the persisted reservations here, because timers and scheduler jobs do
+   * not survive a restart. Reported rather than thrown: a failed recovery means
+   * expirations are not being reconstructed, which is exactly what a caller needs
+   * to be able to see, and it must not take the rest of the capability down.
+   *
+   * @returns {object|null}
+   */
+  get expirationRecovery() {
+    return this.#expirationRecovery
   }
 
   async deactivate() {
@@ -101,6 +139,7 @@ export class ReservationCapability extends BaseCapability {
     this.#manager = null
     this.#service = null
     this.#timer = null
+    this.#expirationRecovery = null
     this.#recovery = null
     await super.destroy()
   }

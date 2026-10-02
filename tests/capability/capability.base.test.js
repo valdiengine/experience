@@ -7,7 +7,7 @@
  *   1. Create Runtime   — RuntimeFactory builds an isolated bundle
  *   2. EventBus         — recording wrapper around the real bus
  *   3. Mock Repos       — in-memory adapter registered before first resolution
- *   4. Register Caps    — the nine commercial capabilities register + activate
+ *   4. Register Caps    — the ten commercial capabilities register + activate
  *   5. Execute          — runScenario(bundle)
  *   6. Validate Repo    — assertions against the in-memory store
  *   7. Validate Events  — assertions against emitted events
