@@ -29,6 +29,8 @@ import { PostgresAvailabilityAdapter } from '../../capabilities/persistence/adap
 import { registerCapabilities } from './capability.bootstrap.js'
 import { validateRuntime } from './runtime.validation.js'
 import { bootstrapEnsueñoBookingRegistry } from '../../experience/booking/ensueno.booking.resolver.js'
+import { getBookingRegistry } from '../../api/routes/booking.routes.js'
+import { startTenantReservationRecovery } from './reservation.recovery.bootstrap.js'
 import { StartupError, RuntimeBootstrapError, ValidationBootstrapError } from './startup.errors.js'
 import { STARTUP_EVENTS, createStartupEvent } from './startup.events.js'
 
@@ -142,13 +144,37 @@ export async function start(options = {}) {
       await bootstrapEnsueñoBookingRegistry()
     }
 
-    // 4. Capabilities — register, initialize, activate the nine commercial capabilities
+    // 4. Capabilities — register, initialize, activate the ten commercial capabilities
     const capabilities = await registerCapabilities(runtime, {
       tenant: options.tenant || DEFAULT_TENANT,
       configuration: { ...(options.configuration || {}), persistenceProvider },
     })
     capabilityRegistry = capabilities.registry
     capabilityContext = capabilities.context
+
+    // 4b. BOOKING-EXPIRATION-RECOVERY-1 — reservation expiration recovery for the
+    // REAL BookingRegistry tenants.
+    //
+    // The capability above recovered under the synthetic `commercial` tenant, which
+    // owns no real reservations. Real reservations live under the tenants the
+    // BookingRegistry reconstructed at step 3b, and the only runtime that reached
+    // them was the request-scoped manager inside the public Booking path — whose
+    // timers died with the request, so nothing survived a Passenger restart.
+    //
+    // This establishes one tenant-scoped reservation expiration runtime per UNIQUE
+    // registered Booking tenant and holds it for the process lifetime. It must run
+    // here, after `registerCapabilities()` (so the shared SchedulerCapability exists
+    // and is active) and after the registry bootstrap. A per-tenant failure marks
+    // the result degraded; startup itself is not failed — see the module header for
+    // the failure-semantics rationale.
+    const { orchestrator: tenantRecovery, report: tenantRecoveryReport } =
+      await startTenantReservationRecovery({
+        runtime,
+        capabilityContext,
+        capabilityRegistry,
+        bookingRegistry: getBookingRegistry(),
+        configuration: options.configuration || {},
+      })
 
     // 5. Validation — static/structural verification of the assembled bundle
     const validation = validateRuntime(
@@ -202,12 +228,22 @@ export async function start(options = {}) {
       },
       config: resolved,
       tenant: options.tenant || DEFAULT_TENANT,
+      // BOOKING-EXPIRATION-RECOVERY-1. Live per-tenant expiration ownership plus the
+      // structured startup result. Exposed, not just logged: a degraded tenant must be
+      // observable by whatever supervises this process.
+      tenantReservationRecovery: tenantRecoveryReport,
+      tenantReservationRecoveryRuntime: tenantRecovery,
     }
 
     eventBus.emit(STARTUP_EVENTS.COMPLETED, createStartupEvent(STARTUP_EVENTS.COMPLETED, {
       capabilities: capabilityRegistry.size,
       repositories: runtime.repositoryRuntime.registry.count,
       modules: runtime.engine.listModules(),
+      tenantReservationRecovery: {
+        status: tenantRecoveryReport.status,
+        bookingTargets: tenantRecoveryReport.bookingTargets,
+        uniqueTenants: tenantRecoveryReport.uniqueTenants,
+      },
     }))
 
     bundle.cleanup = () => cleanup(bundle)
@@ -226,10 +262,19 @@ export async function start(options = {}) {
  * @param {object} bundle - Runtime bundle returned by start()
  */
 export async function cleanup(bundle = {}) {
-  const { capabilityRegistry, eventBus, engine, apiServer } = bundle
+  const { capabilityRegistry, eventBus, engine, apiServer, tenantReservationRecoveryRuntime } = bundle
 
   if (apiServer) {
     try { await apiServer.shutdown() } catch {}
+  }
+
+  // BOOKING-EXPIRATION-RECOVERY-1. Tenant expiration runtimes are destroyed FIRST —
+  // before the capabilities, and therefore before `SchedulerCapability.destroy()`.
+  // Each tenant timer unregisters its own handler and cancels its own queued jobs, and
+  // those calls only work while the shared scheduler is still alive. Reversing this
+  // order would leave tenant handlers registered against a destroyed scheduler.
+  if (tenantReservationRecoveryRuntime) {
+    try { await tenantReservationRecoveryRuntime.destroy() } catch {}
   }
 
   if (capabilityRegistry) {

@@ -8,6 +8,7 @@ export const SCHEDULER_EVENTS = {
   JOB_COMPLETED: 'scheduler:job_completed',
   JOB_FAILED: 'scheduler:job_failed',
   JOB_CANCELLED: 'scheduler:job_cancelled',
+  JOB_REQUEUED: 'scheduler:job_requeued',
   JOB_EXPIRED: 'scheduler:job_expired',
   TICK: 'scheduler:tick',
 

@@ -95,12 +95,18 @@ export class JobBuilder {
 
   /**
    * Mark job as failed
+   *
+   * `permanent` is set when the handler declares the failure non-retryable — for
+   * example a failure that happened after the work was already committed. The
+   * generic retry counter must not re-run those: retrying them would repeat
+   * committed work, not fix anything.
    * @param {object} job
+   * @param {{ permanent?: boolean }} [options]
    * @returns {object}
    */
-  static markFailed(job) {
+  static markFailed(job, { permanent = false } = {}) {
     const retries = (job.retries || 0) + 1
-    const shouldRetry = retries < (job.maxRetries || 3)
+    const shouldRetry = !permanent && retries < (job.maxRetries || 3)
 
     return {
       ...job,
@@ -116,5 +122,17 @@ export class JobBuilder {
    */
   static markCancelled(job) {
     return { ...job, status: JOB_STATUS.CANCELLED }
+  }
+
+  /**
+   * Return a job to pending after an early delivery that did no work and asked to
+   * be requeued. Built from the job as it was BEFORE the run, so `runAt`/`nextRun`
+   * and the retry counters are untouched: the scheduled execution stays pending at
+   * its original deadline instead of being consumed.
+   * @param {object} job
+   * @returns {object}
+   */
+  static markRequeued(job) {
+    return { ...job, status: JOB_STATUS.PENDING }
   }
 }

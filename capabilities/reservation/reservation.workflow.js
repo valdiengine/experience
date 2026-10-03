@@ -20,9 +20,16 @@ const EXPIRATION_TARGETS = {
 }
 
 const VALID_TRANSITIONS = {
+  // BOOKING-EXPIRATION-ATOMIC-1. REQUESTED now declares EXPIRED, matching
+  // EXPIRATION_TARGETS above and the default `requestedTimeout` of 12h. Without
+  // it, `canExpire('requested')` was true while `canTransition` was false, so a
+  // requested reservation that timed out threw `Invalid transition` out of both
+  // `expireReservation` and the timer's expiration. Every pre-existing
+  // transition out of REQUESTED is retained; this is purely additive.
   [RESERVATION_STATUS.REQUESTED]: [
     RESERVATION_STATUS.OWNER_PENDING,
     RESERVATION_STATUS.REJECTED,
+    RESERVATION_STATUS.EXPIRED,
     RESERVATION_STATUS.CANCELLED,
     RESERVATION_STATUS.ARCHIVED,
   ],

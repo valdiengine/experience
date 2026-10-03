@@ -6,14 +6,13 @@
  * No direct imports from other capabilities
  */
 import { BaseCapability } from '../core/base.capability.js'
-import { ReservationManager } from './reservation.manager.js'
+import { ReservationManager, isPersistedTenantScope } from './reservation.manager.js'
 import { ReservationService } from './reservation.service.js'
 import { ReservationWorkflow } from './reservation.workflow.js'
 import { ReservationTimer } from './reservation.timer.js'
 import { ReservationRecovery } from './reservation.recovery.js'
 import { ReservationFlow } from './reservation.flow.js'
 import { RESERVATION_EVENTS } from './reservation.events.js'
-import { RESERVATION_STATUS } from './reservation.status.js'
 import { ReservationSearch } from './reservation.search.js'
 
 export class ReservationCapability extends BaseCapability {
@@ -25,17 +24,25 @@ export class ReservationCapability extends BaseCapability {
   #manager = null
   #service = null
   #timer = null
+  #timerActivation = null
+  #expirationRecovery = null
   #recovery = null
 
   async init(context, config = {}) {
     await super.init(context, config)
     this.#manager = new ReservationManager(context)
     this.#service = new ReservationService(this.#manager)
-    this.#timer = new ReservationTimer(context)
+    // BOOKING-EXPIRATION-TIMERS-1. The timer is handed the manager so it can (a)
+    // route expiration through the single atomic manager path and (b) attach
+    // itself to the manager, which is where lifecycle timer wiring lives. Wiring
+    // it in the wrappers below instead would have missed every production caller
+    // that goes straight to the manager or the service (the business manager and
+    // the HTTP routes do).
+    this.#timer = new ReservationTimer(context, { manager: this.#manager })
     this.#recovery = new ReservationRecovery(context)
     if (typeof this.#manager.hydrate === 'function') {
       const tenantId = context?.tenant?.id
-      if (tenantId && tenantId !== 'commercial') {
+      if (isPersistedTenantScope(tenantId)) {
         await this.#manager.hydrate()
       }
     }
@@ -47,16 +54,119 @@ export class ReservationCapability extends BaseCapability {
     this.on(RESERVATION_EVENTS.CONFIRMED, this.#onReservationConfirmed.bind(this))
     this.on(RESERVATION_EVENTS.CANCELLED, this.#onReservationCancelled.bind(this))
     this.on(RESERVATION_EVENTS.EXPIRED, this.#onReservationExpired.bind(this))
+    // BOOKING-EXPIRATION-ATOMIC-1. NO_RESPONSE is the expiration outcome for an
+    // unanswered OWNER_PENDING reservation and is terminal, exactly like
+    // EXPIRED. Without this subscription it would produce no search-index
+    // handling at all, so the reservation would stay listed in search while its
+    // capacity had been released — the same divergence EXPIRED already handled.
+    // This is the directly affected consumer being wired; no event-delivery
+    // framework is introduced and the existing EXPIRED path is unchanged.
+    this.on(RESERVATION_EVENTS.NO_RESPONSE, this.#onReservationNoResponse.bind(this))
+    // BOOKING-EXPIRATION-TIMERS-1. The `reservationExpiration` handler is
+    // registered BEFORE anything can schedule it; previously the name was only
+    // ever enqueued, so a due job could not run.
+    //
+    // The outcome is kept and exposed on `timerActivation` instead of being
+    // discarded: an activation without a scheduler used to report success while no
+    // expiration handler existed, leaving every armed deadline unrunnable and the
+    // failure invisible.
+    //
+    // It is REPORTED, not thrown. Without a scheduler, automatic expiration is
+    // off and says so; every other reservation duty still works, and failing the
+    // whole capability over one absent dependency would take the search-index,
+    // event and manager behaviour down with it. `already_active` is a legitimate
+    // outcome and is not a failure.
+    this.#timerActivation = (await this.#timer?.activate()) ?? null
+
+    // BOOKING-EXPIRATION-RECOVERY-1. Restart recovery, strictly AFTER the handler
+    // is registered: recovery arms timers, and a timer whose handler does not
+    // exist would queue work nothing could ever run.
+    //
+    // It runs only when the registration actually succeeded. A failed
+    // registration is reported through `timerActivation`, and recovery would
+    // only be able to report the same missing scheduler again — so it is skipped
+    // here and that skip is itself visible, rather than being masked by a second,
+    // vaguer outcome.
+    //
+    // BOOKING-EXPIRATION-STAGE-1. `init()` already refused to hydrate persisted
+    // state under the synthetic `commercial` tenant, but this recovery call had
+    // no equivalent guard. `recoverFromPersistedState()` delegates to
+    // `manager.findReservationsByStatus()`, which put the context tenant into a
+    // `tenant_id = $2` predicate against a uuid column, so Passenger logged
+    // `invalid input syntax for type uuid: "commercial"`.
+    //
+    // Why this stayed hidden until Slice E: without `SchedulerCapability` the
+    // timer could not register, `timerActivation.status` was not 'registered',
+    // and this branch was never taken. Adding the scheduler made it reachable.
+    //
+    // So the same distinction is applied here, in the same style as `init()`. The
+    // synthetic tenant owns no persisted reservations by construction, and
+    // `startTenantReservationRecovery()` remains the owner of restart recovery
+    // for the real BookingRegistry tenants, each of which builds its own
+    // manager/timer pair under its own UUID scope. Nothing is recovered here
+    // that was not already recovered there.
+    this.#expirationRecovery = this.#timerActivation?.status === 'registered'
+      ? (isPersistedTenantScope(this.tenant?.id)
+        ? await this.#timer.recoverFromPersistedState()
+        : {
+          source: 'recovery',
+          status: 'skipped',
+          reason: 'synthetic_tenant_scope',
+          tenantId: this.tenant?.id ?? null,
+          error: 'The synthetic commercial tenant owns no persisted reservations; restart recovery for real Booking tenants is performed by startTenantReservationRecovery()',
+          reservations: [],
+        })
+      : {
+        source: 'recovery',
+        status: 'skipped',
+        reason: this.#timerActivation?.status === 'already_active'
+          ? 'already_active'
+          : 'timer_not_registered',
+        error: this.#timerActivation?.error || 'The reservation expiration handler is not registered',
+        reservations: [],
+      }
+
     await super.activate()
   }
 
+  /**
+   * The timer registration outcome from the last `activate()`: `{ status, handler, error }`.
+   * A `failed` status means automatic expiration is not running in this process.
+   * @returns {{ status: string, handler?: string, error?: string }|null}
+   */
+  get timerActivation() {
+    return this.#timerActivation
+  }
+
+  /**
+   * The restart-recovery report from the last `activate()`.
+   *
+   * BOOKING-EXPIRATION-RECOVERY-1. Automatic expiration work is reconstructed
+   * from the persisted reservations here, because timers and scheduler jobs do
+   * not survive a restart. Reported rather than thrown: a failed recovery means
+   * expirations are not being reconstructed, which is exactly what a caller needs
+   * to be able to see, and it must not take the rest of the capability down.
+   *
+   * @returns {object|null}
+   */
+  get expirationRecovery() {
+    return this.#expirationRecovery
+  }
+
   async deactivate() {
+    // Stops this instance's timers and cancels their queued jobs before the
+    // capability goes away. Does not touch another instance's jobs.
+    await this.#timer?.deactivate()
     await super.deactivate()
   }
 
   async destroy() {
+    await this.#timer?.destroy()
+    this.#manager?.attachTimer?.(null)
     this.#manager = null
+    this.#service = null
     this.#timer = null
+    this.#expirationRecovery = null
     this.#recovery = null
     await super.destroy()
   }
@@ -82,11 +192,10 @@ export class ReservationCapability extends BaseCapability {
   // ── Core Methods ──
 
   async createRequest(data) {
-    const result = await this.#manager?.createRequest(data) || { success: false, errors: ['Manager not initialized'] }
-    if (result.success && result.reservationId) {
-      this.#timer?.startReservationTimer(result.reservationId, RESERVATION_STATUS.REQUESTED)
-    }
-    return result
+    // BOOKING-EXPIRATION-TIMERS-1. The `requested` timer is armed by the manager
+    // after the reservation is persisted; the wrapper only forwards the result,
+    // which now carries the separate `timer` outcome.
+    return this.#manager?.createRequest(data) || { success: false, errors: ['Manager not initialized'] }
   }
 
   async validateReservation(reservationId) {
@@ -94,37 +203,26 @@ export class ReservationCapability extends BaseCapability {
   }
 
   async requestOwnerConfirmation(reservationId) {
-    const result = await this.#manager?.requestOwnerConfirmation(reservationId) || { success: false, errors: ['Manager not initialized'] }
-    if (result.success) {
-      this.#timer?.stopTimer(reservationId, RESERVATION_STATUS.REQUESTED)
-      this.#timer?.startReservationTimer(reservationId, RESERVATION_STATUS.OWNER_PENDING)
-    }
-    return result
+    // The manager stops the `requested` timer and arms the 24h `owner_pending`
+    // one, anchored to that transition.
+    return this.#manager?.requestOwnerConfirmation(reservationId) || { success: false, errors: ['Manager not initialized'] }
   }
 
   async confirmReservation(reservationId) {
-    const result = await this.#manager?.confirmReservation(reservationId) || { success: false, errors: ['Manager not initialized'] }
-    if (result.success) {
-      this.#timer?.stopTimer(reservationId, RESERVATION_STATUS.OWNER_PENDING)
-    }
-    return result
+    // The manager drops the `owner_pending` timer and arms the 6h
+    // `payment_pending` one.
+    return this.#manager?.confirmReservation(reservationId) || { success: false, errors: ['Manager not initialized'] }
   }
 
   async rejectReservation(reservationId, reason) {
-    const result = await this.#manager?.rejectReservation(reservationId, reason) || { success: false, errors: ['Manager not initialized'] }
-    if (result.success) {
-      this.#timer?.stopTimer(reservationId, RESERVATION_STATUS.OWNER_PENDING)
-    }
-    return result
+    // The manager stops every timer for the reservation, including `requested`.
+    return this.#manager?.rejectReservation(reservationId, reason) || { success: false, errors: ['Manager not initialized'] }
   }
 
   async cancelReservation(reservationId, reason) {
-    const result = await this.#manager?.cancelReservation(reservationId, reason) || { success: false, errors: ['Manager not initialized'] }
-    if (result.success) {
-      this.#timer?.stopTimer(reservationId, RESERVATION_STATUS.OWNER_PENDING)
-      this.#timer?.stopTimer(reservationId, RESERVATION_STATUS.PAYMENT_PENDING)
-    }
-    return result
+    // The manager stops every timer for the reservation, including `requested` —
+    // the case these wrappers used to omit.
+    return this.#manager?.cancelReservation(reservationId, reason) || { success: false, errors: ['Manager not initialized'] }
   }
 
   async expireReservation(reservationId) {
@@ -192,6 +290,15 @@ export class ReservationCapability extends BaseCapability {
   }
 
   #onReservationExpired(event) {
+    this.#triggerSearchRemove(event.reservation)
+  }
+
+  /**
+   * The NO_RESPONSE expiration outcome is terminal, so it removes the
+   * reservation from the search index exactly as EXPIRED does.
+   * BOOKING-EXPIRATION-ATOMIC-1.
+   */
+  #onReservationNoResponse(event) {
     this.#triggerSearchRemove(event.reservation)
   }
 

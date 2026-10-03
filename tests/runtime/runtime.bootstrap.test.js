@@ -41,13 +41,17 @@ export async function run() {
     const repoCount = bundle.repositoryRuntime?.registry?.list?.().length ?? bundle.repositoryRuntime?.registry?.count ?? -1
     add('repositories-registered', repoCount === 12, `repositories registered: ${repoCount}`)
 
-    add('capabilities-registered', bundle.capabilityRegistry?.size === 9, `capabilities registered: ${bundle.capabilityRegistry?.size}`)
+    // BOOKING-EXPIRATION-STAGE-1: the commercial runtime registers ten capabilities
+    // (SchedulerCapability included); the legacy expectation of 9 is obsolete.
+    add('capabilities-registered', bundle.capabilityRegistry?.size === 10, `capabilities registered: ${bundle.capabilityRegistry?.size}`)
+    add('capability-scheduler-present', bundle.capabilityRegistry?.has?.('scheduler') === true, 'SchedulerCapability registered')
+    add('capability-scheduler-active', (bundle.capabilityRegistry?.getActive?.() || []).some((c) => c.id === 'scheduler'), 'SchedulerCapability active')
 
     add('runtime-validation', bundle.validation?.valid === true, 'validateRuntime passed')
 
     const secondBus = createMockEventBus(createEventBus())
     const second = await start({ eventBus: secondBus })
-    const idempotent = Boolean(second?.engine) && second.capabilityRegistry?.size === 9 && Boolean(second.repositoryRuntime)
+    const idempotent = Boolean(second?.engine) && second.capabilityRegistry?.size === 10 && Boolean(second.repositoryRuntime)
     add('start-idempotent', idempotent, 'second start() returns the same bundle shape')
     await cleanup(second)
   } finally {

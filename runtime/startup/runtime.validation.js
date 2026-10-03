@@ -13,10 +13,43 @@ const COMMERCIAL_REPOSITORY_NAMES = [
   'owner', 'booking', 'notification', 'opportunity',
 ]
 
-const COMMERCIAL_CAPABILITY_IDS = [
-  'business', 'accommodation', 'availability', 'reservation', 'visitor',
-  'owner', 'booking', 'notifications', 'opportunity',
+/**
+ * The required commercial runtime capability set.
+ *
+ * BOOKING-EXPIRATION-STAGE-1. `scheduler` is a REQUIRED capability, not an
+ * optional extra. `capability.bootstrap.js` registers
+ * `SchedulerCapability` immediately before `ReservationCapability` because
+ * `ReservationTimer` resolves the scheduler ONLY through
+ * `context.capabilities.get('scheduler')`, and `application.start.js` runs
+ * `startTenantReservationRecovery()` only after the shared scheduler is active.
+ * A commercial runtime without it cannot register an expiration handler and
+ * cannot recover real BookingRegistry tenants.
+ *
+ * This list is the single source of truth for the capability contract, so the
+ * count check below can never drift from it the way the previous hardcoded
+ * `capabilityCount === 9` did: adding the capability without updating the count
+ * invalidated a correctly assembled runtime on Passenger boot.
+ */
+export const COMMERCIAL_CAPABILITY_IDS = [
+  'business', 'accommodation', 'availability', 'scheduler', 'reservation',
+  'visitor', 'owner', 'booking', 'notifications', 'opportunity',
 ]
+
+/**
+ * The minimum number of registered capabilities the commercial runtime must
+ * have. Derived from COMMERCIAL_CAPABILITY_IDS so the floor and the required set
+ * are the same statement.
+ */
+export const COMMERCIAL_CAPABILITY_COUNT = COMMERCIAL_CAPABILITY_IDS.length
+
+/**
+ * Capabilities whose absence must be reported on its own, not only as part of
+ * the aggregate set. `scheduler` is here because it is the capability the whole
+ * expiration path depends on: its absence is a boot-time regression with a very
+ * different cause than any other missing capability, and it would otherwise be
+ * buried in the `capabilities.commercial` detail string.
+ */
+export const COMMERCIAL_REQUIRED_INDIVIDUAL_IDS = ['scheduler']
 
 /**
  * Validate a booted runtime bundle.
@@ -52,11 +85,23 @@ export function validateRuntime(runtime, environment = {}) {
   }
 
   // Capabilities
+  //
+  // The count is a FLOOR and the required-ID presence check is the contract,
+  // which is exactly how the repository checks above are already written. The
+  // previous `capabilityCount === 9` was a hardcoded total that the intended
+  // ten-capability composition contradicted.
   const capabilityCount = runtime.capabilityRegistry ? runtime.capabilityRegistry.size : 0
-  check('capabilities.registered', capabilityCount === 9, `count=${capabilityCount}`)
+  check('capabilities.registered', capabilityCount >= COMMERCIAL_CAPABILITY_COUNT, `count=${capabilityCount} (min=${COMMERCIAL_CAPABILITY_COUNT})`)
   if (runtime.capabilityRegistry) {
     const missing = COMMERCIAL_CAPABILITY_IDS.filter(id => !runtime.capabilityRegistry.has(id))
     check('capabilities.commercial', missing.length === 0, missing.length ? `missing: ${missing.join(', ')}` : 'ok')
+    for (const id of COMMERCIAL_REQUIRED_INDIVIDUAL_IDS) {
+      check(
+        `capabilities.${id}`,
+        runtime.capabilityRegistry.has(id),
+        runtime.capabilityRegistry.has(id) ? 'ok' : 'missing required capability'
+      )
+    }
   }
 
   // Runtime contexts (contracts present on the shared RuntimeContext)
