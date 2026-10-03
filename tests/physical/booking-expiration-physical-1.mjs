@@ -32,14 +32,34 @@
  * record is the one being certified.
  *
  * FAIL CLOSED / OPT IN
- * Two independent gates must BOTH be satisfied before a pool is created:
- *   BOOKING_EXPIRATION_PHYSICAL_CERTIFY=1   explicit human opt-in
- *   DATABASE_URL                            present (presence only; never printed)
- * If either is missing this file prints a refusal and exits 0 WITHOUT creating a
+ * THREE independent conditions must ALL be satisfied before a pool is created:
+ *   BOOKING_EXPIRATION_PHYSICAL_CERTIFY=1            explicit human opt-in
+ *   DATABASE_URL                                     present (presence only; never printed)
+ *   BOOKING_EXPIRATION_PHYSICAL_EXPECT_DATABASE      the exact disposable cert database name
+ * If any is missing this file prints a refusal and exits 0 WITHOUT creating a
  * pool, WITHOUT connecting, and WITHOUT falling back to localhost/default database
  * configuration. `createPool()` in the production connector falls back to local
  * config when DATABASE_URL is unset, which is precisely why the gate is evaluated
  * before any production connection helper is touched.
+ *
+ * DISPOSABLE DATABASE IDENTITY (BOOKING-PHYSICAL-HARNESS-SAFETY-1)
+ * The three conditions above still do not prove WHICH database is reached:
+ * DATABASE_URL carries the Stage URL perfectly well, so an opted-in run pointed at
+ * Stage would mutate Stage. A fourth, independent condition therefore closes the
+ * run against the server's OWN answer:
+ *
+ *   `SELECT current_database()` on the live connection must equal the declared
+ *   BOOKING_EXPIRATION_PHYSICAL_EXPECT_DATABASE by EXACT string equality.
+ *
+ * That read is issued as the FIRST statement on the connection, before the
+ * connection probe and before every other preflight query, so the identity is
+ * established while the database is still untouched. No substring, hostname or
+ * NODE_ENV heuristic is accepted in its place — see
+ * `tests/physical/support/physical-database-identity.guard.mjs`.
+ *
+ * Until that comparison has passed, `state.databaseIdentityVerified` stays false
+ * and `cleanup()` issues NO statement at all: the fixture DELETEs are mutations
+ * too, and must not run against a database this harness has not proven it owns.
  *
  * NOT REACHABLE BY A NORMAL TEST RUN
  * tests/reports/generate.js lists its suites explicitly and this file is not among
@@ -66,12 +86,22 @@ import {
   AvailabilityConflictError,
   AvailabilityConsumptionRecordError,
 } from '../../capabilities/availability/availability.errors.js'
+import {
+  CERTIFY_VARIABLE,
+  EXPECT_DATABASE_VARIABLE,
+  PhysicalDatabaseIdentityError,
+  describeDatabaseName,
+  evaluateCertificationGates,
+  hasDatabaseUrl,
+  readAndVerifyDatabaseIdentity,
+} from './support/physical-database-identity.guard.mjs'
 
 /* ------------------------------------------------------------------ *
  * Gates, deterministic fixture identity and execution-relative dates
  * ------------------------------------------------------------------ */
 
-const GATE_VARIABLE = 'BOOKING_EXPIRATION_PHYSICAL_CERTIFY'
+const GATE_VARIABLE = CERTIFY_VARIABLE
+const EXPECT_DATABASE_GATE_VARIABLE = EXPECT_DATABASE_VARIABLE
 const SLUG_PREFIX = 'physical-expiration-1'
 
 /**
@@ -376,32 +406,42 @@ function describeError(error) {
 
 /* ------------------------------------------------------------------ *
  * Gate evaluation — runs before any connection helper is touched
+ *
+ * The decision logic itself lives in
+ * `tests/physical/support/physical-database-identity.guard.mjs` so it can be proven
+ * by deterministic tests that never open a socket. These two wrappers keep every
+ * existing call site and marker contract unchanged while making the harness run
+ * exactly the code the tests cover — there is no second, divergent copy of the gate
+ * that a test could miss.
  * ------------------------------------------------------------------ */
 
-function hasDatabaseUrl(env) {
-  const value = env.DATABASE_URL
-  return typeof value === 'string' && value.trim().length > 0
+/**
+ * @returns {{allowed: boolean, reason: string|null, detail: string, expectedDatabase: string|null}}
+ */
+function evaluateGate(env) {
+  return evaluateCertificationGates(env)
 }
 
 /**
- * @returns {{ allowed: boolean, reason: string|null, detail: string }}
+ * Disposal-database identity gate, evaluated on the live connection.
+ *
+ * Called as the FIRST statement after `createPool()`, so the server is asked who it
+ * is before it is asked anything else and long before anything is written. On any
+ * refusal this throws, which unwinds `runCertification()` into `main()`'s handler:
+ * the failure is reported by class name only, `cleanup()` refuses to issue a single
+ * statement because `databaseIdentityVerified` is still false, and `closePool()`
+ * still runs in the `finally`. The pool is therefore released on every refusal path.
  */
-function evaluateGate(env) {
-  if (env[GATE_VARIABLE] !== '1') {
-    return {
-      allowed: false,
-      reason: 'gate_absent',
-      detail: `${GATE_VARIABLE} is not set to '1'`,
-    }
-  }
-  if (!hasDatabaseUrl(env)) {
-    return {
-      allowed: false,
-      reason: 'database_url_absent',
-      detail: 'DATABASE_URL is not present in the environment',
-    }
-  }
-  return { allowed: true, reason: null, detail: '' }
+async function assertDisposableDatabaseIdentity(expected, state) {
+  const identity = await readAndVerifyDatabaseIdentity({ expected, runQuery: query })
+
+  marker('DATABASE_IDENTITY_VERIFIED', true)
+  marker('EXPECTED_DATABASE', describeDatabaseName(expected))
+  marker('ACTUAL_DATABASE', identity.database)
+
+  // The single switch that authorises every later mutation in this run.
+  state.databaseIdentityVerified = true
+  return identity
 }
 
 /* ------------------------------------------------------------------ *
@@ -611,11 +651,20 @@ async function countFixtureSlugResidue() {
  * PREFLIGHT — SELECT only. Nothing before this block mutates anything.
  * ------------------------------------------------------------------ */
 
-async function preflight() {
+async function preflight(state) {
   marker('PREFLIGHT_STARTED', true)
 
-  // 1. PostgreSQL connection.
+  // 0. DISPOSABLE DATABASE IDENTITY — the first statement on the connection.
+  //    `createPool()` opens a connection but issues no statement and mutates
+  //    nothing, so the identity read below is the first thing the server is asked
+  //    and the database is still completely untouched. Every remaining preflight
+  //    query is SELECT-only, and the first write in the whole run is `scaffold()`,
+  //    which is reachable only through this gate having passed.
   createPool()
+  marker('EXPECTED_DATABASE_DECLARED', describeDatabaseName(state.expectedDatabase))
+  await assertDisposableDatabaseIdentity(state.expectedDatabase, state)
+
+  // 1. PostgreSQL connection.
   const connectionProbe = await query('SELECT 1 AS ok')
   assert(connectionProbe.rows.length === 1, 'Connection probe returned no row')
 
@@ -1276,6 +1325,21 @@ async function testDTenantIsolation(state) {
  * ------------------------------------------------------------------ */
 
 async function cleanup(state) {
+  // MUTATION GATE. The fixture DELETEs below are writes, so they are authorised by
+  // exactly the same proof as every other write in this run. If the identity gate
+  // never passed — because it refused, or because the run failed before reaching
+  // it — this harness has NOT established that the connected database is the
+  // disposable certification database, and therefore issues no statement at all.
+  // Without this, a refusal thrown from `preflight()` would still have fallen
+  // through `main()`'s `finally` into six DELETE statements against whatever
+  // database happened to be configured, which is precisely the destructive
+  // behaviour this milestone exists to prevent.
+  if (state.databaseIdentityVerified !== true) {
+    marker('CLEANUP_SKIPPED_UNVERIFIED_IDENTITY', true)
+    marker('DATABASE_IDENTITY_VERIFIED', false)
+    return false
+  }
+
   // Reservation ids are deterministic AND observed from the production return
   // values, so a partially created graph is still fully covered.
   const reservationIds = [...new Set([...RESERVATION_IDS, ...state.observedReservationIds])]
@@ -1325,7 +1389,7 @@ async function runCertification(state) {
   await state.stackA.repository.initialize()
   await state.stackB.repository.initialize()
 
-  await preflight()
+  await preflight(state)
   await scaffold(state.dates)
 
   marker('STAGE_REACHED', 'test_a')
@@ -1351,6 +1415,8 @@ async function main() {
     marker('REFUSAL_REASON', gate.reason)
     marker('REFUSAL_DETAIL', gate.detail)
     marker('DATABASE_URL_PRESENT', hasDatabaseUrl(process.env))
+    marker('EXPECTED_DATABASE', describeDatabaseName(gate.expectedDatabase))
+    marker('DATABASE_IDENTITY_VERIFIED', false)
     marker('POOL_CREATED', false)
     marker('NODE_EXIT', 0)
     return
@@ -1365,6 +1431,19 @@ async function main() {
   installProcessGuards()
 
   const state = { observedReservationIds: new Set() }
+
+  // The declaration proven acceptable by `evaluateGate()` above, carried to the
+  // connection gate in `preflight()`. It is the ONLY identity this harness will
+  // accept, and it was validated before any pool existed.
+  state.expectedDatabase = gate.expectedDatabase
+
+  // Fail-closed default. Every mutation in this run — the scaffolding INSERTs and
+  // the cleanup DELETEs alike — is authorised by this flag, and it is set to true
+  // at exactly one place: after `current_database()` has been compared for exact
+  // equality against `state.expectedDatabase`. A refusal leaves it false, so the
+  // run cannot write anything at all.
+  state.databaseIdentityVerified = false
+
   let certificationPassed = false
   let cleanupPassed = false
   let poolClosed = false
@@ -1381,10 +1460,20 @@ async function main() {
     // message, the stack and every other pg/network property are never printed,
     // because they can embed the target hostname, IP:port or username.
     marker('CERTIFICATION_FAILURE', describeError(error))
+
+    // An identity refusal carries a stable, fixed reason code. Reporting it makes a
+    // mis-pointed run diagnosable from the markers alone; the `reason` values are a
+    // closed set defined by the guard, so no driver text can reach output here.
+    if (error instanceof PhysicalDatabaseIdentityError) {
+      marker('DATABASE_IDENTITY_REFUSAL_REASON', error.reason)
+    }
   } finally {
     try {
-      await cleanup(state)
-      cleanupPassed = true
+      // `cleanup()` returns false when it refused to issue any statement because the
+      // database identity was never verified. That is NOT a successful cleanup, and
+      // it must not be reported as one — otherwise a skipped cleanup could be read as
+      // "the database is clean", which is the opposite of what is known.
+      cleanupPassed = (await cleanup(state)) === true
     } catch (error) {
       cleanupPassed = false
       marker('CLEANUP_FAILURE', describeError(error))

@@ -14,6 +14,11 @@ coverage/
 # Logs
 *.log
 
+# Certification credential artifacts (local only, never committed).
+# Anchored to the repository root so nested look-alikes are not swept up.
+# The file itself is preserved on disk; only Git's visibility of it changes.
+/.tmp-runtime-cert-token.txt
+
 # Windows
 Thumbs.db
 
