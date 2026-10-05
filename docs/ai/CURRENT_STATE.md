@@ -1,7 +1,8 @@
 # CURRENT_STATE.md
 
 > Exact snapshot of project state. Update after each completed phase.
-> Last updated: **ENSUEÑO POSTGRES M1–M5 — CERTIFIED + STAGE-DEPLOYED (ENSUENO-M5-STAGE-DEPLOY-1 — CERTIFIED)** (2026-09-27)
+> Last updated: **MVP10 — STAGE RECOVERY VIA `stage_app` (OPTION B CERTIFIED) + `BOOKING-STAGE-APP-WRITE-1` NEXT GATE** (2026-10-05). Prior: **ENSUEÑO POSTGRES M1–M5 — CERTIFIED + STAGE-DEPLOYED (ENSUENO-M5-STAGE-DEPLOY-1 — CERTIFIED)** (2026-09-27)
+> Security-rotation checkpoint report: `docs/ai/MVP10_STAGE_APP_RECOVERY_OPTION_B_REPORT.md`
 
 ## Platform Status
 
@@ -3252,3 +3253,237 @@ Scope note for whoever picks it up: the wording change belongs to the widget's s
 - Inbound date validation and HTTP error classification — `capabilities/availability/availability.validation.js` still accepts equal dates (HTTP `200` with a one-date calendar), still surfaces reversed dates as an unclassified `500` rather than `400`, and still normalizes impossible dates server-side. The new `nights` and widget guards are defense at the serialization and gate boundary, **not** a fix to that inbound contract; hardening it is a separate milestone.
 - The `jsonwebtoken` Stage runtime debt and the mixed-file reconciliation gate recorded under ENSUENO-M5-STAGE-DEPLOY-1 remain open and untouched.
 - Certification reservations `7f820bae-870f-460d-a14f-96894c97db34` and `1f6de1dc-7279-4439-b73b-5c5c6b83f562` remain untouched as evidence.
+
+## MVP10 — STAGE RECOVERY VIA `stage_app` (OPTION B CERTIFIED)
+
+**Date:** 2026-10-05
+**Full report:** `docs/ai/MVP10_STAGE_APP_RECOVERY_OPTION_B_REPORT.md`
+**Baseline commit:** `6f3870de4839659a1cc219c1504781dbde438500`
+**Database:** `valdi_test`
+**Scope of this entry:** documentation only. No runtime code, database configuration,
+`.env` file, Passenger configuration, or migration was modified. No `GRANT`/`REVOKE` was
+executed and Stage was not restarted by the documentation task.
+
+### Executive status
+
+| Checkpoint | Status |
+|---|---|
+| Gate 1B-2 — Owner permission matrix | **CLOSED / CERTIFIED** (prior gate, not re-run) |
+| Stage availability after `stage_app` adoption | **RECOVERED** |
+| Option B administrative preflight | **COMPLETE / PASS** |
+| Option B privilege grants | **CLOSED / CERTIFIED** |
+| Independent post-COMMIT certification | **COMPLETE / EXACT MATCH** |
+| Targeted Passenger restart | **EXECUTED** (operator) |
+| Public `/health` | **HTTP 200**, physical PostgreSQL |
+| Deployed CRLF-normalized comparison | **CLOSED / CERTIFIED** |
+| `BOOKING-STAGE-APP-WRITE-1` | **NOT EXECUTED** — immediate next gate |
+| Gate 1C | **PENDING** |
+| `neondb_owner` rotation | **BLOCKED** |
+| JWT / VAPID rotation | **PENDING** |
+| Overall credential incident | **OPEN** |
+
+```text
+OPTION_B_GRANTS=CLOSED_CERTIFIED
+STAGE_RECOVERY=CLOSED
+STAGE_HTTP_STATUS=200
+STAGE_PERSISTENCE_PROVIDER=postgres
+STAGE_PERSISTENCE_STATUS=up
+STAGE_PERSISTENCE_PHYSICAL=true
+DEPLOYED_CRLF_NORMALIZED_COMPARISON=CLOSED_CERTIFIED
+BOOKING_STAGE_APP_WRITE_1=NOT_EXECUTED
+```
+
+### Incident
+
+The Node.js Selector `DATABASE_URL` was changed to the restricted `stage_app`
+connection; Selector and `.htaccess` were verified equal and a targeted Passenger restart
+was performed. Stage then returned **HTTP 503**, with sanitized `stderr.log` showing
+PostgreSQL `permission denied for table tenants` and `SQLSTATE 42501`.
+
+This reopened exactly one assumption — that the Owner-session tables were the only
+relevant PostgreSQL consumer for this runtime. The closed Booking milestones were **not**
+reopened.
+
+The rejection occurred during initialization before any listener was bound, which is why
+every route including `/health` returned 503 rather than a health-specific failure.
+
+### Traced consumer surface
+
+Startup identity reconstruction (`experience/booking/ensueno.booking.resolver.js:88-91`,
+`:103-106`, `:126-129`) requires reads of `public.tenants`, `public.companies`,
+`public.accommodations`. It fails fatally: it throws through
+`runtime/startup/application.start.js:251-257`.
+
+Per-tenant expiration recovery (`runtime/startup/application.start.js:170-177`) requires
+reads and writes on `public.reservations`, `public.reservation_lines`,
+`public.availability` (`reservation.repository.js:1446-1519`,
+`postgres.reservation.adapter.js:213`). It fails **degraded, not fatally**
+(`reservation.recovery.bootstrap.js:325-337`).
+
+The pipeline override block (`runtime/startup/application.start.js:40-57`,
+`FEATURE_DATABASE=false`, `DEFAULT_PROVIDER=mock`) never reaches those gates, which depend
+on `options.persistenceProvider`, sourced from `PERSISTENCE_PROVIDER` via
+`web/start.web.js:22`. Two differently-scoped variables had been conflated.
+
+### Option B — applied privilege matrix
+
+| Table | Privileges |
+|---|---|
+| `public.tenants` | `SELECT` |
+| `public.companies` | `SELECT` |
+| `public.accommodations` | `SELECT` |
+| `public.reservations` | `SELECT`, `UPDATE` |
+| `public.reservation_lines` | `SELECT`, `UPDATE` |
+| `public.availability` | `SELECT`, `UPDATE` |
+
+9 required privilege pairs. The physical transaction used two `GRANT` statements. No
+`INSERT`, `DELETE`, `TRUNCATE`, `REFERENCES`, `TRIGGER`, DDL, ownership, sequence or
+default privilege, superuser, or role-inheritance expansion was authorized or applied. No
+sequence grants were required: the traced path contains no `INSERT`, and primary keys are
+UUID-with-default rather than serial.
+
+### Certification evidence
+
+- **Preflight (pre-change baseline):** all nine `stage_app` privilege checks were
+  `false`. Target database physically confirmed; administrative role was sufficient but
+  not superuser and held grant authority over all 6 targets.
+- **Transaction:** target and ownership re-asserted immediately before mutation,
+  `BEGIN_ISSUED=true`, `TXN_DATABASE_REASSERTED=true`, `TRANSACTION_COMMITTED=true`.
+- **Independent post-COMMIT certification** on a new connection:
+  `POST_REQUIRED_PRIVILEGE_COUNT=9`, `POST_REQUIRED_PRIVILEGES_ALL_TRUE=true`,
+  `POST_OPTION_B_DIRECT_GRANT_ROW_COUNT=9`, `OPTION_B_DIRECT_GRANTS_EXACT_MATCH=true`,
+  `POST_PROHIBITED_PRIVILEGES_HELD=0`.
+- **Passenger:** targeted `turistic-stage` restart, then first public health request
+  returned HTTP 200 with `provider=postgres`, `status=up`, `physical=true`.
+
+### Certification boundary
+
+**Certified:** `stage_app` supports the traced startup reconstruction surface; `stage_app`
+holds the traced `SELECT`/`UPDATE` surface for the Option B expiration-recovery tables;
+Passenger restarted; public Stage returned HTTP 200; health reported physical PostgreSQL;
+the 503 incident caused by insufficient `tenants` access is resolved; the grant surface is
+exactly the authorized surface with zero prohibited privileges; and for the four deployed
+files listed below, the deployed tree is logically equivalent to the baseline commit after
+in-memory line-ending normalization.
+
+**Not certified:** all Booking write paths; reservation `POST` under `stage_app`;
+`INSERT` privileges for reservation creation (not traced, not granted); durable reservation
+survival across a Passenger restart under `stage_app`; the full cancellation/release
+lifecycle under `stage_app`; live Owner-session PostgreSQL identity; migration of all
+PostgreSQL consumers away from the old identity; `POSTGRES_*` remediation; Gate 1C;
+`neondb_owner` rotatability; JWT/VAPID rotation; overall incident closure; and the deployed
+repository as a whole, since the CRLF-normalized comparison covers only four named files.
+
+**Absence of evidence is not evidence of loss.** Reservations are **not** known to be
+currently lost. The outstanding item is an *uncertified* contract: durable reservation
+persistence under the new restricted runtime identity has not yet been re-certified.
+
+**Interpretation limits:** a `physical: true` health response does not by itself prove the
+exact database role used by every independent runtime pool — it is evidence of a working
+PostgreSQL-backed runtime, not an identity attestation. Absence of a failure on the traced
+path is not proof that no other PostgreSQL permission problem exists. Option B is a repair
+of the traced permission surface, not a functional certification of Booking. The
+CRLF-normalized comparison certifies logical equivalence for four files only and must not
+be restated as a whole-repository deployment certification.
+
+### Remaining security rotation work
+
+**Ordering constraint — product safety gate first.** This work is **not** abandoned or
+deprioritized and remains the full path to retiring the compromised credentials. However,
+`BOOKING-STAGE-APP-WRITE-1` is recorded as the **immediate product safety gate**, to be
+executed **before** the destructive credential-retirement steps below (items 2–6). The
+rationale is ordering: retiring the old identities while the durable Booking write
+lifecycle under the new restricted runtime is still uncertified would remove the fallback
+before proving the replacement carries production responsibility.
+
+1. **Live runtime identity certification** — distinguish saved Selector configuration,
+   process environment, independently opened diagnostic connections, and the actual
+   application pool/session identity.
+2. **Legacy `POSTGRES_*` remediation** — still references the old target/identity and does
+   not match `DATABASE_URL`. Not rewritten during this checkpoint; needs its own evidence
+   and authorization.
+3. **Gate 1C** — maintenance/cron cleanup pending. Architecture:
+   `cron -> external wrapper -> /home/rodrigo/etc/owner-session-env -> Node -> cleanup`.
+   This path historically references the old administrative identity/configuration. Evaluate
+   the appropriate maintenance identity and cleanup contract. `DELETE` must **not** be added
+   to `stage_app` merely to satisfy cron without tracing the contract.
+4. **`neondb_owner` rotation** — blocked until remaining consumers are identified and
+   remediated.
+5. **`JWT_SECRET` / VAPID** — pending, sequenced after database consumer cleanup.
+6. **Final incident closure** — only after remaining credentials and consumers are handled
+   and independently certified.
+
+### Next gate — `BOOKING-STAGE-APP-WRITE-1`
+
+**Status: NOT EXECUTED.** Nothing in this section is a claim of certification.
+
+**Gate kind:** Booking certification under the restricted `stage_app` identity.
+**Sequence position:** immediate next gate, ahead of the destructive credential-retirement
+steps above.
+
+**Objective:** determine whether the actual public Stage Booking write lifecycle works
+durably under `stage_app`.
+
+**Principal question this gate must answer:** can a reservation created in public Stage
+under the restricted `stage_app` runtime be persisted durably, survive a Passenger restart,
+and subsequently release its capacity correctly?
+
+**Intended sequence:**
+
+1. Trace the actual public Stage reservation `POST` path.
+2. Determine the exact PostgreSQL operations and minimum privileges used by reservation
+   creation.
+3. Compare those requirements against the current `stage_app` privilege surface.
+4. **Do NOT pre-grant `INSERT` or any other privilege.**
+5. If additional privileges are physically required, define and review a least-privilege
+   matrix before mutation.
+6. Execute one controlled synthetic Stage reservation only after the permission contract
+   is understood.
+7. Verify the reservation exists through the public/product path and, where appropriate,
+   physical persistence evidence.
+8. Verify availability/capacity reflects the reservation.
+9. Perform a targeted Passenger restart.
+10. Verify the **same** reservation still exists after restart and that its capacity state
+    remains correct.
+11. Exercise the appropriate cancellation/release path.
+12. Verify capacity is released exactly and persistent state remains consistent.
+
+**Prohibitions:** no pre-granting of `INSERT` or any other privilege; no `DELETE` added to
+`stage_app` to satisfy the Gate 1C cron contract without first tracing that contract; and
+no certificate of "all Booking functionality" — the gate certifies only the specific
+create → survive-restart → release lifecycle under test.
+
+**After this gate:** certify the running pool/session identity from inside the Passenger
+runtime; then decide the `POSTGRES_*` remediation with explicit authorization; then proceed
+with Gate 1C identity, `neondb_owner` rotation, `JWT_SECRET` / VAPID rotation, and final
+incident closure. Gate 1C and `neondb_owner` rotation remain blocked behind these.
+
+### Supporting records
+
+- Gate 1B-2 — prior checkpoint, closed and not re-run. Its historical administrative
+  connection mechanism (Windows local `powershell.exe -ExecutionPolicy Bypass -File`, with
+  the URL pathname rewritten **in memory** to `/valdi_test`, and `current_database()`
+  physically guarded before mutation and inside the transaction) was recovered and reused.
+  Administrative role name is **NOT_EVIDENCED**; no claim is made that it was
+  `neondb_owner`.
+- **Deployed CRLF-normalized comparison — CLOSED / CERTIFIED.** An earlier raw SHA-256
+  comparison found four deployed files differing from their expected baseline hashes while
+  also containing CRLF: `web/web.server.js`, `runtime/startup/application.start.js`,
+  `runtime/startup/capability.bootstrap.js`, and
+  `capabilities/persistence/adapters/postgres/postgres.reservation.adapter.js`. A later
+  **read-only** Stage verification normalized CRLF to LF **in memory only** and
+  recalculated SHA-256; **no deployed file was modified**. All four normalized hashes
+  matched their expected baseline hashes:
+  `SUMMARY_CHECKED=4`, `SUMMARY_MATCHED=4`, `ALL_FOUR_CHECKED=true`, `ALL_FOUR_MATCH=true`,
+  `CRLF_NORMALIZED_COMPARISON_COMPLETE=true`, `SSH_LASTEXITCODE=0` →
+  `DEPLOYED_CRLF_NORMALIZED_COMPARISON=CLOSED_CERTIFIED`. This proves **logical
+  equivalence after line-ending normalization for those four files only**; it is not a
+  certification of the entire deployed repository. Residual methodology requirement, not
+  an open defect: future deployed-vs-baseline hash comparisons must normalize line endings
+  in memory first, and must never do so by writing to the deployed file.
+- The resolver that issues the failing query, `experience/booking/ensueno.booking.resolver.js`,
+  was byte-exact against the baseline, so the SQL that produced
+  `permission denied for table tenants` is certified committed code.
+- Correction note: the initial version of this entry recorded the CRLF-normalized
+  comparison as unrecorded/open. That was incorrect. The check completed successfully and
+  is certified above.
