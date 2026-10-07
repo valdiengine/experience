@@ -232,10 +232,26 @@ export class Router {
         return;
       }
       const middleware = allMiddleware[index++];
-      try {
-        await middleware(req, res, middlewareNext);
-      } catch (err) {
-      }
+
+      // CANCEL-TIMEOUT-REMEDIATION-1.
+      //
+      // This block used to be
+      //
+      //   try { await middleware(req, res, middlewareNext) } catch (err) {}
+      //
+      // which discarded every middleware AND handler rejection. `handle()`
+      // then resolved normally with no response written, so `res.end()` never
+      // ran, the socket stayed open, and the client waited out its own
+      // deadline. That is the certified third `/cancel`:
+      // HTTP_STATUS=000, TOTAL_TIME_S=120.001436, RESPONSE_BODY_BYTES=0,
+      // against an 83 ms dispatch that produced HTTP_REQUEST_END with no
+      // transaction marker at all.
+      //
+      // The router is not the right place to invent a response body, so the
+      // rejection is PROPAGATED to the single commercial-API boundary in
+      // `web/web.server.js` (#handleCommercialApiError), which owns
+      // terminating the response.
+      await middleware(req, res, middlewareNext);
     };
 
     await middlewareNext();

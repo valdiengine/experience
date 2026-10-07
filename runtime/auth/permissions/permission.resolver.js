@@ -142,11 +142,7 @@ export class PermissionResolver {
       const prefix = permission.slice(0, -2)
       return action.startsWith(prefix)
     }
-    if (this.#config.prefixMatching && permission.includes(':')) {
-      const [permAction] = permission.split(':')
-      const [reqAction] = action.split(':')
-      return permAction === reqAction
-    }
+
     return false
   }
 

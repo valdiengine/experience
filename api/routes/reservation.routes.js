@@ -7,10 +7,71 @@
  */
 
 import { Router } from './router.js';
-import { authMiddleware } from '../middleware/auth.middleware.js';
+import { authMiddleware, requireAuth } from '../middleware/auth.middleware.js';
+import { requirePermission } from '../middleware/authorization.middleware.js';
 import { createRepositoriesFacade } from '../../runtime/startup/capability.bootstrap.js';
-import { ReservationManager } from '../../capabilities/reservation/reservation.manager.js';
+import { ReservationManager, isPersistedTenantScope } from '../../capabilities/reservation/reservation.manager.js';
+import { RESERVATION_PERMISSIONS } from '../../capabilities/reservation/reservation.permissions.js';
 import { BusinessManager } from '../../capabilities/business/business.manager.js';
+
+/**
+ * CANCEL-TIMEOUT-REMEDIATION-1: finish a response exactly once.
+ *
+ * If a handler already committed status/headers/body, that response is
+ * preserved untouched and only the connection is closed. Otherwise a sanitized
+ * JSON 500 is written. `error.message` is never serialized.
+ *
+ * @param {object} res
+ */
+function terminateCancelWithError(res) {
+  if (res.headersSent || res.writableEnded) {
+    if (!res.writableEnded) {
+      res.end()
+    }
+    return
+  }
+
+  res.statusCode = 500
+  res.setHeader('Content-Type', 'application/json')
+  res.end(
+    JSON.stringify({
+      error: {
+        code: 'CANCEL_FAILED',
+        message: 'The reservation could not be cancelled.'
+      }
+    })
+  )
+}
+
+/**
+ * CANCEL-TIMEOUT-REMEDIATION-2: refuse a cancel whose identity carries no tenant.
+ *
+ * Bounded and sanitized exactly like `terminateCancelWithError`: a fixed body, no
+ * `error.message`, no tenant id, no reservation id, no credential. Reached before
+ * the business service, manager, repository, pool or transaction, so a missing
+ * tenant can no longer produce a database round trip.
+ *
+ * @param {object} res
+ */
+function terminateCancelWithoutTenant(res) {
+  if (res.headersSent || res.writableEnded) {
+    if (!res.writableEnded) {
+      res.end()
+    }
+    return
+  }
+
+  res.statusCode = 401
+  res.setHeader('Content-Type', 'application/json')
+  res.end(
+    JSON.stringify({
+      error: {
+        code: 'CANCEL_TENANT_REQUIRED',
+        message: 'The reservation could not be cancelled.'
+      }
+    })
+  )
+}
 
 /**
  * Check if tenant is synthetic (bootstrap-only, not a real UUID)
@@ -84,7 +145,33 @@ export function registerReservationRoutes(router) {
 
   reservationRouter.post('/:id/confirm', authMiddleware, controller.confirm.bind(controller));
   reservationRouter.post('/:id/reject', authMiddleware, controller.reject.bind(controller));
-  reservationRouter.post('/:id/cancel', authMiddleware, controller.cancel.bind(controller));
+  // CANCEL-TIMEOUT-REMEDIATION-2: this is the only commercial route hardened in
+  // this slice. `requireAuth` runs AFTER `authMiddleware`, so a missing or refused
+  // credential is answered with a bounded 401 and the handler never runs. The
+  // other reservation routes keep `authMiddleware`-only semantics on purpose.
+  reservationRouter.post(
+    '/:id/cancel',
+    authMiddleware,
+    requireAuth,
+    // CANCEL-TIMEOUT-REMEDIATION-2C: the authorization gate for this route.
+    //
+    // `ReservationManager.cancelReservation()` already calls `#checkPermission()`
+    // with `reservation:cancel`, so an identity without that permission is
+    // already stopped before any mutation — the existing layer prevents it. That
+    // rejection is raised as a plain Error and the handler maps every thrown
+    // error to 500, so a routine authorization denial was being reported as an
+    // internal fault.
+    //
+    // This uses the existing `requirePermission` middleware rather than changing
+    // `#checkPermission()`, because that method is shared with internal and
+    // timer-driven cancellation which legitimately has no user identity. The
+    // middleware is already fail-closed: `checkPermission()` returns false when
+    // no auth runtime is reachable, and it answers 401 without an identity and
+    // 403 without the grant. Net effect for /cancel: the same denial, decided
+    // before any business logic, reported with authorization semantics.
+    requirePermission(RESERVATION_PERMISSIONS.CANCEL),
+    controller.cancel.bind(controller)
+  );
   reservationRouter.post('/:id/checkin', authMiddleware, controller.checkIn.bind(controller));
   reservationRouter.post('/:id/checkout', authMiddleware, controller.checkOut.bind(controller));
 
@@ -400,7 +487,8 @@ export class ReservationController {
     res.end(JSON.stringify({ success: true, data: reservation }))
   }
 
-  async cancel(req, res) {
+async cancel(req, res) {
+
     const authenticatedTenant = req.user?.tenant
     const identity = {
       tenantId: req.user?.tenant?.id || req.user?.tenantId,
@@ -409,28 +497,67 @@ export class ReservationController {
       roles: req.user?.roles,
     }
 
-    if (authenticatedTenant?.id) {
-      try {
-        const result = await withTenantScopedExecution(authenticatedTenant, identity, async (scopedReservationManager) => {
-          return await scopedReservationManager.cancelReservation(req.params.id, req.body?.reason, identity)
-        })
-        res.statusCode = 200
-        res.setHeader('Content-Type', 'application/json')
-        res.end(JSON.stringify({ success: true, data: result }))
-        return
-      } catch (error) {
-        res.statusCode = 500
-        res.setHeader('Content-Type', 'application/json')
-        res.end(JSON.stringify({ error: error.message }))
-        return
-      }
+    // CANCEL-TIMEOUT-REMEDIATION-2: fail closed BEFORE any business capability is
+    // touched.
+    //
+    // `requireAuth` already guarantees `req.user` is a verified identity, but an
+    // identity is not necessarily a TENANT identity: a token minted without a
+    // `tid` claim yields `req.user.tenant === null` while still authenticating.
+    // That case used to fall through to the unscoped branch below, which called
+    // `cancelReservation` with `businessId = null`, reached
+    // `#assertBusinessActive(null)` and failed in a repository lookup — an
+    // authenticated-looking request that never had a tenancy.
+    //
+    // 401 rather than 403: the request cannot be attributed to any tenant, so no
+    // authorization decision is even reachable. 403 would assert that we know who
+    // the caller is and merely lack a grant; we do not know that. This matches
+    // the existing `requireAuth` contract, which also answers 401 for credentials
+    // that do not establish a usable principal.
+    if (!authenticatedTenant?.id) {
+      terminateCancelWithoutTenant(res)
+      return
     }
 
-    const reservation = await this.getService()?.cancelReservation(req.params.id, req.body?.reason, identity)
+    // CANCEL-TIMEOUT-REMEDIATION-2C: a present id is not necessarily a real
+    // tenant scope. `tid=commercial` — the synthetic bootstrap tenant — is a
+    // truthy string, so it passed the presence check above and then failed
+    // deeper in `withTenantScopedExecution`, whose contract refuses a
+    // synthetic tenant. That rejection surfaced as a bounded 500, which is an
+    // internal-error status for what is really an unattributable caller, and
+    // it re-injected noise into the exact 500 class under investigation.
+    //
+    // `isPersistedTenantScope` is the existing exported contract for this
+    // decision, already used by `ReservationCapability.activate()` to decide
+    // whether a tenant may drive a persisted read. It is deliberately a
+    // NEGATIVE check, not a shape check: it refuses only the synthetic
+    // commercial tenant, a non-string id, and a blank id. A well-formed tenant
+    // that does not exist stays resolvable by the existing tenant-scoped
+    // architecture, and a new real tenant form is not silently refused.
+    //
+    // The check is a pure string test: no database, tenant table or repository
+    // read, so it cannot become its own availability dependency.
+    //
+    // 401 for the same reason as the absent-tenant case above: the request
+    // cannot be attributed to any real tenant, so no authorization decision is
+    // reachable. Same bounded helper, same `CANCEL_TENANT_REQUIRED` contract.
+    if (!isPersistedTenantScope(authenticatedTenant.id)) {
+      terminateCancelWithoutTenant(res)
+      return
+    }
 
-    res.statusCode = 200
-    res.setHeader('Content-Type', 'application/json')
-    res.end(JSON.stringify({ success: true, data: reservation }))
+    try {
+      const result = await withTenantScopedExecution(authenticatedTenant, identity, async (scopedReservationManager) => {
+        return await scopedReservationManager.cancelReservation(req.params.id, req.body?.reason, identity)
+      })
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ success: true, data: result }))
+    } catch (error) {
+      // The rejection is classified from a closed enum and `error.message` is
+      // never serialized: a repository or driver message can carry a statement,
+      // an identifier or a tenant id.
+      terminateCancelWithError(res)
+    }
   }
 
   async checkIn(req, res) {

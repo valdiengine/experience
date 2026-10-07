@@ -49,9 +49,6 @@ export class JwtAccessService {
     const token = jwt.sign(claims, key, {
       algorithm: this.#keyManager.algorithm,
       keyid: kid,
-      issuer: this.#config.issuer,
-      audience: this.#config.audience,
-      expiresIn,
     })
 
     return {
@@ -64,7 +61,7 @@ export class JwtAccessService {
 
   verify(tokenString, options = {}) {
     if (this.#revokedTokens.has(tokenString)) {
-      throw new JwtRevokedError('Access token has been revoked', { token: tokenString.substring(0, 20) })
+      throw new JwtRevokedError('Access token has been revoked')
     }
 
     let decoded
@@ -77,13 +74,18 @@ export class JwtAccessService {
         ignoreExpiration: options.ignoreExpiration || false,
       })
     } catch (err) {
+      // CANCEL-TIMEOUT-REMEDIATION-2: no token material is attached to these
+      // errors. They previously carried `tokenString.substring(0, 20)`, which
+      // put a fragment of the presented credential into an object that any
+      // future context-serializing sink (audit, error boundary) could emit. The
+      // TYPE of the error is what callers branch on; the token is not needed.
       if (err.name === 'TokenExpiredError') {
-        throw new JwtExpiredError('Access token has expired', { token: tokenString.substring(0, 20) })
+        throw new JwtExpiredError('Access token has expired')
       }
       if (err.name === 'JsonWebTokenError') {
-        throw new JwtInvalidSignatureError('Access token signature is invalid', { token: tokenString.substring(0, 20) })
+        throw new JwtInvalidSignatureError('Access token signature is invalid')
       }
-      throw new JwtMalformedError(`Access token verification failed: ${err.message}`, { token: tokenString.substring(0, 20) })
+      throw new JwtMalformedError('Access token verification failed')
     }
 
     const result = this.#claimsMapper.toIdentity(decoded)
@@ -93,11 +95,11 @@ export class JwtAccessService {
   decode(tokenString) {
     try {
       const decoded = jwt.decode(tokenString, { complete: true })
-      if (!decoded) throw new JwtMalformedError('Unable to decode access token', { token: tokenString.substring(0, 20) })
+      if (!decoded) throw new JwtMalformedError('Unable to decode access token')
       return decoded
     } catch (err) {
       if (err instanceof JwtMalformedError) throw err
-      throw new JwtMalformedError(`Access token decode failed: ${err.message}`, { token: tokenString.substring(0, 20) })
+      throw new JwtMalformedError('Access token decode failed')
     }
   }
 

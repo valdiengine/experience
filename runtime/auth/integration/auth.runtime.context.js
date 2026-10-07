@@ -24,6 +24,11 @@ export class AuthRuntimeContext {
     return this.#engine.authenticate(token)
   }
 
+  async validateToken(token) {
+    const result = await this.#engine.authenticate(token)
+    return result?.identity || null
+  }
+
   async refresh(token) {
     return this.#engine.refresh(token)
   }

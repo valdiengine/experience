@@ -398,20 +398,36 @@ export class PublicWebServer {
   }
 
   #handleCommercialApiError(error, res) {
-    console.error('Unhandled commercial API error:', error)
+    // CANCEL-TIMEOUT-REMEDIATION-1: this is the single commercial-API error
+    // boundary. It must always terminate the response and must never
+    // double-send over one that is already on the wire.
+    //
+    // Repository/driver error messages may contain statements, constraints,
+    // identifiers or tenant information, so raw error details are not exposed
+    // to the client or emitted here.
 
-    res.statusCode = error.statusCode || 500
-    res.setHeader('Content-Type', 'application/json')
+    if (res.headersSent || res.writableEnded) {
+      // The response is already committed. Its status and body stand; close
+      // any still-open response so the request cannot hang until client timeout.
+      if (!res.writableEnded) {
+        res.end()
+      }
+      return
+    }
+
+    const status = error?.statusCode || 500
+    res.statusCode = status
+    res.setHeader('Content-Type', 'application/problem+json')
     res.end(
       JSON.stringify({
-        error: {
-          code: error.code || 'INTERNAL_ERROR',
-          message: error.message || 'An unexpected error occurred'
-        }
+        type: 'https://api.example.com/errors/internal-error',
+        title: 'Internal Server Error',
+        status,
+        detail: 'The request could not be completed.',
+        instance: `urn:api:error:internal:${res.req?.id || ''}`,
       })
     )
   }
-
   async #parseJsonBody(req) {
     return new Promise((resolve, reject) => {
       let data = ''

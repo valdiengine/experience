@@ -102,8 +102,8 @@ export function requireRole(role) {
  */
 async function checkPermission(user, permission) {
   if (!global.runtimeContext?.auth) {
-    return true;
+    return false;
   }
 
-  return await global.runtimeContext.auth.checkPermission(user, permission);
+  return await global.runtimeContext.auth.hasPermission(user, permission);
 }

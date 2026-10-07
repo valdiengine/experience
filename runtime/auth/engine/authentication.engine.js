@@ -72,6 +72,7 @@ export class AuthenticationEngine {
     this.#health.setEventBus(eventBus)
   }
 
+
   async initialize() {
     if (this.#initialized) return
     this.#registry.initialize()
@@ -131,8 +132,7 @@ export class AuthenticationEngine {
 
   async login(credentials) {
     if (!this.#initialized) throw new AuthenticationEngineError('Authentication engine is not initialized', { operation: 'login' })
-    const provider = this.#registry.resolve('default')
-    if (!provider) throw new AuthenticationEngineError('No default auth provider registered', { operation: 'login' })
+    const provider = await this.#factory.resolve('default', { eventBus: this.#eventBus })
     const result = await provider.login(credentials)
     this.#emit(AUTH_ENGINE_EVENTS.AUTH_LOGIN, { identityId: result?.identity?.id, method: credentials?.method })
     const ctx = new AuthEngineContext({
@@ -145,7 +145,7 @@ export class AuthenticationEngine {
       device: result?.device,
       provider: 'default',
     })
-    return { identity: result?.identity, session: result?.session, context: ctx.toJSON() }
+    return { ...result, context: ctx.toJSON() }
   }
 
   async logout(session) {
@@ -155,9 +155,10 @@ export class AuthenticationEngine {
   }
 
   async authenticate(token) {
+
     if (!this.#initialized) throw new AuthenticationEngineError('Authentication engine is not initialized', { operation: 'authenticate' })
-    const provider = this.#registry.resolve('default')
-    if (!provider) throw new AuthenticationEngineError('No default auth provider registered', { operation: 'authenticate' })
+
+    const provider = await this.#factory.resolve('default', { eventBus: this.#eventBus })
     return provider.authenticate(token)
   }
 
@@ -257,6 +258,7 @@ export class AuthenticationEngine {
       this.#eventBus.emit(event, createAuthEngineEvent(event, data))
     }
   }
+
 }
 
 export default AuthenticationEngine

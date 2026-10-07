@@ -3487,3 +3487,94 @@ incident closure. Gate 1C and `neondb_owner` rotation remain blocked behind thes
 - Correction note: the initial version of this entry recorded the CRLF-normalized
   comparison as unrecorded/open. That was incorrect. The check completed successfully and
   is certified above.
+
+## MVP 10 — BOOKING-STAGE-APP-WRITE-1 FINAL CERTIFICATION (2026-10-07)
+
+> This checkpoint supersedes the earlier `BOOKING-STAGE-APP-WRITE-1 = NOT EXECUTED`
+> status above. Earlier sections are retained as historical pre-certification evidence.
+
+### Final status
+
+`BOOKING-STAGE-APP-WRITE-1 = CLOSED_CERTIFIED`
+
+The complete bounded Stage lifecycle under the restricted `stage_app` runtime identity
+has been physically and publicly certified.
+
+Certified lifecycle:
+
+`PUBLIC 4/4/4 -> CREATE HTTP 201 -> physical requested -> physical capacity 1/1/0 -> authenticated CANCEL HTTP 200 -> physical cancelled -> cancelled_at present -> reservation line released -> physical capacity 0/0/0 -> PUBLIC 4/4/4`
+
+Certification flags:
+
+```text
+BOOKING_STAGE_APP_WRITE_STATUS=CLOSED_CERTIFIED
+FRESH_CREATE_CERTIFIED=true
+FRESH_CANCEL_CERTIFIED=true
+PHYSICAL_RELEASE_CERTIFIED=true
+PUBLIC_CAPACITY_RESTORED=true
+DIAGNOSTICS_CLEANUP_STATUS=PENDING
+SECURITY_ROTATION_STATUS=PENDING
+
+Detailed certification evidence:
+docs/ai/MVP10_BOOKING_STAGE_APP_WRITE_CERTIFICATION_REPORT.md
+stage_app Booking privilege extension
+Booking creation additionally required and received:
+- reservations: INSERT
+- reservation_lines: INSERT
+No broader privilege is implied by this checkpoint.
+Fresh CREATE certification
+One fresh public CREATE using the correct Booking contract returned HTTP 201.
+Physical PostgreSQL readback certified:
+- reservation status requested
+- guest count 2
+- cancelled_at absent
+- checkout-exclusive capacity 1 / 1 / 0
+- occupied nights 2026-10-23, 2026-10-24
+- checkout 2026-10-25
+Fresh authenticated CANCEL certification
+Exactly one authenticated cancellation returned HTTP 200.
+Physical PostgreSQL readback certified:
+- reservation status cancelled
+- cancelled_at present
+- reservation line released
+- physical availability restored to 0 / 0 / 0
+Public availability subsequently restored full 4 / 4 / 4 capacity.
+Historical cancellation investigation
+Earlier cancellation timeouts were diagnostic results and are not current Stage failures.
+The investigation discovered and remediated async router rejection propagation,
+bounded API error handling, authentication rejection handling, requireAuth,
+JWT rejection classification, the reservation:cancel permission guard,
+tenant-scope validation, and real permission-resolution wiring.
+The original reservation used during the investigation later auto-expired after
+the configured 12-hour timeout.
+Its later cancellation rejection was therefore a domain-state rejection
+(expired -> cancelled), not evidence of broken current authentication.
+The remaining HTTP mapping of that invalid transition to HTTP 500 / CANCEL_FAILED
+instead of a conflict-class response such as HTTP 409 remains technical debt.
+Temporary diagnostics
+Temporary cancellation/prewrite/route/adapter/PostgreSQL runtime diagnostic instrumentation
+has been removed while preserving the permanent cancellation/authentication remediation.
+The executable-code sweep found zero remaining references to the retired diagnostics layer.
+Permanent regression coverage retained after cleanup:
+- CANCEL-TIMEOUT-REMEDIATION-1: 9/9 PASS
+- CANCEL-TIMEOUT-REMEDIATION-2: 14/14 PASS
+- CANCEL-TIMEOUT-REMEDIATION-2C: 17/17 PASS
+- combined remediation regression gate: 40/40 PASS, 0 FAIL
+Historical diagnostic documentation remains as incident evidence and is not runtime instrumentation.
+DIAGNOSTICS_CLEANUP_STATUS=CLOSED_CERTIFIED
+Remaining Security Rotation
+Security Rotation remains open independently of Booking certification.
+Pending:
+1. final live runtime identity/security closure if still required
+2. legacy Selector POSTGRES_* remediation
+3. Gate 1C maintenance/cron identity
+4. neondb_owner rotation
+5. JWT_SECRET rotation
+6. VAPID rotation
+7. UUID / identifier hygiene follow-up
+8. final incident/security closure
+These items MUST NOT reopen BOOKING-STAGE-APP-WRITE-1.
+Next milestone
+MVP 10-6 — Security Rotation Cleanup & Final Closure
+After bounded Security Rotation closure:
+APP ZONE / Isla Teja -> Booking Traveler UX -> Owner UX -> Master Admin UX -> PWA integration

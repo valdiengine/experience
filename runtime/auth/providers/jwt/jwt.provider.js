@@ -8,7 +8,55 @@ import { JwtHeaderService } from './jwt.header.service.js'
 import { DeviceManager } from './device.manager.js'
 import { IdentityCache } from './identity.cache.js'
 import { JWT_EVENTS, createJwtEvent } from './jwt.events.js'
-import { JwtError, JwtExpiredError, JwtConfigurationError, JwtPermissionError, JwtSessionExpiredError } from './jwt.errors.js'
+import { JwtError, JwtExpiredError, JwtConfigurationError, JwtPermissionError, JwtSessionExpiredError, JwtInvalidSignatureError, JwtMalformedError, JwtRevokedError } from './jwt.errors.js'
+
+/**
+ * CANCEL-TIMEOUT-REMEDIATION-2: closed vocabulary for a refused bearer token.
+ *
+ * Kept local to this module on purpose — `runtime/auth` must not depend on the
+ * its own frozen enum, so an unrecognised member degrades to `reasonClass: null`
+ * rather than leaking anything.
+ */
+export const AUTH_REJECTION_REASONS = Object.freeze([
+  'EXPIRED',
+  'INVALID_SIGNATURE',
+  'MALFORMED',
+  'REVOKED',
+  'NOT_CONFIGURED',
+  'OTHER_REJECTED',
+])
+
+/**
+ * Map a verification failure to a bounded reason class using only the error's
+ * TYPE. The message is never read: `jsonwebtoken` messages can quote expected
+ * issuer/audience values, and this runs on the request auth path.
+ *
+ * Note that `jwt.access.service.js` already folds every `JsonWebTokenError` into
+ * `JwtInvalidSignatureError`, so an issuer or audience mismatch is reported as
+ * `INVALID_SIGNATURE`. Separating those would require a new error type in
+ * `jwt.access.service.js`, which is out of scope for this slice; the class is
+ * still sufficient to separate the two live candidates, because an expired token
+ * and a wrong secret raise different types here.
+ *
+ * @param {unknown} error
+ * @returns {string} one of `AUTH_REJECTION_REASONS`
+ */
+function classifyJwtRejection(error) {
+  switch (error?.name) {
+    case 'JwtExpiredError':
+      return 'EXPIRED'
+    case 'JwtInvalidSignatureError':
+      return 'INVALID_SIGNATURE'
+    case 'JwtRevokedError':
+      return 'REVOKED'
+    case 'JwtConfigurationError':
+      return 'NOT_CONFIGURED'
+    case 'JwtMalformedError':
+      return 'MALFORMED'
+    default:
+      return 'OTHER_REJECTED'
+  }
+}
 
 export class JwtProvider {
   #keyManager = null
@@ -195,13 +243,39 @@ export class JwtProvider {
   }
 
   async authenticate(tokenString) {
-    this.#checkInitialized()
-    const result = this.#accessService.verify(tokenString)
-    return {
-      authenticated: true,
-      identity: result.identity,
-      session: result.session,
-      device: result.device,
+
+    try {
+      this.#checkInitialized()
+      const result = this.#accessService.verify(tokenString)
+
+      return {
+        authenticated: true,
+        identity: result.identity,
+        session: result.session,
+        device: result.device,
+        reason: null,
+      }
+    } catch (error) {
+      // CANCEL-TIMEOUT-REMEDIATION-2: classify by error TYPE, never by message.
+      //
+      // Before this slice every failure was flattened into `identity: null` with
+      // nothing to tell the caller apart, so an expired token and a signature
+      // mismatch were indistinguishable — and both were then silently downgraded
+      // to an anonymous request by the API layer. `reason` is drawn from a closed
+      // enum derived from the error classes `jwt.errors.js` already raises.
+      //
+      // `error.message` is deliberately NOT read, and no raw error is returned or
+      // logged: a jsonwebtoken message can carry expected-claim values, and this
+      // object is on the request path where a token must never travel.
+      const reason = classifyJwtRejection(error)
+
+      return {
+        authenticated: false,
+        identity: null,
+        session: null,
+        device: null,
+        reason,
+      }
     }
   }
 
@@ -254,7 +328,14 @@ export class JwtProvider {
         timestamp: Date.now(),
       }
     } catch (err) {
-      return { status: 'unhealthy', provider: 'jwt', error: err.message, timestamp: Date.now() }
+      // `err.message` is never surfaced. A JWT failure message can echo claim
+      // or token material, and this response is caller-visible.
+      return {
+        status: 'unhealthy',
+        provider: 'jwt',
+        errorClass: typeof err?.name === 'string' ? err.name : 'UNKNOWN',
+        timestamp: Date.now(),
+      }
     }
   }
 
