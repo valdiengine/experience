@@ -122,7 +122,7 @@ function seedBookingCatalog(tenant, businessId, accommodationId) {
 }
 
 /** Availability rows for one stay, in the tenant that owns them. */
-function seedAvailability(tenantId, accommodationId, checkIn, checkOut) {
+function seedAvailability(tenantId, accommodationId, checkIn, checkOut, inventory = 4) {
   const end = new Date(checkOut)
   end.setDate(end.getDate() - 1)
   const nights = []
@@ -138,9 +138,9 @@ function seedAvailability(tenantId, accommodationId, checkIn, checkOut) {
     date,
     status: 'available',
     isBlocked: false,
-    inventory: 4,
+    inventory,
     reservedCount: 0,
-    available: 4,
+    available: inventory,
     price: 120000,
     currency: 'CLP',
   })))
@@ -1133,8 +1133,9 @@ await test('public BookingAdapter behaviour is unchanged by the startup recovery
     assertEqual(persisted.tenantId, TENANT_B.id, 'the public reservation must belong to the target tenant')
     assertEqual(persisted.status, RESERVATION_STATUS.REQUESTED, 'a new public reservation must be requested')
 
-    // Its `requested` deadline is armed on the REQUEST-SCOPED manager, and the tenant
-    // recovery runtime sees the very same persisted row — one writer, no divergence.
+    // Its `requested` deadline is armed on the TENANT recovery runtime at create
+    // time (BOOKING-EXPIRATION-LIVE-ARM-1), and a repeated recovery pass sees the
+    // very same armed record - one writer, no divergence, deadline untouched.
     const tenantB = platform.tenantRuntime(TENANT_B.id)
     const again = await platform.orchestrator.recover(getBookingRegistry())
     const entry = again.tenants.find((t) => t.tenantId === TENANT_B.id)
@@ -1143,6 +1144,280 @@ await test('public BookingAdapter behaviour is unchanged by the startup recovery
     assertEqual(recovered.outcome, 'armed', 'the public reservation deadline must be adopted as armed')
     assertDeep(reservedFor(TENANT_B.id, 'acc-otro'), [1, 1], 'the public booking must keep its capacity')
     assert(tenantB, 'tenant B runtime must still exist')
+  } finally {
+    await platform.shutdown()
+  }
+})
+
+// ---------------------------------------------------------------------------
+// BOOKING-EXPIRATION-LIVE-ARM-1 - live-process traveler arming
+// ---------------------------------------------------------------------------
+
+console.log('\nlive-process traveler arming (BOOKING-EXPIRATION-LIVE-ARM-1):')
+
+await test('a public traveler reservation arms in its tenant runtime and expires in the SAME live process, without any restart', async () => {
+  InMemoryRepositoryAdapter.reset()
+  const platform = await startPlatform({
+    targets: {
+      'ensueno-curinanco': companyFor('ensueno-curinanco', TENANT_A, 'acc-ensueno'),
+      'otro-complejo': companyFor('otro-complejo', TENANT_B, 'acc-otro'),
+    },
+  })
+
+  try {
+    // 1-2. One boot; the booking goes through the REAL public BookingAdapter path.
+    // Inventory is seeded at 1 so the single requested unit makes checkout
+    // exclusivity directly observable.
+    seedBookingCatalog(TENANT_A, 'biz-ensueno-curinanco', 'acc-ensueno')
+    seedAvailability(TENANT_A.id, 'acc-ensueno', dateOffset(1), dateOffset(3), 1)
+    const adapter = createBookingAdapter(platform.apiContext, getBookingRegistry())
+    const booked = await adapter.createReservation('ensueno-curinanco', {
+      guestName: 'Live Traveler',
+      guestEmail: 'live@example.com',
+      checkIn: dateOffset(1),
+      checkOut: dateOffset(3),
+      guestCount: 2,
+    })
+    assert(booked.ok === true, `the public booking must succeed: ${JSON.stringify(booked)}`)
+    // Public contract: the pre-existing confirmation payload shape - timer
+    // arming state is process-internal and must never appear in it.
+    const bookedSerialized = JSON.stringify(booked.data)
+    assert(!('expiration' in (booked.data || {})), 'the public confirmation payload must not carry an expiration field')
+    assert(!bookedSerialized.includes('expiration'), 'the public confirmation payload must not leak expiration infrastructure state')
+    assert(!bookedSerialized.includes('armReservationTimer'), 'internal method names must not leak to the traveler')
+    const id = booked.data.reservationId
+    assertEqual(reservationRow(id).status, RESERVATION_STATUS.REQUESTED, 'the created reservation must be requested')
+
+    // 3-4. Arming is proven through the ACTUAL tenant runtime: the CORRECT
+    // runtime owns exactly one live timer; no other authority holds one for
+    // this reservation.
+    const runtimeA = platform.tenantRuntime(TENANT_A.id)
+    assert(runtimeA, 'tenant A runtime must exist')
+    const record = runtimeA.timer.getTimer(id, RESERVATION_STATUS.REQUESTED)
+    assert(record?.active === true, `tenant A must own a live armed timer: ${JSON.stringify(record)}`)
+    assertEqual(record.tenantId, TENANT_A.id, 'the armed timer record must carry tenant A')
+    assertEqual(record.expiresAtMs - Date.parse(record.anchorAt), 12 * HOUR, 'the deadline must be anchor + the 12h TTL')
+    assert(record.expiresAtMs > Date.now(), 'the deadline must be in the future at creation time')
+    assertEqual(runtimeA.timer.getActiveTimers().filter((t) => t.reservationId === id).length, 1, 'exactly one armed record must exist')
+    const runtimeB = platform.tenantRuntime(TENANT_B.id)
+    assert(runtimeB, 'tenant B runtime must exist')
+    assertEqual(runtimeB.timer.getTimer(id, RESERVATION_STATUS.REQUESTED), null, "tenant B must not hold tenant A's timer")
+    assertEqual(platform.tenantEntry('commercial'), null, 'the synthetic commercial scope must not exist')
+    assertDeep(reservedFor(TENANT_A.id, 'acc-ensueno'), [1, 1], 'the booking must consume the unit')
+
+    // Checkout-exclusive while held: an overlapping public booking must fail.
+    const conflict = await adapter.createReservation('ensueno-curinanco', {
+      guestName: 'Conflict Traveler',
+      guestEmail: 'conflict@example.com',
+      checkIn: dateOffset(1),
+      checkOut: dateOffset(3),
+      guestCount: 1,
+    })
+    assert(conflict.ok === false, `an overlapping booking must be rejected while capacity is held: ${JSON.stringify(conflict)}`)
+    assertDeep(reservedFor(TENANT_A.id, 'acc-ensueno'), [1, 1], 'the rejected booking must consume nothing')
+
+    // 5. Deterministic clock advance past the TTL - same process, same runtime,
+    // no restart, no recovery reconstruction. The due job is then delivered
+    // through the REAL shared scheduler.
+    const scheduler = platform.capabilityRegistry.get('scheduler')
+    const job = scheduler.manager.getJob(record.jobId)
+    assert(job?.status === 'pending', `the armed deadline must have a pending job: ${JSON.stringify(job)}`)
+
+    const realNow = Date.now
+    Date.now = () => realNow() + 13 * HOUR
+    try {
+      const delivered = await scheduler.run(record.jobId)
+      assert(delivered?.success === true, `the scheduler must deliver the due job: ${JSON.stringify(delivered)}`)
+
+      // 6. Transition to expired in the same live process.
+      assertEqual(reservationRow(id).status, RESERVATION_STATUS.EXPIRED, 'the reservation must expire without any restart')
+
+      // 7. The reservation line is released exactly once.
+      const lines = rows('reservation_lines').filter((l) => l.reservationId === id)
+      assertEqual(lines.length, 1, 'exactly one reservation line must exist')
+      assert(lines[0].releasedAt, 'the reservation line must be released')
+
+      // 8. Capacity restored exactly once, and the timer settled.
+      assertDeep(reservedFor(TENANT_A.id, 'acc-ensueno'), [0, 0], 'availability must be restored exactly once')
+      assertEqual(runtimeA.timer.getActiveTimers().filter((t) => t.reservationId === id).length, 0, 'a committed expiration must leave no live timer')
+    } finally {
+      Date.now = realNow
+    }
+
+    // 9. Checkout-exclusive remains correct AFTER expiry: the freed unit is
+    // bookable again by a new traveler booking.
+    const rebooked = await adapter.createReservation('ensueno-curinanco', {
+      guestName: 'Second Traveler',
+      guestEmail: 'second@example.com',
+      checkIn: dateOffset(1),
+      checkOut: dateOffset(3),
+      guestCount: 1,
+    })
+    assert(rebooked.ok === true, `the freed unit must be bookable again: ${JSON.stringify(rebooked)}`)
+    assert(rebooked.data.reservationId !== id, 'the rebooking must be a new reservation')
+    assertDeep(reservedFor(TENANT_A.id, 'acc-ensueno'), [1, 1], 'the new booking must consume the freed unit exactly once')
+  } finally {
+    await platform.shutdown()
+  }
+})
+
+await test('traveler arming is tenant-isolated: a booking arms only its own tenant runtime, and a foreign tenant can never arm', async () => {
+  InMemoryRepositoryAdapter.reset()
+  const platform = await startPlatform({
+    targets: {
+      'ensueno-curinanco': companyFor('ensueno-curinanco', TENANT_A, 'acc-ensueno'),
+      'otro-complejo': companyFor('otro-complejo', TENANT_B, 'acc-otro'),
+    },
+  })
+
+  try {
+    const idA = await bookThroughPublicAdapter(platform, 'ensueno-curinanco', TENANT_A, 'acc-ensueno')
+    const idB = await bookThroughPublicAdapter(platform, 'otro-complejo', TENANT_B, 'acc-otro', { guestEmail: 'b@example.com' })
+
+    const runtimeA = platform.tenantRuntime(TENANT_A.id)
+    const runtimeB = platform.tenantRuntime(TENANT_B.id)
+
+    // Each booking armed ONLY in its own tenant's runtime, under its own tenant id.
+    const recordA = runtimeA.timer.getTimer(idA, RESERVATION_STATUS.REQUESTED)
+    const recordB = runtimeB.timer.getTimer(idB, RESERVATION_STATUS.REQUESTED)
+    assert(recordA?.active === true && recordA.tenantId === TENANT_A.id, 'tenant A must own its own timer')
+    assert(recordB?.active === true && recordB.tenantId === TENANT_B.id, 'tenant B must own its own timer')
+    assertEqual(runtimeA.timer.getTimer(idB, RESERVATION_STATUS.REQUESTED), null, "tenant A's runtime must not hold tenant B's reservation")
+    assertEqual(runtimeB.timer.getTimer(idA, RESERVATION_STATUS.REQUESTED), null, "tenant B's runtime must not hold tenant A's reservation")
+
+    // An unregistered tenant can never arm at all.
+    const unknown = await platform.orchestrator.armReservationTimer('tenant-not-in-registry', {
+      id: idA, status: RESERVATION_STATUS.REQUESTED, createdAt: new Date().toISOString(),
+    })
+    assertEqual(unknown.armed, false, 'an unregistered tenant must not arm')
+    assertEqual(unknown.status, 'unavailable', 'an unregistered tenant must be reported unavailable')
+
+    // A mismatched tenant can never plant a timer for a foreign row: the armed
+    // reservation must belong to the tenant runtime asked to arm it.
+    const mismatch = await platform.orchestrator.armReservationTimer(TENANT_A.id, reservationRow(idB))
+    assertEqual(mismatch.armed, false, 'a foreign reservation must not be armed under another tenant')
+    assertEqual(mismatch.status, 'foreign_tenant', 'a tenant mismatch must be refused')
+    assertEqual(runtimeA.timer.getTimer(idB, RESERVATION_STATUS.REQUESTED), null, 'no timer record may exist for the refused arm')
+  } finally {
+    await platform.shutdown()
+  }
+})
+
+await test('a failed timer-arm never rolls back a persisted reservation, stays observable server-side, and never leaks into the traveler response', async () => {
+  InMemoryRepositoryAdapter.reset()
+  const platform = await startPlatform({
+    targets: { 'ensueno-curinanco': companyFor('ensueno-curinanco', TENANT_A, 'acc-ensueno') },
+  })
+
+  try {
+    // Seed the catalog and capacity the public write path needs, THEN destroy
+    // tenant A's runtime BEFORE the booking: arming must report the failure
+    // rather than succeed against dead timers.
+    seedBookingCatalog(TENANT_A, 'biz-ensueno-curinanco', 'acc-ensueno')
+    seedAvailability(TENANT_A.id, 'acc-ensueno', dateOffset(1), dateOffset(3))
+    await platform.tenantRuntime(TENANT_A.id).destroy()
+
+    const adapter = createBookingAdapter(platform.apiContext, getBookingRegistry())
+
+    // The failure must remain operationally observable server-side: capture the
+    // bounded arm-failure log line emitted inside the adapter.
+    const operationalLogs = []
+    const realConsoleError = console.error
+    console.error = (...args) => {
+      operationalLogs.push(args.map(String).join(' '))
+      realConsoleError(...args)
+    }
+
+    let result
+    try {
+      result = await adapter.createReservation('ensueno-curinanco', {
+        guestName: 'Degraded Traveler',
+        guestEmail: 'degraded@example.com',
+        checkIn: dateOffset(1),
+        checkOut: dateOffset(3),
+        guestCount: 2,
+      })
+    } finally {
+      console.error = realConsoleError
+    }
+
+    // The durably-persisted reservation is NEVER rolled back and never throws.
+    assert(result.ok === true && result.status === 201, `the persisted reservation must still succeed: ${JSON.stringify(result)}`)
+    const id = result.data.reservationId
+    assertEqual(reservationRow(id).status, RESERVATION_STATUS.REQUESTED, 'the reservation must remain requested')
+    assertDeep(reservedFor(TENANT_A.id, 'acc-ensueno'), [1, 1], 'capacity must remain held - no rollback')
+
+    // Operationally observable server-side: an arm-failure log line names the
+    // reservation, but no internal reason/method state leaks into the payload.
+    const armLog = operationalLogs.find((line) => line.includes('Expiration timer') && line.includes(id))
+    assert(armLog, `the arm failure must be logged server-side: ${JSON.stringify(operationalLogs)}`)
+
+    // The public response keeps the pre-existing contract: no expiration
+    // infrastructure field and no internal failure reason or method name.
+    const serialized = JSON.stringify(result.data)
+    assert(!('expiration' in (result.data || {})), 'the public confirmation payload must not carry an expiration field')
+    assert(!serialized.includes('expiration'), 'the public payload must not expose expiration infrastructure state')
+    assert(!serialized.includes('tenant_runtime_unavailable'), 'internal arm reasons must not leak to the traveler')
+    assert(!serialized.includes('tenant_recovery_not_initialized'), 'internal arm reasons must not leak to the traveler')
+    assert(!serialized.includes('armReservationTimer'), 'internal method names must not leak to the traveler')
+
+    // No usable timer authority exists for it anywhere.
+    const runtimeA = platform.tenantRuntime(TENANT_A.id)
+    assert(!runtimeA || !runtimeA.usable, 'no usable tenant runtime may remain')
+    if (runtimeA?.timer) {
+      assertEqual(runtimeA.timer.getActiveTimers().filter((t) => t.reservationId === id).length, 0, 'no live timer may exist for the failed arm')
+    }
+  } finally {
+    await platform.shutdown()
+  }
+})
+
+await test('a repeated arm of the same traveler reservation is idempotent: one timer, one job, one release', async () => {
+  InMemoryRepositoryAdapter.reset()
+  const platform = await startPlatform({
+    targets: { 'ensueno-curinanco': companyFor('ensueno-curinanco', TENANT_A, 'acc-ensueno') },
+  })
+
+  try {
+    const id = await bookThroughPublicAdapter(platform, 'ensueno-curinanco', TENANT_A, 'acc-ensueno')
+    const runtimeA = platform.tenantRuntime(TENANT_A.id)
+    const first = runtimeA.timer.getTimer(id, RESERVATION_STATUS.REQUESTED)
+    assert(first?.active === true, 'the create-time arm must be live')
+
+    // A duplicate arm - through the same authority a repeated create or a
+    // recovery pass would use - must keep the original deadline.
+    const again = await platform.orchestrator.armReservationTimer(TENANT_A.id, reservationRow(id))
+    assertEqual(again.armed, true, 'a duplicate arm must still report armed')
+    const second = runtimeA.timer.getTimer(id, RESERVATION_STATUS.REQUESTED)
+    assert(second?.active === true, 'the timer must still be live after a duplicate arm')
+    assertEqual(second.expiresAtMs, first.expiresAtMs, 'a duplicate arm must keep the original deadline')
+    assertEqual(second.anchorAt, first.anchorAt, 'a duplicate arm must keep the original anchor')
+    assertEqual(runtimeA.timer.getActiveTimers().filter((t) => t.reservationId === id).length, 1, 'exactly one armed record may exist')
+
+    const scheduler = platform.capabilityRegistry.get('scheduler')
+    const pending = scheduler.manager.getJobs().filter((j) => j.payload?.reservationId === id && j.status === 'pending')
+    assertEqual(pending.length, 1, 'exactly one pending expiration job may exist')
+
+    // Expire once: one delivery, one release.
+    const realNow = Date.now
+    Date.now = () => realNow() + 13 * HOUR
+    try {
+      const delivered = await scheduler.run(second.jobId)
+      assert(delivered?.success === true, `the scheduler must deliver the due job: ${JSON.stringify(delivered)}`)
+    } finally {
+      Date.now = realNow
+    }
+    assertEqual(reservationRow(id).status, RESERVATION_STATUS.EXPIRED, 'the reservation must expire')
+    const lines = rows('reservation_lines').filter((l) => l.reservationId === id)
+    assertEqual(lines.length, 1, 'exactly one line must exist')
+    assert(lines[0].releasedAt, 'the line must be released')
+    assertDeep(reservedFor(TENANT_A.id, 'acc-ensueno'), [0, 0], 'capacity must be restored exactly once')
+
+    // An expired reservation can never be re-armed or re-released.
+    const post = await platform.orchestrator.armReservationTimer(TENANT_A.id, reservationRow(id))
+    assertEqual(post.armed, false, 'an expired reservation must not be re-armed')
+    assertDeep(reservedFor(TENANT_A.id, 'acc-ensueno'), [0, 0], 'no second release may occur')
+    assertEqual(runtimeA.timer.getActiveTimers().filter((t) => t.reservationId === id).length, 0, 'no live timer may exist after expiry')
   } finally {
     await platform.shutdown()
   }

@@ -61,6 +61,27 @@ import { ReservationTimer } from '../../capabilities/reservation/reservation.tim
 export const TENANT_RECOVERY_SOURCE = 'startup_tenant_reservation_recovery'
 
 /**
+ * BOOKING-EXPIRATION-LIVE-ARM-1. The process-lifetime orchestrator established by
+ * `startTenantReservationRecovery()`, exposed so the public traveler booking path
+ * can arm a freshly-persisted reservation on the ONE authoritative tenant timer
+ * instead of building a per-request timer. A single-writer module singleton, in
+ * the same style as the shared BookingRegistry in `booking.routes.js`: set on every
+ * successful `startTenantReservationRecovery()` call (production startup and test
+ * harnesses alike), and safe to read at any time - when no orchestrator has been
+ * established, or its tenant runtimes were destroyed, callers receive `null` and
+ * report the reservation as not armed rather than inventing a timer authority.
+ */
+let sharedTenantReservationRecovery = null
+
+/**
+ * The live tenant reservation recovery orchestrator for this process, or null.
+ * @returns {TenantReservationRecoveryOrchestrator|null}
+ */
+export function getTenantReservationRecovery() {
+  return sharedTenantReservationRecovery
+}
+
+/**
  * One tenant's reservation expiration runtime: its scoped context, its manager and
  * its timer. Kept alive for the lifetime of the process so reconstructed future
  * deadlines remain armed and their handler remains resolvable.
@@ -364,6 +385,60 @@ export class TenantReservationRecoveryOrchestrator {
     }
   }
 
+  /**
+   * Arm the automatic-expiration timer for a just-persisted reservation under the
+   * process-lifetime runtime that owns its tenant.
+   *
+   * BOOKING-EXPIRATION-LIVE-ARM-1. The public traveler path creates reservations
+   * through a request-scoped `ReservationManager` that owns no timer; this method
+   * hands the persisted reservation to the ONE authoritative per-tenant
+   * `ReservationTimer` this orchestrator already holds - the same instance startup
+   * recovery arms - so a live traveler reservation gets its deadline immediately,
+   * with no second timer authority and no per-request timer. Idempotent by
+   * construction: the timer's own duplicate guard keeps an already-armed record's
+   * original deadline untouched.
+   *
+   * @param {string} tenantId
+   * @param {object} reservation - The persisted reservation (id, status, createdAt)
+   * @returns {Promise<{ armed: boolean, status: string, reason: string|null, tenantId: string|null }>}
+   */
+  async armReservationTimer(tenantId, reservation) {
+    const key = typeof tenantId === 'string' ? tenantId.trim() : ''
+    const runtime = key ? this.#runtimes.get(key) : undefined
+    if (!runtime || !runtime.usable) {
+      // Tenant isolation holds by construction: only the runtime registered for
+      // this exact tenant id can arm its reservations. A missing or destroyed
+      // runtime is reported, never borrowed from another tenant.
+      return { armed: false, status: 'unavailable', reason: 'tenant_runtime_unavailable', tenantId: key || null }
+    }
+
+    // The reservation must actually belong to this tenant's runtime: a mismatched
+    // caller can never plant a timer for a foreign row under the wrong tenant's
+    // authority, so no expiration attempt can ever be aimed across tenants.
+    const reservationTenantId = typeof reservation?.tenantId === 'string' ? reservation.tenantId : null
+    if (reservationTenantId && reservationTenantId !== key) {
+      return { armed: false, status: 'foreign_tenant', reason: 'reservation_tenant_mismatch', tenantId: key }
+    }
+
+    const reservationId = reservation?.id
+    const status = reservation?.status
+    const result = await runtime.timer.syncReservationState(reservationId, reservation, {
+      onStateChange: true,
+      anchor: reservation?.createdAt || undefined,
+    })
+
+    // The live record is the authority on whether an arm actually exists - a
+    // schedule rejection or invalidated arming publishes no record, so this
+    // never reports a timer that is not queued.
+    const live = reservationId && status ? runtime.timer.getTimer(reservationId, status) : null
+    return {
+      armed: live?.active === true,
+      status: result?.status ?? 'unknown',
+      reason: result?.reason ?? null,
+      tenantId: runtime.tenantId,
+    }
+  }
+
   /** The live tenant runtimes, keyed by tenantId. */
   list() {
     return Array.from(this.#runtimes.values())
@@ -420,6 +495,14 @@ export async function startTenantReservationRecovery({
   })
 
   const report = await orchestrator.recover(bookingRegistry)
+
+  // BOOKING-EXPIRATION-LIVE-ARM-1. Published before returning so the public
+  // traveler booking path can arm freshly-persisted reservations on the tenant
+  // timers this orchestrator owns. A later boot replaces it; a destroyed
+  // orchestrator keeps the reference but owns no runtimes, so arming through it
+  // reports unavailable rather than succeeding against dead timers.
+  sharedTenantReservationRecovery = orchestrator
+
   return { orchestrator, report }
 }
 

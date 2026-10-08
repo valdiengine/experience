@@ -2,6 +2,7 @@ import { BookingRegistry } from './booking.registry.js'
 import { buildTravelerContext } from './traveler-context.js'
 import { ReservationManager } from '../../capabilities/reservation/reservation.manager.js'
 import { BusinessManager } from '../../capabilities/business/business.manager.js'
+import { getTenantReservationRecovery } from '../../runtime/startup/reservation.recovery.bootstrap.js'
 import { AvailabilityConflictError } from '../../capabilities/availability/availability.errors.js'
 
 export class BookingValidationError extends Error {
@@ -238,6 +239,44 @@ export class BookingAdapter {
       persisted = null
     }
 
+    // BOOKING-EXPIRATION-LIVE-ARM-1. The request-scoped ReservationManager built
+    // above owns no timer (`#syncTimers` reports `not_configured`), and nothing
+    // else in a live process would arm this reservation: without this hand-off it
+    // stays `requested` with its capacity held until a Passenger restart performs
+    // startup recovery. The process-lifetime tenant runtime established by
+    // `startTenantReservationRecovery()` is the single authoritative timer owner
+    // for real Booking tenants, so the persisted reservation is handed to it for
+    // immediate arming - no per-request timer, no second timer authority, and the
+    // atomic expire+release path downstream is untouched.
+    //
+    // Failure contract: a reservation already durably persisted is NEVER rolled
+    // back and never throws back into the traveler response. The failure is
+    // reported through bounded server-side operational logging only - the
+    // public confirmation payload keeps its pre-existing contract and never
+    // carries timer, scheduler or recovery implementation state; internal
+    // reasons and errors never leave this process.
+    try {
+      const recovery = getTenantReservationRecovery()
+      const arm = recovery && persisted
+        ? await recovery.armReservationTimer(resolved.target.tenantId, persisted)
+        : { status: 'unavailable', reason: persisted ? 'tenant_recovery_not_initialized' : 'persisted_state_unavailable' }
+      if (arm?.armed !== true) {
+        console.error(
+          `[BookingAdapter] Expiration timer NOT armed for reservation ${result.reservationId} (tenant ${resolved.target.tenantId}): ${arm?.reason || arm?.status || 'unknown'}`
+        )
+      }
+    } catch {
+      // Sanitized boundary log: reservation id + tenant id only. Raw error
+      // messages, stacks and provider/DB exception text never enter the log
+      // from here and never reach the traveler response.
+      console.error(
+        `[BookingAdapter] Expiration timer arm failed unexpectedly for reservation ${result.reservationId} (tenant ${resolved.target.tenantId})`
+      )
+    }
+
+    // BOOKING-EXPIRATION-LIVE-ARM-1 public contract: the confirmation payload
+    // is the pre-existing serializeConfirmationPayload shape - timer arming
+    // state is process-internal and never serialized into the HTTP response.
     return {
       ok: true,
       status: 201,
