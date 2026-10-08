@@ -385,6 +385,7 @@ export class AvailabilityManager {
       capacity: recordMap[d]?.capacity || null,
       available: recordMap[d]?.available || null,
       price: recordMap[d]?.price || null,
+      currency: recordMap[d]?.currency || null,
       notes: recordMap[d]?.notes || null,
     }))
   }

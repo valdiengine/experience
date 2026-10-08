@@ -169,6 +169,52 @@ export class BookingAdapter {
       currency: resolved.target.currency || null,
     }
 
+    // Compute pricing server-side before creating reservation (traveler path)
+    let pricingResult
+    try {
+      pricingResult = await scopedBusinessManager.calculateReservationPrice(
+        resolved.target.businessId,
+        resolved.target.accommodationId,
+        traveler.checkIn,
+        traveler.checkOut,
+        traveler.guestCount,
+        identity
+      )
+    } catch {
+      return {
+        ok: false,
+        status: 400,
+        code: 'PRICING_UNAVAILABLE',
+        error: 'No se pudo calcular el precio de la reserva',
+      }
+    }
+    if (!pricingResult?.success) {
+      return {
+        ok: false,
+        status: 400,
+        code: 'PRICING_UNAVAILABLE',
+        error: 'No se pudo calcular el precio de la reserva',
+      }
+    }
+    if (pricingResult.price == null || !Number.isFinite(pricingResult.price) || pricingResult.price < 0) {
+      return {
+        ok: false,
+        status: 400,
+        code: 'PRICING_INVALID',
+        error: 'Precio de reserva inv\u00e1lido',
+      }
+    }
+    request.totalPrice = pricingResult.price
+    if (pricingResult.currency != null) {
+      request.currency = pricingResult.currency
+    }
+    request.pricing = {
+      pricePerNight: pricingResult.pricePerNight ?? null,
+      nights: pricingResult.nights ?? null,
+      totalPrice: pricingResult.price,
+      currency: pricingResult.currency ?? request.currency ?? null,
+    }
+
     let result
     try {
       result = await scopedBusinessManager.createReservation(resolved.target.businessId, request, identity)

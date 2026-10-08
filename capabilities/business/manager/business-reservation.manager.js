@@ -808,13 +808,23 @@ export class BusinessReservationManager {
   async calculateReservationPrice(businessId, accommodationId, checkIn, checkOut, guests, identity) {
     await this.#assertAccommodationBelongsToBusiness(accommodationId, businessId)
     await this.#checkPermission(identity, BUSINESS_PERMISSIONS.READ)
-    return this.#delegateService('calculateReservationPrice', accommodationId, checkIn, checkOut, guests, identity)
+
+    const cap = this.#context?.capabilities?.get?.('reservation')
+    if (!cap?.service?.calculateReservationPrice) {
+      throw new BusinessOrchestrationError('Reservation pricing service not available')
+    }
+    return cap.service.calculateReservationPrice(accommodationId, checkIn, checkOut, guests, identity)
   }
 
   async validateAvailability(businessId, accommodationId, checkIn, checkOut, identity) {
     await this.#assertAccommodationBelongsToBusiness(accommodationId, businessId)
     await this.#checkPermission(identity, BUSINESS_PERMISSIONS.READ)
-    return this.#delegateService('validateAvailability', accommodationId, checkIn, checkOut, identity)
+
+    const cap = this.#context?.capabilities?.get?.('availability')
+    if (!cap?.service?.checkAvailability) {
+      throw new BusinessOrchestrationError('Availability service not available')
+    }
+    return cap.service.checkAvailability(accommodationId, checkIn, checkOut, identity)
   }
 
   async estimateTaxes(businessId, totalPrice, identity) {

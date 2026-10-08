@@ -2437,11 +2437,26 @@ ${declarations}
       }
 
       if (result.success && result.data && result.data.confirmationCode) {
-        confirmationRegion.textContent = 'Reserva confirmada. Tu código de confirmación es ' +
-          result.data.confirmationCode + '.';
-        confirmationRegion.hidden = false;
-        travelerForm.hidden = true;
-        dateForm.reset();
+        var status = result.data.status || result.status || 'requested'
+        if (status === 'requested') {
+          confirmationRegion.textContent = 'Solicitud de reserva recibida. Tu c\u00f3digo de confirmaci\u00f3n es ' +
+            result.data.confirmationCode + '. Te avisaremos cuando el propietario responda.'
+          confirmationRegion.hidden = false
+          travelerForm.hidden = true
+          dateForm.reset()
+        } else if (status === 'confirmed') {
+          confirmationRegion.textContent = 'Reserva confirmada. Tu c\u00f3digo de confirmaci\u00f3n es ' +
+            result.data.confirmationCode + '.'
+          confirmationRegion.hidden = false
+          travelerForm.hidden = true
+          dateForm.reset()
+        } else {
+          confirmationRegion.textContent = 'Solicitud de reserva recibida. Tu c\u00f3digo de confirmaci\u00f3n es ' +
+            result.data.confirmationCode + '.'
+          confirmationRegion.hidden = false
+          travelerForm.hidden = true
+          dateForm.reset()
+        }
       } else {
         showState(result.error || 'No se pudo completar la reserva.', 'error');
       }

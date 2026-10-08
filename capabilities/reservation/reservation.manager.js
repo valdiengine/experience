@@ -379,6 +379,8 @@ constructor(context) {
       metadata: data.metadata || {},
       createdAt: new Date().toISOString(),
     }
+    if (data.totalPrice != null) reservation.totalPrice = data.totalPrice
+    if (data.currency != null) reservation.currency = data.currency
 
     const validation = validateReservation(reservation)
     if (!validation.valid) {
@@ -386,6 +388,14 @@ constructor(context) {
     }
 
     if (reservation.accommodationId) {
+      let unitPrice = null
+      let lineTotal = null
+      if (data.totalPrice != null && Number.isFinite(Number(data.totalPrice)) && Number(data.totalPrice) >= 0) {
+        lineTotal = Number(data.totalPrice)
+      }
+      if (data.pricing && data.pricing.pricePerNight != null && Number.isFinite(Number(data.pricing.pricePerNight))) {
+        unitPrice = Number(data.pricing.pricePerNight)
+      }
       const lineData = {
         id: crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         lineOrder: 1,
@@ -397,8 +407,8 @@ constructor(context) {
           endDate: reservation.dates?.checkOut || null,
         },
         quantity: 1,
-        unitPrice: null,
-        lineTotal: null,
+        unitPrice,
+        lineTotal,
         metadata: {},
       }
 
