@@ -1334,9 +1334,10 @@ async expireReservationFromTimer(reservationId, expectedStatus, options = {}) {
    * @param {string} checkIn
    * @param {string} checkOut
    * @param {number} guests
+   * @param {object|null} identity - traveler identity forwarded to availability authorization
    * @returns {{ success: boolean, price?: number, currency?: string, nights?: number }}
    */
-  async calculatePrice(accommodationId, checkIn, checkOut, guests = 1) {
+  async calculatePrice(accommodationId, checkIn, checkOut, guests = 1, identity = null) {
     const nights = this.calculateNights(checkIn, checkOut)
     if (nights <= 0) return { success: false, errors: ['Invalid date range'] }
 
@@ -1355,7 +1356,7 @@ async expireReservationFromTimer(reservationId, expectedStatus, options = {}) {
     let currency = 'USD'
     if (availability?.service) {
       try {
-        const calendar = await availability.service.getCalendar(accommodationId, checkIn, checkOut, null)
+        const calendar = await availability.service.getCalendar(accommodationId, checkIn, checkOut, identity)
         if (Array.isArray(calendar) && calendar.length > 0) {
           const priced = calendar.filter(d => d.price != null)
           if (priced.length > 0) {

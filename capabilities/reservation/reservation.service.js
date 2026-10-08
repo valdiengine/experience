@@ -100,7 +100,7 @@ export class ReservationService {
   }
 
   async calculateReservationPrice(accommodationId, checkIn, checkOut, guests, identity) {
-    return this.#manager.calculatePrice(accommodationId, checkIn, checkOut, guests)
+    return this.#manager.calculatePrice(accommodationId, checkIn, checkOut, guests, identity)
   }
 
   async calculateNights(checkIn, checkOut) {
