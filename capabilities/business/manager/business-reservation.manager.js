@@ -809,6 +809,9 @@ export class BusinessReservationManager {
     await this.#assertAccommodationBelongsToBusiness(accommodationId, businessId)
     await this.#checkPermission(identity, BUSINESS_PERMISSIONS.READ)
 
+    if (this.#scopedReservationManager?.calculatePrice) {
+      return this.#scopedReservationManager.calculatePrice(accommodationId, checkIn, checkOut, guests, identity)
+    }
     const cap = this.#context?.capabilities?.get?.('reservation')
     if (!cap?.service?.calculateReservationPrice) {
       throw new BusinessOrchestrationError('Reservation pricing service not available')
