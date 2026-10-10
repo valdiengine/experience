@@ -2,6 +2,7 @@ import { PostgresConfigurationError } from './postgres.errors.js'
 
 export class PostgresConfig {
   constructor(config = {}) {
+    this.connectionString = config.connectionString || process.env.DATABASE_URL || null
     this.host = config.host || process.env.POSTGRES_HOST || 'localhost'
     this.port = parseInt(config.port || process.env.POSTGRES_PORT || '5432', 10)
     this.database = config.database || process.env.POSTGRES_DATABASE || process.env.POSTGRES_DB || 'valdi'
@@ -39,7 +40,6 @@ export class PostgresConfig {
     this.lazy = config.lazy !== false
     this.schema = config.schema || 'public'
     this.applicationName = config.applicationName || 'valdi-engine'
-    this.connectionString = config.connectionString || null
     this.validate()
   }
 
@@ -64,10 +64,12 @@ export class PostgresConfig {
 
   validate() {
     const errors = []
-    if (!this.host) errors.push('host is required')
+    if (!this.connectionString) {
+      if (!this.host) errors.push('host is required')
+      if (!this.database) errors.push('database is required')
+      if (!this.user) errors.push('user is required')
+    }
     if (!this.port || this.port < 1 || this.port > 65535) errors.push('port must be between 1 and 65535')
-    if (!this.database) errors.push('database is required')
-    if (!this.user) errors.push('user is required')
     if (this.pool.min < 0) errors.push('poolMin cannot be negative')
     if (this.pool.max < 1) errors.push('poolMax must be at least 1')
     if (this.pool.min > this.pool.max) errors.push('poolMin cannot exceed poolMax')

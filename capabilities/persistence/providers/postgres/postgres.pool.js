@@ -1,6 +1,32 @@
-import { Pool } from './postgres.lifecycle.js'
 import { PostgresPoolError, PostgresConfigurationError } from './postgres.errors.js'
 import { POSTGRES_EVENTS, createPostgresEvent } from './postgres.events.js'
+
+export function buildPostgresPoolOptions(config) {
+  const tuning = {
+    min: config.pool.min,
+    max: config.pool.max,
+    acquireTimeoutMillis: config.pool.acquireTimeout,
+    idleTimeoutMillis: config.pool.idleTimeout,
+    reapIntervalMillis: config.pool.reapInterval,
+    createTimeoutMillis: config.pool.createTimeout,
+    destroyTimeoutMillis: config.pool.destroyTimeout,
+    maxQueue: config.pool.maxQueue,
+    application_name: config.applicationName,
+  }
+  const ssl = config.ssl.enabled ? config.ssl : false
+  if (config.connectionString) {
+    return { connectionString: config.connectionString, ssl, ...tuning }
+  }
+  return {
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    user: config.user,
+    password: config.password,
+    ssl,
+    ...tuning,
+  }
+}
 
 export class PostgresPool {
   constructor(config, options = {}) {
@@ -36,23 +62,7 @@ export class PostgresPool {
 
   #createPool() {
     const poolModule = this.#getPoolModule()
-    return new poolModule.Pool({
-      host: this.config.host,
-      port: this.config.port,
-      database: this.config.database,
-      user: this.config.user,
-      password: this.config.password,
-      ssl: this.config.ssl.enabled ? this.config.ssl : false,
-      min: this.config.pool.min,
-      max: this.config.pool.max,
-      acquireTimeoutMillis: this.config.pool.acquireTimeout,
-      idleTimeoutMillis: this.config.pool.idleTimeout,
-      reapIntervalMillis: this.config.pool.reapInterval,
-      createTimeoutMillis: this.config.pool.createTimeout,
-      destroyTimeoutMillis: this.config.pool.destroyTimeout,
-      maxQueue: this.config.pool.maxQueue,
-      application_name: this.config.applicationName,
-    })
+    return new poolModule.Pool(buildPostgresPoolOptions(this.config))
   }
 
   #getPoolModule() {
