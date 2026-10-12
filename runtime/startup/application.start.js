@@ -33,6 +33,8 @@ import { getBookingRegistry } from '../../api/routes/booking.routes.js'
 import { startTenantReservationRecovery } from './reservation.recovery.bootstrap.js'
 import { StartupError, RuntimeBootstrapError, ValidationBootstrapError } from './startup.errors.js'
 import { STARTUP_EVENTS, createStartupEvent } from './startup.events.js'
+import { attestRuntimeIdentity } from './runtime.identity.attestation.js'
+import { query as runtimeConnectionQuery } from '../../database/connection/postgres.connection.js'
 
 // Provider features are deliberately disabled (RB3): the pipeline's provider
 // registration step would otherwise re-register 'database' and collide with the
@@ -175,6 +177,29 @@ export async function start(options = {}) {
         bookingRegistry: getBookingRegistry(),
         configuration: options.configuration || {},
       })
+
+    // 4c. SEC-2O — TEMPORARY runtime identity attestation (feature-gated).
+    //
+    // One-shot, read-only attestation of the PostgreSQL session identity used by the
+    // running application. It issues a single `SELECT current_user, session_user,
+    // current_database()` through the EXISTING application-owned pool (the same
+    // singleton connector every adapter uses), placed here after the required startup
+    // database operations (step 3b BookingRegistry bootstrap, step 4b tenant recovery).
+    //
+    // Disabled unless SEC2N_IDENTITY_ATTEST=1. Non-fatal: it can never fail startup,
+    // never creates or closes a pool and never opens a new physical connection. It is
+    // removed together with `runtime.identity.attestation.js` after certification.
+    if (persistenceProvider === 'postgres') {
+      try {
+        await attestRuntimeIdentity({
+          env: process.env,
+          query: runtimeConnectionQuery,
+          workerPid: process.pid,
+        })
+      } catch {
+        // Diagnostic only — must never affect startup behaviour.
+      }
+    }
 
     // 5. Validation — static/structural verification of the assembled bundle
     const validation = validateRuntime(
